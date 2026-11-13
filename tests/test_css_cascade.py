@@ -542,6 +542,10 @@ class DeepNestingTests(unittest.TestCase):
             with self.subTest(depth=depth):
                 self.assert_payload_not_passed(at_rule_page(nested(":is(", ".x", ")", depth) + "{display:none}"))
 
+    def test_a_selector_nested_too_deep_to_read_cannot_show_hidden_text_again(self):
+        self.assert_hidden(at_rule_page(".x{display:none} " + nested(":is(", ".x", ")", 300)
+                                        + "{display:inline !important}"))
+
     def test_a_selector_at_the_reading_depth_is_read_exactly(self):
         self.assert_hidden(at_rule_page(nested(":is(", ".x", ")", SELECTOR_DEPTH_READ_EXACTLY) + "{display:none}"))
 

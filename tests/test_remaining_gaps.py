@@ -510,6 +510,15 @@ class HeadlineDrawingTests(unittest.TestCase):
         self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
         self.assertEqual(article.verdict, "review")
 
+    def test_css_generated_words_from_a_selector_nested_too_deep_to_read_are_flagged(self):
+        for depth in (1, 33, 300):
+            with self.subTest(depth=depth):
+                selector = ":is(" * depth + ".k" + ")" * depth
+                html = article_page(f'<span class="k"></span>{HEADLINE}',
+                                    head_extra=f'<style>{selector}::before {{ content: "Exclusive: losses ahead " }}</style>')
+                article = GUARD.extract_article(html)
+                self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
+
     def test_css_generated_words_hidden_only_by_an_undecided_block_are_flagged(self):
         css = ('.k::before { content: "Exclusive: losses ahead " } '
                '@supports (bogus: 1) { .k::before { display: none } }')
