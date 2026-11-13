@@ -87,6 +87,17 @@ SELECTOR_NAME_PATTERN = re.compile(r"([#.])([A-Za-z_][\w-]*)")
 DOM_LOOKUP_PATTERN = re.compile(
     r"getElementById|querySelector|getElementsByClassName|getElementsByTagName|closest\(|\$\(|jQuery\("
 )
+# A lookup by a literal selector or tag name: querySelector("main h1"), getElementsByTagName("h1").
+LITERAL_TAG_LOOKUP_PATTERN = re.compile(
+    r"(getElementsByTagName|querySelector(?:All)?|\$|jQuery)\(\s*([\"'])([^\"'\n]{1,200})\2"
+)
+# Code that writes to an element (reading its text, as analytics scripts do, does not count).
+DOM_WRITE_PATTERN = re.compile(
+    r"\.(?:textContent|innerText|innerHTML|outerHTML|className|hidden|cssText)\s*=(?!=)"
+    r"|\.style\.[\w-]+\s*=(?!=)|\.style\[|classList\.(?:add|remove|toggle|replace)\(|setAttribute\("
+    r"|\.remove\(|removeChild\(|replaceWith\(|replaceChildren\(|insertAdjacent|\.(?:text|html)\(\s*[^)\s]"
+    r"|\.css\(|\.hide\(|\.addClass\(|\.attr\([^)]*,"
+)
 # Script code that changes what elements show.
 DOM_MUTATION_PATTERN = re.compile(
     r"\.style\b|classList|className|setAttribute|\.hidden\b|\.remove\(|removeChild|innerHTML|outerHTML"
@@ -355,14 +366,14 @@ def _with_field(flags, field_name, detail_prefix=""):
     return flags
 
 
-def _inline_scripts_that_change_elements(root):
+def _inline_scripts_that_change_elements(root, change_pattern=DOM_MUTATION_PATTERN):
     """The code of each inline script (not JSON data) that changes the page somewhere."""
     scripts = []
     for script in root.iter("script"):
         if script.get("src") or (script.get("type") or "").lower() in ("application/ld+json", "application/json"):
             continue
         code = script.text or ""
-        if code and DOM_MUTATION_PATTERN.search(code) is not None:
+        if code and change_pattern.search(code) is not None:
             scripts.append(code)
     return scripts
 
@@ -631,6 +642,9 @@ class _ArticleExtraction:
         changed_name = self._name_a_script_changes(names, self.root)
         if changed_name is not None:
             self._add_browser_reason(f"an inline script finds {changed_name!r}, used in the headline, and changes it")
+        heading_tag = headline_element.tag.lower() if isinstance(headline_element.tag, str) else ""
+        if heading_tag and self._tag_a_script_changes(heading_tag, self.root):
+            self._add_browser_reason(f"an inline script finds <{heading_tag}> by its tag and changes it")
 
     @staticmethod
     def _distinctive_names(elements, root):
@@ -675,6 +689,23 @@ class _ArticleExtraction:
                     if DOM_LOOKUP_PATTERN.search(window) and DOM_MUTATION_PATTERN.search(window):
                         return name
         return None
+
+    @staticmethod
+    def _tag_a_script_changes(tag, root):
+        """Whether an inline script looks up elements by a literal selector naming tag (as a type
+        selector, anywhere in it) and writes to them right after. A selector built at run time,
+        or a script loaded from a file, is not seen; only a browser check catches those."""
+        type_selector = re.compile(r"(?<![\w#.\-\\])" + re.escape(tag) + r"(?![\w-])", re.IGNORECASE)
+        for code in _inline_scripts_that_change_elements(root, DOM_WRITE_PATTERN):
+            for lookup in LITERAL_TAG_LOOKUP_PATTERN.finditer(code):
+                if type_selector.search(lookup.group(3)) is None:
+                    continue
+                window = code[lookup.end():lookup.end() + SCRIPT_WINDOW_CHARACTERS]
+                if re.match(r"\s*\)\s*\.length\b", window):
+                    continue  # counting the elements (France 24 counts its <h1>s), not changing them
+                if DOM_WRITE_PATTERN.search(window) is not None:
+                    return True
+        return False
 
     @staticmethod
     def _names_scripts_change(root):

@@ -309,6 +309,7 @@ Reading the browser table:
 - **"leaked, verdict review"**: the payload reaches the model, but the page goes to `review`. On the Hindu BusinessLine pages, for example, the payload sits inside the collapsed article, which is kept.
 - **The one "leaked, verdict pass"** (Economic Times) isn't a miss. The site's own CSS overrides the injected `font-size: 0` in Chrome, so readers see the word at 11px. The static reading applied the injected rule last and judged the word hidden, which errs on the safe side.
 - **The "no name" rows count only variants already on triaged pages.** The 115 that are never sent to the browser are in the static table.
+- **A headline script that finds its element by tag** (`querySelector('h1')`, `getElementsByTagName('h1')`, `$('main h1')`) and writes to it sends the page to the browser. Reading it, or counting the `<h1>`s, does not. A selector built at run time, or a script loaded from a file, is still invisible to the static reading; only the browser check sees those.
 
 On the baseline pages ([injection_report.md](real_world_test/injection_report.md)):
 
