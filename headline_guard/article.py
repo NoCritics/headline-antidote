@@ -96,7 +96,8 @@ DOM_WRITE_PATTERN = re.compile(
     r"\.(?:textContent|innerText|innerHTML|outerHTML|className|hidden|cssText)\s*=(?!=)"
     r"|\.style\.[\w-]+\s*=(?!=)|\.style\[|classList\.(?:add|remove|toggle|replace)\(|setAttribute\("
     r"|\.remove\(|removeChild\(|replaceWith\(|replaceChildren\(|insertAdjacent|\.(?:text|html)\(\s*[^)\s]"
-    r"|\.css\(|\.hide\(|\.addClass\(|\.attr\([^)]*,"
+    # Bounded, so a script full of unclosed ".attr(" cannot make each match scan to its end.
+    r"|\.css\(|\.hide\(|\.addClass\(|\.attr\([^),]{0,200},"
 )
 # Script code that changes what elements show.
 DOM_MUTATION_PATTERN = re.compile(
