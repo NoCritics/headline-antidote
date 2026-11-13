@@ -56,6 +56,29 @@ class RenderedPageComparisonTests(unittest.TestCase):
         self.assertIn("most_of_article_hidden", [flag.kind for flag in verified.flags])
         self.assertEqual(verified.verdict, "review")
 
+    def test_almost_fully_hidden_body_is_reviewed_not_passed(self):
+        # Hole A: a script hiding nearly all of the body made the render "inconclusive", which kept
+        # the static body (payload included) with a low flag, so the page passed. A render showing
+        # almost none of the article now always sends the page to review.
+        from headline_guard.browser_check import compare_with_rendered_page
+        from headline_guard.browser_visibility import RenderedPage
+
+        visible_paragraph = ("Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
+                             "a breakup of the company, a ruling analysts said removes a major overhang.")
+        hidden_lines = ""
+        for number in range(30):
+            hidden_lines += (f"<p>Insiders say restructuring wave {number} will bring mass layoffs, a profit "
+                             "warning and a regulatory probe that analysts expect to hit the shares.</p>")
+        html = (f"<!doctype html><html><head><title>{HEADLINE}</title></head><body><article>"
+                f"<h1>{HEADLINE}</h1><p>{visible_paragraph}</p>{hidden_lines}</article></body></html>")
+        article = GUARD.extract_article(html)
+        self.assertEqual(article.verdict, "pass")
+        rendered = RenderedPage(HEADLINE, f"{HEADLINE}\n{visible_paragraph}", "", 5.0, True)
+        verified = compare_with_rendered_page(GUARD, article, rendered)
+        self.assertIn("browser_check_inconclusive", [flag.kind for flag in verified.flags])
+        self.assertEqual(verified.verdict, "review")
+        self.assertFalse(verified.browser_verified)
+
 
 @unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
 class MediaFeatureTableTests(unittest.TestCase):
@@ -285,12 +308,13 @@ class BrowserCheckTests(unittest.TestCase):
         self.assertEqual(verified.verdict, "pass", verified.flags)
 
     def test_render_showing_nothing_is_inconclusive(self):
-        # A consent wall over everything: the browser sees none of the article, which proves nothing.
+        # A consent wall over everything: the browser sees none of the article, which proves nothing,
+        # so the static body stands and the page goes to review (a script could have hidden it).
         wall = ('<div style="position:fixed;inset:0;background:#fff;z-index:9"></div>'
                 "<script>document.querySelector('article').style.visibility='hidden';</script>")
         article, verified = self.check(page(HEADLINE, body_extra=wall))
         self.assertIn("browser_check_inconclusive", [flag.kind for flag in verified.flags])
-        self.assertEqual(verified.verdict, article.verdict)
+        self.assertEqual(verified.verdict, "review")
         self.assertEqual(verified.body, article.body)
         self.assertFalse(verified.browser_verified)
 
