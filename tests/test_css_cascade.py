@@ -245,6 +245,19 @@ class MediaQueryTests(unittest.TestCase):
             ("screen, (min-width: 1px", True),
             ("((min-width: 1px)", True),
             ("(min-width: 1px)) and (orientation: landscape)", False),
+            # CSS white space and case folding are ASCII only.
+            ("not print", False),
+            ("screen and (min-width: 1px)", False),
+            ("(min-width: 1px )", False),
+            ("not (prefers-color-scheme: darK)", False),
+            ("SCREEN AND (MIN-WIDTH: 1PX)", True),
+            ("screen\nand\n(min-width: 1px)", True),
+            ("(min-width: 1px) or (é)", True),
+            # A value a known feature can't take drops the whole query, even under 'not'.
+            ("not (prefers-color-scheme: blue)", False),
+            ("not (orientation: sideways)", False),
+            ("not (scripting: initial-only)", True),
+            ("not (-ms-high-contrast: active)", False),
         ):
             with self.subTest(query=query):
                 self.assertEqual(media_query_applies(query), chrome_answer)

@@ -23,35 +23,44 @@ RANGE_FEATURES = {
     "color-index": ("number", 0.0),
     "monochrome": ("number", 0.0),
 }
-# Discrete features: the desktop screen's value.
+# Discrete features: (the desktop screen's value, every valid value). A value outside the list
+# makes Chrome drop the whole query, even under 'not'.
 DISCRETE_FEATURES = {
-    "orientation": "landscape",
-    "prefers-color-scheme": "light",
-    "prefers-reduced-motion": "no-preference",
-    "prefers-reduced-transparency": "no-preference",
-    "prefers-contrast": "no-preference",
-    "forced-colors": "none",
-    "inverted-colors": "none",
-    "scripting": "enabled",
-    "hover": "hover",
-    "any-hover": "hover",
-    "pointer": "fine",
-    "any-pointer": "fine",
-    "update": "fast",
-    "overflow-block": "scroll",
-    "overflow-inline": "scroll",
-    "color-gamut": "srgb",
-    "dynamic-range": "standard",
-    "video-dynamic-range": "standard",
-    "display-mode": "browser",
-    "grid": "0",
+    "orientation": ("landscape", ("portrait", "landscape")),
+    "prefers-color-scheme": ("light", ("light", "dark")),
+    "prefers-reduced-motion": ("no-preference", ("no-preference", "reduce")),
+    "prefers-reduced-transparency": ("no-preference", ("no-preference", "reduce")),
+    "prefers-contrast": ("no-preference", ("no-preference", "more", "less", "custom")),
+    "forced-colors": ("none", ("none", "active")),
+    "inverted-colors": ("none", ("none", "inverted")),
+    "scripting": ("enabled", ("none", "initial-only", "enabled")),
+    "hover": ("hover", ("none", "hover")),
+    "any-hover": ("hover", ("none", "hover")),
+    "pointer": ("fine", ("none", "coarse", "fine")),
+    "any-pointer": ("fine", ("none", "coarse", "fine")),
+    "update": ("fast", ("none", "slow", "fast")),
+    "overflow-block": ("scroll", ("none", "scroll", "paged")),
+    "overflow-inline": ("scroll", ("none", "scroll")),
+    "color-gamut": ("srgb", ("srgb", "p3", "rec2020")),
+    "dynamic-range": ("standard", ("standard", "high")),
+    "video-dynamic-range": ("standard", ("standard", "high")),
+    "display-mode": ("browser", ("fullscreen", "standalone", "minimal-ui", "browser", "picture-in-picture",
+                                 "window-controls-overlay")),
+    "grid": ("0", ("0", "1")),
 }
 SCREEN_MEDIA_TYPES = ("all", "screen")
-_COMPARISON = re.compile(r"\s*(<=|>=|<|>|=)\s*")
+# CSS white space and case folding are ASCII only: a no-break space is not a separator, and a
+# KELVIN SIGN does not become 'k' (Python's \s and str.lower() would do both).
+CSS_WHITE_SPACE = " \t\n\r\f"
+_ASCII_LOWERCASE = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+_COMPARISON = re.compile(r"[ \t\n\r\f]*(<=|>=|<|>|=)[ \t\n\r\f]*")
 # A keyword must be followed by white space: 'and(' is a function in CSS, and makes the query invalid.
-_KEYWORD = re.compile(r"(and|or|not)\s+")
-_NOT_GROUP = re.compile(r"not\s+\(")
-_WHITE_SPACE = re.compile(r"\s*")
+_KEYWORD = re.compile(r"(and|or|not)[ \t\n\r\f]+")
+_NOT_GROUP = re.compile(r"not[ \t\n\r\f]+\(")
+_WHITE_SPACE = re.compile(r"[ \t\n\r\f]*")
+_MEDIA_TYPE_QUERY = re.compile(
+    r"(?:(not|only)[ \t\n\r\f]+)?([a-z-]+)(?:[ \t\n\r\f]+and[ \t\n\r\f]+(.+))?", flags=re.S
+)
 _RESOLUTION = re.compile(r"(\d*\.?\d+)(dppx|x|dpi|dpcm)")
 
 
@@ -61,12 +70,12 @@ class _Unparsable(Exception):
 
 def media_query_applies(media_text):
     """True when a media query list (an @media prelude or a media attribute) matches the screen."""
-    media_text = (media_text or "").strip().lower()
+    media_text = (media_text or "").translate(_ASCII_LOWERCASE).strip(CSS_WHITE_SPACE)
     if not media_text:
         return True
     for query in _split_top_level(media_text, ","):
         try:
-            if _query_matches(query.strip()) is True:
+            if _query_matches(query.strip(CSS_WHITE_SPACE)) is True:
                 return True
         except _Unparsable:
             continue
@@ -116,7 +125,7 @@ def _negated(value):
 def _query_matches(query):
     if query.startswith("(") or _NOT_GROUP.match(query):
         return _condition_matches(query)
-    match = re.fullmatch(r"(?:(not|only)\s+)?([a-z-]+)(?:\s+and\s+(.+))?", query, flags=re.S)
+    match = _MEDIA_TYPE_QUERY.fullmatch(query)
     if match is None:
         raise _Unparsable(query)
     modifier, media_type, condition = match.groups()
@@ -229,18 +238,21 @@ def _feature_matches(content):
         return _range_matches(content)
     if ":" in content:
         name, value = content.split(":", 1)
-        return _plain_feature_matches(name.strip(), value.strip())
-    name = content.strip()
+        return _plain_feature_matches(name.strip(CSS_WHITE_SPACE), value.strip(CSS_WHITE_SPACE))
+    name = content.strip(CSS_WHITE_SPACE)
     if name in RANGE_FEATURES:
         return RANGE_FEATURES[name][1] != 0
     if name in DISCRETE_FEATURES:
-        return DISCRETE_FEATURES[name] not in ("none", "no-preference", "0")
+        return DISCRETE_FEATURES[name][0] not in ("none", "no-preference", "0")
     return None
 
 
 def _plain_feature_matches(name, value):
     if name in DISCRETE_FEATURES:
-        return value == DISCRETE_FEATURES[name]
+        screen_value, valid_values = DISCRETE_FEATURES[name]
+        if value not in valid_values:
+            raise _Unparsable(value)
+        return value == screen_value
     for prefix, comparison in (("min-", ">="), ("max-", "<=")):
         base_name = None
         if name.startswith(prefix):
@@ -257,7 +269,7 @@ def _plain_feature_matches(name, value):
 
 
 def _range_matches(content):
-    parts = _COMPARISON.split(content.strip())
+    parts = _COMPARISON.split(content.strip(CSS_WHITE_SPACE))
     if len(parts) == 3:
         left, operator, right = parts
         if left in RANGE_FEATURES:
@@ -285,7 +297,7 @@ def _flipped(operator):
 def _compare_with_screen(name, operator, value_text):
     """The screen's value of a range feature compared with value_text: screen OPERATOR value."""
     kind, screen_value = RANGE_FEATURES[name]
-    value = _range_value(kind, value_text.strip())
+    value = _range_value(kind, value_text.strip(CSS_WHITE_SPACE))
     if value is None:
         raise _Unparsable(value_text)  # Chrome drops the whole query, even under 'not'
     if operator == "<":
@@ -300,6 +312,8 @@ def _compare_with_screen(name, operator, value_text):
 
 
 def _range_value(kind, text):
+    if not text.isascii():
+        return None  # every valid value is ASCII; Python's parsers would accept a no-break space
     if kind == "length":
         return length_in_pixels(text)
     if kind == "ratio":
