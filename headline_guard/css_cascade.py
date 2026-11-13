@@ -629,32 +629,35 @@ class _RuleSet:
         # through the full cascade.
         self.scoped_variable_names = set()
         self.data_font_families = set()
+        # Only @layer namings set the layer order (rules never do), so it is known before any rule is read.
+        self.layer_order = _LayerOrder(inherited_layers)
         for stylesheet_text, key in zip(stylesheet_texts, stylesheet_keys):
             compiled = _compiled_stylesheet(stylesheet_text, key, stylesheet_cache)
             compiled_stylesheets.append(compiled)
             for family in compiled.data_font_families:
                 self.data_font_families.add(family)
+            for _, path, undecided in compiled.layer_names:
+                self.layer_order.name(path, undecided)
+        # Variables some undecided block defines: their value depends on which blocks apply.
+        self.undecided_variable_names = set()
+        for compiled in compiled_stylesheets:
             for rule in compiled.rules:
-                site_wide = rule.selector_text in SITE_WIDE_SELECTORS and not rule.undecided
+                undecided = rule.undecided or self.layer_order.is_tentative(rule.layer)
+                # A site-wide definition in a layer or an undecided block competes in the
+                # cascade (unlayered definitions win), so it is looked up there instead.
+                site_wide = rule.selector_text in SITE_WIDE_SELECTORS and not undecided and not rule.layer
                 for name, value, _ in rule.declarations:
                     if name.startswith("--"):
                         if site_wide:
                             self.site_variables[name] = value
                         else:
                             self.scoped_variable_names.add(name)
-        # Variables some undecided block defines: their value depends on which blocks apply.
-        self.undecided_variable_names = set()
-        for compiled in compiled_stylesheets:
-            for rule in compiled.rules:
-                if rule.undecided:
-                    for name, _, _ in rule.declarations:
-                        if name.startswith("--"):
+                        if undecided:
                             self.undecided_variable_names.add(name)
         decidable_variables = {}
         for name, value in self.site_variables.items():
-            if name not in self.undecided_variable_names:
+            if name not in self.undecided_variable_names and name not in self.scoped_variable_names:
                 decidable_variables[name] = value
-        self.layer_order = _LayerOrder(inherited_layers)
         self.hiding_matcher = cssselect2.Matcher()
         self.full_matcher = cssselect2.Matcher()
         self.pseudo_matcher = cssselect2.Matcher()
@@ -672,12 +675,7 @@ class _RuleSet:
         self._font_matcher = None
         order = first_order
         for compiled in compiled_stylesheets:
-            next_layer_name = 0
-            for index, rule in enumerate(compiled.rules):
-                while next_layer_name < len(compiled.layer_names) and compiled.layer_names[next_layer_name][0] <= index:
-                    _, path, undecided = compiled.layer_names[next_layer_name]
-                    self.layer_order.name(path, undecided)
-                    next_layer_name += 1
+            for rule in compiled.rules:
                 order += 1
                 rank = self.layer_order.rank(rule.layer) if rule.layer else (_UNLAYERED,)
                 # Chrome ranks a scoped rule above unscoped ones of equal specificity (scope
@@ -693,10 +691,11 @@ class _RuleSet:
                     self.has_undecided_rules = True
                 payload = (rule_order, rank, _negated(rank), undecided, declarations)
                 variable_declarations = []
-                if rule.selector_text not in SITE_WIDE_SELECTORS or undecided:
-                    for declaration in declarations:
-                        if declaration[0].startswith("--"):
-                            variable_declarations.append(declaration)
+                # Every definition of a variable some narrower, layered or undecided rule also
+                # defines, so they compete in one cascade (site-wide ones included).
+                for declaration in declarations:
+                    if declaration[0] in self.scoped_variable_names:
+                        variable_declarations.append(declaration)
                 could_hide = rule.could_hide
                 if could_hide is None:
                     could_hide = _rule_could_hide(declarations, decidable_variables)
@@ -720,10 +719,6 @@ class _RuleSet:
                             selector, (rule_order, rank, _negated(rank), undecided, variable_declarations),
                         )
                         self.has_variable_rules = True
-            while next_layer_name < len(compiled.layer_names):
-                _, path, undecided = compiled.layer_names[next_layer_name]
-                self.layer_order.name(path, undecided)
-                next_layer_name += 1
         self.last_order = order
 
     def font_matcher(self):
@@ -782,6 +777,13 @@ _INLINE_LAYER_RANK = (0,)
 # How many combinations of an element's undecided declarations are checked; past this the
 # element counts as hidden.
 MAXIMUM_UNDECIDED_COMBINATIONS = 64
+
+
+class _TooManyCombinations(Exception):
+    """An element's undecided rules or variables give more than MAXIMUM_UNDECIDED_COMBINATIONS readings."""
+
+
+_TOO_MANY = object()
 
 
 def _matched_entries(matcher, element_wrapper, entries):
@@ -898,6 +900,8 @@ class CascadeRules:
 
     def _reset_resolved_caches(self):
         self._alternatives = {}
+        self._resolved_forms_cache = {}
+        self._variable_candidates_cache = {}
         self._pseudo_entries_cache = {}
         self._cascaded = {}
         self._resolved = {}
@@ -1128,24 +1132,22 @@ class CascadeRules:
         Each subset of the undecided rules that can outrank a decided value here gives one; var()
         is resolved with and without the undecided blocks, and with every value an undecided block
         gives a variable it uses."""
-        cached = self._alternatives.get(element)
-        if cached is not None:
-            return cached
-        alternatives = self._declaration_alternatives(element)
+        if element in self._alternatives:
+            return self._alternatives[element]
+        try:
+            alternatives = self._declaration_alternatives(element)
+        except _TooManyCombinations:
+            alternatives = None
         self._alternatives[element] = alternatives
         return alternatives
-
-    def _undecided_variables_in(self, value):
-        names = []
-        if "var(" in value:
-            for match in _VARIABLE_REFERENCE.finditer(value):
-                if match.group(1) in self._undecided_variable_names and match.group(1) not in names:
-                    names.append(match.group(1))
-        return names
 
     def _variable_candidates(self, element, name):
         """Every value the variable could have at element, whichever undecided blocks apply: each
         definition on the element and its ancestors, and the site-wide one."""
+        key = (element, name)
+        values = self._variable_candidates_cache.get(key)
+        if values is not None:
+            return values
         values = []
         node = element
         while node is not None and isinstance(node.tag, str):
@@ -1159,10 +1161,29 @@ class CascadeRules:
         site_value = self._site_variables.get(name)
         if site_value is not None and site_value not in values:
             values.append(site_value)
+        self._variable_candidates_cache[key] = values
         return values
 
     def _resolved_forms(self, element, value, lowercase=True):
-        """The values a declaration can resolve to, whichever undecided blocks apply."""
+        """The values a declaration can resolve to, whichever undecided blocks apply: var() is
+        resolved with and without those blocks, and every undecided variable it uses, directly or
+        through other variables, takes each value it can have (all combinations of them).
+        Raises _TooManyCombinations past MAXIMUM_UNDECIDED_COMBINATIONS forms."""
+        key = (element, value, lowercase)
+        cached = self._resolved_forms_cache.get(key)
+        if cached is not None:
+            if cached is _TOO_MANY:
+                raise _TooManyCombinations()
+            return cached
+        try:
+            forms = self._compute_resolved_forms(element, value, lowercase)
+        except _TooManyCombinations:
+            self._resolved_forms_cache[key] = _TOO_MANY
+            raise
+        self._resolved_forms_cache[key] = forms
+        return forms
+
+    def _compute_resolved_forms(self, element, value, lowercase):
         def normalized(resolved):
             return resolved.lower() if lowercase else resolved
         forms = [normalized(self._resolve_variables(element, value))]
@@ -1171,13 +1192,40 @@ class CascadeRules:
             form = normalized(undecided_view._resolve_variables(element, value))
             if form not in forms:
                 forms.append(form)
-        for name in self._undecided_variables_in(value):
-            for candidate in self._variable_candidates(element, name):
-                def substitute(match, name=name, candidate=candidate):
-                    return candidate if match.group(1) == name else match.group(0)
-                form = normalized(self._resolve_variables(element, _VARIABLE_REFERENCE.sub(substitute, value)))
-                if form not in forms:
-                    forms.append(form)
+        if not self._undecided_variable_names or "var(" not in value:
+            return forms
+        # Expand var() references one at a time; an undecided variable branches into each of
+        # its possible values, any other takes its cascaded value (which may hold more var()).
+        pending = [(value, 0)]
+        finished = []
+        while pending:
+            partial, depth = pending.pop()
+            match = _VARIABLE_REFERENCE.search(partial) if depth <= MAXIMUM_VARIABLE_DEPTH else None
+            if match is None:
+                if partial not in finished:
+                    finished.append(partial)
+                continue
+            name = match.group(1)
+            if name in self._undecided_variable_names:
+                replacements = list(self._variable_candidates(element, name))
+            else:
+                replacements = [self._custom_property(element, name)]
+            if None in replacements or not replacements:
+                # Undefined here: the var() fallback applies.
+                defined = []
+                for candidate in replacements:
+                    if candidate is not None:
+                        defined.append(candidate)
+                defined.append(match.group(2) or "")
+                replacements = defined
+            for replacement in replacements:
+                pending.append((partial[:match.start()] + replacement.strip() + partial[match.end():], depth + 1))
+            if len(pending) + len(finished) > MAXIMUM_UNDECIDED_COMBINATIONS:
+                raise _TooManyCombinations()
+        for partial in finished:
+            form = normalized(partial)
+            if form not in forms:
+                forms.append(form)
         return forms
 
     def _declaration_alternatives(self, element):
@@ -1186,7 +1234,8 @@ class CascadeRules:
         uses_undecided_variables = False
         if self._undecided_variable_names:
             for entry in entries:
-                if self._undecided_variables_in(entry[6]):
+                # Any var() may reach an undecided variable through other variables.
+                if not entry[5].startswith("--") and "var(" in entry[6]:
                     uses_undecided_variables = True
                     break
         if not uses_undecided_variables and not _has_undecided_entry(entries):
@@ -1277,16 +1326,24 @@ class CascadeRules:
             for value in candidates_by_name.get("display", [None]):
                 if value is None:
                     may_show = True
-                else:
-                    for form in self._resolved_forms(element, value):
-                        if form != "none":
-                            may_show = True
+                    continue
+                try:
+                    forms = self._resolved_forms(element, value)
+                except _TooManyCombinations:
+                    forms = [value]
+                for form in forms:
+                    if form != "none":
+                        may_show = True
             if not may_show:
                 continue
             for value in candidates_by_name.get("content", []):
                 if value is None:
                     continue
-                for form in self._resolved_forms(element, value, lowercase=False):
+                try:
+                    forms = self._resolved_forms(element, value, lowercase=False)
+                except _TooManyCombinations:
+                    forms = [value]
+                for form in forms:
                     if form not in contents:
                         contents.append(form)
         return contents
