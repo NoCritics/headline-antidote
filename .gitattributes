@@ -1,0 +1,3 @@
+# Keep every file byte for byte: unicode_data is checked against SHA-256 hashes,
+# which a line-ending conversion would break.
+* -text
