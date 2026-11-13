@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.remember/
+# Scraped third-party pages (118 MB): kept on disk for the tests in real_world_test, not versioned.
+real_world_test/data/
+real_world_test/data_2026-11-09/

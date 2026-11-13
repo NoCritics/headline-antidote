@@ -1,0 +1,20 @@
+{
+  "_note": "Official Unicode Consortium data files, downloaded 2026-11-07. The loader refuses to run if a file's SHA-256 differs from the value here. After deliberately updating a file, update its hash.",
+  "files": {
+    "confusables.txt": {
+      "source": "https://www.unicode.org/Public/security/latest/confusables.txt",
+      "version": "UTS #39 confusables, dated 2026-08-06",
+      "sha256": "6ed3ee967c9dfdf6677d563c9985182fbc50a2efb7d6059cd57b2e2ce18f5b92"
+    },
+    "Scripts.txt": {
+      "source": "https://www.unicode.org/Public/UCD/latest/ucd/Scripts.txt",
+      "version": "Scripts-18.0.0",
+      "sha256": "0071fd81b6aeae25f6e8bce8efec3066a6476a91b49bdb2f52dc76e817862a6a"
+    },
+    "DerivedCoreProperties.txt": {
+      "source": "https://www.unicode.org/Public/UCD/latest/ucd/DerivedCoreProperties.txt",
+      "version": "DerivedCoreProperties-18.0.0",
+      "sha256": "09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9"
+    }
+  }
+}

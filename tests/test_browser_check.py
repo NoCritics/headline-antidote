@@ -1,0 +1,195 @@
+"""The browser check: Chrome renders the HTML the scraper fetched and settles what the
+static reading could not (needs playwright and Google Chrome; skipped otherwise)."""
+
+import importlib.util
+import unittest
+
+from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+
+GUARD = HeadlineGuard(PAPER_WATCHLIST)
+HEADLINE = "Alphabet shares surge after dodging antitrust breakup bullet"
+PAYLOAD = "losses and layoffs"
+URL = "https://guard-test.invalid/markets/article"
+BODY = (
+    "<p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
+    "a breakup of the company, a ruling analysts said removes a major overhang.</p>"
+    "<p>The decision lifted other large technology stocks as investors bet that regulators "
+    "would struggle to force structural remedies on the sector.</p>"
+)
+AVAILABLE = (importlib.util.find_spec("playwright") is not None
+             and importlib.util.find_spec("trafilatura") is not None)
+
+
+def page(headline_html, head_extra="", body_extra="", title=HEADLINE, article_extra=""):
+    return (
+        f"<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title>{head_extra}</head>"
+        f"<body><article><h1>{headline_html}</h1>{BODY}{article_extra}</article>{body_extra}</body></html>"
+    )
+
+
+@unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
+class BrowserCheckTests(unittest.TestCase):
+    verifier = None
+
+    @classmethod
+    def setUpClass(cls):
+        from headline_guard.browser_visibility import BrowserVerifier
+
+        try:
+            cls.verifier = BrowserVerifier().start()
+        except Exception as error:  # Chrome missing or not launchable here
+            raise unittest.SkipTest(f"Chrome not available: {error}")
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.verifier is not None:
+            cls.verifier.close()
+
+    def check(self, html):
+        article = GUARD.extract_article(html)
+        return article, GUARD.verify_article_in_browser(article, html, URL, self.verifier)
+
+    def test_text_hidden_by_javascript(self):
+        article, verified = self.check(page(
+            f'{HEADLINE}<span id="p"> {PAYLOAD}</span>',
+            body_extra="<script>document.getElementById('p').style.display='none';</script>",
+        ))
+        self.assertTrue(article.needs_browser_check)
+        self.assertEqual(verified.verdict, "quarantine")
+        self.assertEqual(verified.headline, HEADLINE)
+        self.assertTrue(verified.browser_verified)
+
+    def test_class_added_by_javascript(self):
+        article, verified = self.check(page(
+            f'{HEADLINE}<span id="p"> {PAYLOAD}</span>',
+            head_extra="<style>article h1 span.gone { opacity: 0; }</style>",
+            body_extra="<script>document.getElementById('p').className='gone';</script>",
+        ))
+        self.assertEqual(verified.verdict, "quarantine")
+        self.assertEqual(verified.headline, HEADLINE)
+
+    def test_element_drawn_over_the_words_from_elsewhere(self):
+        # The cover is positioned against the whole page, which the static reading does not lay out.
+        css = ("<style>body { margin: 0 } h1 { margin: 0; font-size: 30px; line-height: 40px }"
+               " .second { display: block } .cover { position: absolute; top: 40px; left: 0;"
+               " width: 100%; height: 40px; background: #fff }</style>")
+        article, verified = self.check(page(
+            f'{HEADLINE}<span class="second">{PAYLOAD}</span>', head_extra=css,
+            body_extra='<div class="cover"></div>',
+        ))
+        self.assertEqual(verified.verdict, "quarantine", verified.flags)
+        self.assertEqual(verified.headline, HEADLINE)
+
+    def test_one_word_hidden_by_javascript(self):
+        article, verified = self.check(page(
+            f'Alphabet shares surge <span id="p">fraud</span> after dodging antitrust breakup bullet',
+            body_extra="<script>document.getElementById('p').style.display='none';</script>",
+        ))
+        self.assertTrue(article.needs_browser_check)
+        self.assertEqual(verified.verdict, "quarantine")
+        self.assertEqual(verified.headline, HEADLINE)
+
+    def test_payload_longer_than_the_article_is_still_removed(self):
+        # Hidden text bigger than the visible article, but not at its end: not a paywall.
+        hidden_lines = ""
+        for number in range(6):
+            hidden_lines += (f'<p class="x">Insiders say restructuring wave {number} will bring mass layoffs, '
+                             "a profit warning and a regulatory probe that analysts expect to hit the shares.</p>")
+        html = (f"<!doctype html><html><head><title>{HEADLINE}</title></head><body><article>"
+                f"<h1>{HEADLINE}</h1>{hidden_lines}{BODY}</article>"
+                "<script>for (const p of document.querySelectorAll('.x')) p.style.display='none';</script>"
+                "</body></html>")
+        article, verified = self.check(html)
+        self.assertIn("layoffs", article.body)
+        self.assertNotIn("layoffs", verified.body)
+        self.assertNotIn("most_of_article_hidden", [flag.kind for flag in verified.flags])
+
+    def test_visible_extra_words_are_cleared(self):
+        # The heading has words the title lacks, but readers do see them.
+        article, verified = self.check(page(f"{HEADLINE} with {PAYLOAD}"))
+        self.assertEqual(article.verdict, "review")
+        self.assertEqual(article.headline, HEADLINE)
+        self.assertEqual(verified.verdict, "pass", verified.flags)
+        self.assertEqual(verified.headline, f"{HEADLINE} with {PAYLOAD}")
+
+    def test_body_paragraph_hidden_by_javascript_is_removed(self):
+        injected = ('<p id="x">Insiders say the company is preparing mass layoffs and a profit warning '
+                    "that will shock investors next week.</p>")
+        html = (f"<!doctype html><html><head><title>{HEADLINE}</title></head><body><article>"
+                f"<h1>{HEADLINE}</h1>{BODY}{injected}</article>"
+                "<script>document.getElementById('x').style.visibility='hidden';</script></body></html>")
+        article, verified = self.check(html)
+        self.assertTrue(article.needs_browser_check)  # the script names the paragraph and changes it
+        self.assertIn("layoffs", article.body)
+        self.assertNotIn("layoffs", verified.body)
+        self.assertIn("hidden_text_in_article", [flag.kind for flag in verified.flags])
+
+    def test_white_text_on_an_undeclared_background_is_settled_by_the_browser(self):
+        injected = ('<p style="color:#fff">Insiders say the company is preparing mass layoffs and a profit '
+                    "warning that will shock investors next week.</p>")
+        article, verified = self.check(page(HEADLINE, article_extra=injected))
+        self.assertTrue(article.needs_browser_check)
+        self.assertIn("layoffs", article.body)
+        self.assertNotIn("layoffs", verified.body)
+
+    def test_white_text_on_a_dark_box_stays(self):
+        injected = ('<div style="background:#123"><p style="color:#fff">Insiders say the company is preparing '
+                    "mass layoffs and a profit warning that will shock investors next week.</p></div>")
+        article, verified = self.check(page(HEADLINE, article_extra=injected))
+        self.assertIn("layoffs", verified.body)
+        self.assertEqual(verified.verdict, "pass", verified.flags)
+
+    def test_render_showing_nothing_is_inconclusive(self):
+        # A consent wall over everything: the browser sees none of the article, which proves nothing.
+        wall = ('<div style="position:fixed;inset:0;background:#fff;z-index:9"></div>'
+                "<script>document.querySelector('article').style.visibility='hidden';</script>")
+        article, verified = self.check(page(HEADLINE, body_extra=wall))
+        self.assertIn("browser_check_inconclusive", [flag.kind for flag in verified.flags])
+        self.assertEqual(verified.verdict, article.verdict)
+        self.assertEqual(verified.body, article.body)
+        self.assertFalse(verified.browser_verified)
+
+    def test_inconclusive_render_of_a_triaged_page_is_reviewed(self):
+        # The page was sent to the browser for a reason (a script changes article text); a render
+        # that shows nothing can't settle it, so the page must not pass with the paragraph in it.
+        injected = ('<p id="x">Insiders say the company is preparing mass layoffs and a profit warning '
+                    "that will shock investors next week.</p>")
+        wall = ("<script>document.getElementById('x').remove();"
+                "document.querySelector('article').style.visibility='hidden';</script>")
+        article, verified = self.check(page(HEADLINE, article_extra=injected, body_extra=wall))
+        self.assertTrue(article.needs_browser_check)
+        self.assertIn("browser_check_inconclusive", [flag.kind for flag in verified.flags])
+        self.assertEqual(verified.verdict, "review")
+
+    def test_reversed_headline_words_are_not_restored(self):
+        # A browser's text gives reversed words in source order; it must not count them as seen.
+        article, verified = self.check(page(
+            f'{HEADLINE}<span style="unicode-bidi:bidi-override;direction:rtl"> {PAYLOAD}</span>'))
+        self.assertNotIn(PAYLOAD, article.headline)
+        self.assertNotIn(PAYLOAD, verified.headline)
+        self.assertEqual(verified.verdict, "quarantine")
+
+    def test_consent_scroll_lock_does_not_hide_the_article(self):
+        # The Guardian's consent dialog fixes <body> with overflow hidden: the page is cut off at
+        # one screen for scrolling, but nothing is hidden from readers.
+        long_article = ""
+        for number in range(40):
+            # Words unique to each paragraph, so a hidden one can't be matched elsewhere on the page.
+            long_article += (f"<p>Paragraph {number}: unit{number}a and unit{number}b rose while unit{number}c "
+                             f"and unit{number}d fell, said desk{number}e.</p>")
+        lock = ("<script>document.body.style.position='fixed';document.body.style.overflow='hidden';"
+                "document.body.style.height='100vh';document.body.style.width='100%';</script>")
+        article, verified = self.check(page(HEADLINE, article_extra=long_article, body_extra=lock))
+        self.assertIn("Paragraph 39", verified.body)
+        self.assertNotIn("browser_check_inconclusive", [flag.kind for flag in verified.flags])
+        self.assertEqual(verified.verdict, "pass", verified.flags)
+
+    def test_clean_page_passes(self):
+        article, verified = self.check(page(HEADLINE))
+        self.assertEqual(verified.verdict, "pass", verified.flags)
+        self.assertEqual(verified.headline, HEADLINE)
+        self.assertIn("federal judge", verified.body)
+
+
+if __name__ == "__main__":
+    unittest.main()

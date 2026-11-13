@@ -1,0 +1,442 @@
+"""CSS value parsing for the visibility check: colors in every common syntax, and lengths,
+including calc(), min(), max() and clamp() expressions.
+
+Pure Python, no dependencies. Values the parser cannot evaluate return None, and the
+callers treat None as "not hidden", so an unknown value never removes text.
+"""
+
+import math
+import re
+
+VIEWPORT_WIDTH_PIXELS = 1366
+VIEWPORT_HEIGHT_PIXELS = 900
+PIXELS_PER_EM = 16
+
+PIXELS_PER_UNIT = {
+    "px": 1.0,
+    "em": PIXELS_PER_EM,
+    "rem": PIXELS_PER_EM,
+    "ex": PIXELS_PER_EM / 2,
+    "ch": PIXELS_PER_EM / 2,
+    "cap": PIXELS_PER_EM * 0.7,
+    "lh": PIXELS_PER_EM * 1.2,
+    "pt": 96 / 72,
+    "pc": 16.0,
+    "in": 96.0,
+    "cm": 96 / 2.54,
+    "mm": 96 / 25.4,
+    "q": 96 / 101.6,
+    "vw": VIEWPORT_WIDTH_PIXELS / 100,
+    "vh": VIEWPORT_HEIGHT_PIXELS / 100,
+    "svw": VIEWPORT_WIDTH_PIXELS / 100,
+    "svh": VIEWPORT_HEIGHT_PIXELS / 100,
+    "lvw": VIEWPORT_WIDTH_PIXELS / 100,
+    "lvh": VIEWPORT_HEIGHT_PIXELS / 100,
+    "dvw": VIEWPORT_WIDTH_PIXELS / 100,
+    "dvh": VIEWPORT_HEIGHT_PIXELS / 100,
+    "vmin": VIEWPORT_HEIGHT_PIXELS / 100,
+    "vmax": VIEWPORT_WIDTH_PIXELS / 100,
+}
+
+# The CSS named colors (CSS Color Module Level 4).
+NAMED_COLORS = {
+    "aliceblue": (240, 248, 255), "antiquewhite": (250, 235, 215), "aqua": (0, 255, 255),
+    "aquamarine": (127, 255, 212), "azure": (240, 255, 255), "beige": (245, 245, 220),
+    "bisque": (255, 228, 196), "black": (0, 0, 0), "blanchedalmond": (255, 235, 205),
+    "blue": (0, 0, 255), "blueviolet": (138, 43, 226), "brown": (165, 42, 42),
+    "burlywood": (222, 184, 135), "cadetblue": (95, 158, 160), "chartreuse": (127, 255, 0),
+    "chocolate": (210, 105, 30), "coral": (255, 127, 80), "cornflowerblue": (100, 149, 237),
+    "cornsilk": (255, 248, 220), "crimson": (220, 20, 60), "cyan": (0, 255, 255),
+    "darkblue": (0, 0, 139), "darkcyan": (0, 139, 139), "darkgoldenrod": (184, 134, 11),
+    "darkgray": (169, 169, 169), "darkgreen": (0, 100, 0), "darkgrey": (169, 169, 169),
+    "darkkhaki": (189, 183, 107), "darkmagenta": (139, 0, 139), "darkolivegreen": (85, 107, 47),
+    "darkorange": (255, 140, 0), "darkorchid": (153, 50, 204), "darkred": (139, 0, 0),
+    "darksalmon": (233, 150, 122), "darkseagreen": (143, 188, 143), "darkslateblue": (72, 61, 139),
+    "darkslategray": (47, 79, 79), "darkslategrey": (47, 79, 79), "darkturquoise": (0, 206, 209),
+    "darkviolet": (148, 0, 211), "deeppink": (255, 20, 147), "deepskyblue": (0, 191, 255),
+    "dimgray": (105, 105, 105), "dimgrey": (105, 105, 105), "dodgerblue": (30, 144, 255),
+    "firebrick": (178, 34, 34), "floralwhite": (255, 250, 240), "forestgreen": (34, 139, 34),
+    "fuchsia": (255, 0, 255), "gainsboro": (220, 220, 220), "ghostwhite": (248, 248, 255),
+    "gold": (255, 215, 0), "goldenrod": (218, 165, 32), "gray": (128, 128, 128),
+    "green": (0, 128, 0), "greenyellow": (173, 255, 47), "grey": (128, 128, 128),
+    "honeydew": (240, 255, 240), "hotpink": (255, 105, 180), "indianred": (205, 92, 92),
+    "indigo": (75, 0, 130), "ivory": (255, 255, 240), "khaki": (240, 230, 140),
+    "lavender": (230, 230, 250), "lavenderblush": (255, 240, 245), "lawngreen": (124, 252, 0),
+    "lemonchiffon": (255, 250, 205), "lightblue": (173, 216, 230), "lightcoral": (240, 128, 128),
+    "lightcyan": (224, 255, 255), "lightgoldenrodyellow": (250, 250, 210), "lightgray": (211, 211, 211),
+    "lightgreen": (144, 238, 144), "lightgrey": (211, 211, 211), "lightpink": (255, 182, 193),
+    "lightsalmon": (255, 160, 122), "lightseagreen": (32, 178, 170), "lightskyblue": (135, 206, 250),
+    "lightslategray": (119, 136, 153), "lightslategrey": (119, 136, 153), "lightsteelblue": (176, 196, 222),
+    "lightyellow": (255, 255, 224), "lime": (0, 255, 0), "limegreen": (50, 205, 50),
+    "linen": (250, 240, 230), "magenta": (255, 0, 255), "maroon": (128, 0, 0),
+    "mediumaquamarine": (102, 205, 170), "mediumblue": (0, 0, 205), "mediumorchid": (186, 85, 211),
+    "mediumpurple": (147, 112, 219), "mediumseagreen": (60, 179, 113), "mediumslateblue": (123, 104, 238),
+    "mediumspringgreen": (0, 250, 154), "mediumturquoise": (72, 209, 204), "mediumvioletred": (199, 21, 133),
+    "midnightblue": (25, 25, 112), "mintcream": (245, 255, 250), "mistyrose": (255, 228, 225),
+    "moccasin": (255, 228, 181), "navajowhite": (255, 222, 173), "navy": (0, 0, 128),
+    "oldlace": (253, 245, 230), "olive": (128, 128, 0), "olivedrab": (107, 142, 35),
+    "orange": (255, 165, 0), "orangered": (255, 69, 0), "orchid": (218, 112, 214),
+    "palegoldenrod": (238, 232, 170), "palegreen": (152, 251, 152), "paleturquoise": (175, 238, 238),
+    "palevioletred": (219, 112, 147), "papayawhip": (255, 239, 213), "peachpuff": (255, 218, 185),
+    "peru": (205, 133, 63), "pink": (255, 192, 203), "plum": (221, 160, 221),
+    "powderblue": (176, 224, 230), "purple": (128, 0, 128), "rebeccapurple": (102, 51, 153),
+    "red": (255, 0, 0), "rosybrown": (188, 143, 143), "royalblue": (65, 105, 225),
+    "saddlebrown": (139, 69, 19), "salmon": (250, 128, 114), "sandybrown": (244, 164, 96),
+    "seagreen": (46, 139, 87), "seashell": (255, 245, 238), "sienna": (160, 82, 45),
+    "silver": (192, 192, 192), "skyblue": (135, 206, 235), "slateblue": (106, 90, 205),
+    "slategray": (112, 128, 144), "slategrey": (112, 128, 144), "snow": (255, 250, 250),
+    "springgreen": (0, 255, 127), "steelblue": (70, 130, 180), "tan": (210, 180, 140),
+    "teal": (0, 128, 128), "thistle": (216, 191, 216), "tomato": (255, 99, 71),
+    "turquoise": (64, 224, 208), "violet": (238, 130, 238), "wheat": (245, 222, 179),
+    "white": (255, 255, 255), "whitesmoke": (245, 245, 245), "yellow": (255, 255, 0),
+    "yellowgreen": (154, 205, 50),
+}
+
+_COLOR_FUNCTION = re.compile(r"(rgba?|hsla?|hwb|oklch|oklab|lch|lab)\((.*)\)")
+
+
+def _component(text, percent_scale, default=None):
+    """A color component: a number, or a percentage of percent_scale. 'none' is 0."""
+    if text == "none":
+        return 0.0
+    try:
+        if text.endswith("%"):
+            return float(text[:-1]) / 100 * percent_scale
+        for suffix in ("deg", "turn", "rad", "grad"):
+            if text.endswith(suffix):
+                number = float(text[:-len(suffix)])
+                if suffix == "turn":
+                    return number * 360
+                if suffix == "rad":
+                    return math.degrees(number)
+                if suffix == "grad":
+                    return number * 0.9
+                return number
+        return float(text)
+    except ValueError:
+        return default
+
+
+def _hsl_to_rgb(hue, saturation, lightness):
+    hue = (hue % 360) / 360
+    if saturation == 0:
+        return (lightness, lightness, lightness)
+
+    def channel(offset):
+        k = (offset + hue * 12) % 12
+        amount = saturation * min(lightness, 1 - lightness)
+        return lightness - amount * max(-1, min(k - 3, 9 - k, 1))
+    return (channel(0), channel(8), channel(4))
+
+
+def _oklab_to_rgb(lightness, a, b):
+    l_root = lightness + 0.3963377774 * a + 0.2158037573 * b
+    m_root = lightness - 0.1055613458 * a - 0.0638541728 * b
+    s_root = lightness - 0.0894841775 * a - 1.2914855480 * b
+    l_value = l_root ** 3
+    m_value = m_root ** 3
+    s_value = s_root ** 3
+    linear = (
+        4.0767416621 * l_value - 3.3077115913 * m_value + 0.2309699292 * s_value,
+        -1.2684380046 * l_value + 2.6097574011 * m_value - 0.3413193965 * s_value,
+        -0.0041960863 * l_value - 0.7034186147 * m_value + 1.7076147010 * s_value,
+    )
+    encoded = []
+    for channel in linear:
+        channel = max(0.0, min(1.0, channel))
+        if channel <= 0.0031308:
+            encoded.append(12.92 * channel)
+        else:
+            encoded.append(1.055 * channel ** (1 / 2.4) - 0.055)
+    return tuple(encoded)
+
+
+def parse_color(value):
+    """(red, green, blue, alpha) with channels 0-255 and alpha 0-1, or None when unknown.
+
+    Understands names, #rgb/#rgba/#rrggbb/#rrggbbaa, rgb()/rgba() and hsl()/hsla() in the
+    comma and the modern space syntax, hwb(), oklab() and oklch(). For lab() and lch()
+    only the lightness and alpha are used (as a gray), which is enough for contrast.
+    """
+    if not value:
+        return None
+    color = value.strip().lower()
+    if color == "transparent":
+        return (0, 0, 0, 0.0)
+    if color in NAMED_COLORS:
+        red, green, blue = NAMED_COLORS[color]
+        return (red, green, blue, 1.0)
+    hex_match = re.fullmatch(r"#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})", color)
+    if hex_match:
+        digits = hex_match.group(1)
+        if len(digits) <= 4:
+            expanded_digits = []
+            for digit in digits:
+                expanded_digits.append(digit * 2)
+            digits = "".join(expanded_digits)
+        alpha = int(digits[6:8], 16) / 255 if len(digits) == 8 else 1.0
+        return (int(digits[0:2], 16), int(digits[2:4], 16), int(digits[4:6], 16), alpha)
+
+    function_match = _COLOR_FUNCTION.fullmatch(color)
+    if function_match is None:
+        return None
+    function_name = function_match.group(1)
+    arguments = function_match.group(2)
+    if "(" in arguments:
+        return None  # calc(), var() or relative colors: not evaluated
+    parts = []
+    for part in re.split(r"[\s,/]+", arguments.strip()):
+        if part:
+            parts.append(part)
+    if len(parts) < 3:
+        return None
+    alpha = 1.0
+    if len(parts) >= 4:
+        alpha = _component(parts[3], 1.0)
+        if alpha is None:
+            return None
+        alpha = max(0.0, min(1.0, alpha))
+
+    if function_name.startswith("rgb"):
+        channels = []
+        for part in parts[:3]:
+            channel = _component(part, 255.0)
+            if channel is None:
+                return None
+            channels.append(channel)
+        fractions = (channels[0] / 255, channels[1] / 255, channels[2] / 255)
+    elif function_name.startswith("hsl"):
+        hue = _component(parts[0], 360.0)
+        saturation = _component(parts[1], 1.0)
+        lightness = _component(parts[2], 1.0)
+        if hue is None or saturation is None or lightness is None:
+            return None
+        if not parts[1].endswith("%"):
+            saturation = saturation / 100
+        if not parts[2].endswith("%"):
+            lightness = lightness / 100
+        fractions = _hsl_to_rgb(hue, max(0.0, min(1.0, saturation)), max(0.0, min(1.0, lightness)))
+    elif function_name == "hwb":
+        hue = _component(parts[0], 360.0)
+        whiteness = _component(parts[1], 1.0)
+        blackness = _component(parts[2], 1.0)
+        if hue is None or whiteness is None or blackness is None:
+            return None
+        if whiteness + blackness >= 1:
+            gray = whiteness / (whiteness + blackness)
+            fractions = (gray, gray, gray)
+        else:
+            pure = _hsl_to_rgb(hue, 1.0, 0.5)
+            fractions = []
+            for channel in pure:
+                fractions.append(channel * (1 - whiteness - blackness) + whiteness)
+            fractions = tuple(fractions)
+    elif function_name in ("oklab", "oklch"):
+        lightness = _component(parts[0], 1.0)
+        if lightness is None:
+            return None
+        if function_name == "oklab":
+            a = _component(parts[1], 0.4)
+            b = _component(parts[2], 0.4)
+        else:
+            chroma = _component(parts[1], 0.4)
+            hue = _component(parts[2], 360.0)
+            if chroma is None or hue is None:
+                return None
+            a = chroma * math.cos(math.radians(hue))
+            b = chroma * math.sin(math.radians(hue))
+        if a is None or b is None:
+            return None
+        fractions = _oklab_to_rgb(lightness, a, b)
+    else:  # lab(), lch(): CIE lightness 0-100, used as a gray
+        lightness = _component(parts[0], 100.0)
+        if lightness is None:
+            return None
+        lightness = max(0.0, min(100.0, lightness))
+        linear = ((lightness + 16) / 116) ** 3 if lightness > 8 else lightness / 903.3
+        if linear <= 0.0031308:
+            gray = 12.92 * linear
+        else:
+            gray = 1.055 * linear ** (1 / 2.4) - 0.055
+        fractions = (gray, gray, gray)
+
+    channels = []
+    for fraction in fractions:
+        channels.append(int(round(max(0.0, min(1.0, fraction)) * 255)))
+    return (channels[0], channels[1], channels[2], alpha)
+
+
+_QUOTED_TEXT = re.compile(r'"((?:[^"\\]|\\.)*)"' + r"|'((?:[^'\\]|\\.)*)'")
+
+
+def quoted_strings(value):
+    """The quoted strings in a CSS value, such as content: "Breaking: " attr(x)."""
+    strings = []
+    for double_quoted, single_quoted in _QUOTED_TEXT.findall(value or ""):
+        strings.append(double_quoted or single_quoted)
+    return strings
+
+
+# ---- numbers and lengths -------------------------------------------------
+
+_TOKEN = re.compile(r"\s*(?:(-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?)([a-z%]*)|([a-z-]+)\(|([-+*/(),]))")
+
+
+class _ExpressionParser:
+    """Evaluates calc()-style expressions to (number, kind), kind 'length' (in pixels),
+    'number' or 'percent'. Raises ValueError on anything it does not understand."""
+
+    def __init__(self, text):
+        self.tokens = []
+        position = 0
+        text = text.strip()
+        while position < len(text):
+            match = _TOKEN.match(text, position)
+            if match is None or match.end() == position:
+                raise ValueError(text)
+            self.tokens.append(match.groups())
+            position = match.end()
+            while position < len(text) and text[position].isspace():
+                position += 1
+        self.position = 0
+
+    def _peek(self):
+        if self.position < len(self.tokens):
+            return self.tokens[self.position]
+        return None
+
+    def _take_operator(self, operators):
+        token = self._peek()
+        if token is not None and token[3] in operators:
+            self.position += 1
+            return token[3]
+        return None
+
+    def parse(self):
+        value = self._sum()
+        if self._peek() is not None:
+            raise ValueError("trailing tokens")
+        return value
+
+    def _sum(self):
+        number, kind = self._product()
+        while True:
+            operator = self._take_operator(("+", "-"))
+            if operator is None:
+                return number, kind
+            other_number, other_kind = self._product()
+            if other_kind != kind:
+                if number == 0 and kind == "number":
+                    kind = other_kind
+                elif other_number != 0 or other_kind != "number":
+                    raise ValueError("mixed units")
+            number = number + other_number if operator == "+" else number - other_number
+        return number, kind
+
+    def _product(self):
+        number, kind = self._factor()
+        while True:
+            operator = self._take_operator(("*", "/"))
+            if operator is None:
+                return number, kind
+            other_number, other_kind = self._factor()
+            if operator == "*":
+                if kind == "number":
+                    kind = other_kind
+                elif other_kind != "number":
+                    raise ValueError("length times length")
+                number = number * other_number
+            else:
+                if other_kind != "number" or other_number == 0:
+                    raise ValueError("bad division")
+                number = number / other_number
+
+    def _arguments(self):
+        values = [self._sum()]
+        while self._take_operator((",",)):
+            values.append(self._sum())
+        if self._take_operator((")",)) is None:
+            raise ValueError("missing )")
+        return values
+
+    def _factor(self):
+        token = self._peek()
+        if token is None:
+            raise ValueError("unexpected end")
+        number_text, unit, function_name, operator = token
+        self.position += 1
+        if number_text is not None:
+            number = float(number_text)
+            if unit == "":
+                return number, "number"
+            if unit == "%":
+                return number, "percent"
+            if unit in PIXELS_PER_UNIT:
+                return number * PIXELS_PER_UNIT[unit], "length"
+            raise ValueError("unknown unit " + unit)
+        if function_name is not None:
+            arguments = self._arguments()
+            kinds = set()
+            for _, kind in arguments:
+                kinds.add(kind)
+            if len(kinds) != 1:
+                raise ValueError("mixed kinds")
+            kind = arguments[0][1]
+            numbers = []
+            for argument_number, _ in arguments:
+                numbers.append(argument_number)
+            if function_name == "calc" and len(numbers) == 1:
+                return numbers[0], kind
+            if function_name == "min":
+                return min(numbers), kind
+            if function_name == "max":
+                return max(numbers), kind
+            if function_name == "clamp" and len(numbers) == 3:
+                return max(numbers[0], min(numbers[1], numbers[2])), kind
+            raise ValueError("unsupported function " + function_name)
+        if operator == "(":
+            value = self._sum()
+            if self._take_operator((")",)) is None:
+                raise ValueError("missing )")
+            return value
+        raise ValueError("unexpected " + str(operator))
+
+
+def numeric_value(value):
+    """(number, kind) for a CSS number, percentage or length (kind 'length' is in pixels),
+    including calc(), min(), max() and clamp(); None when it cannot be evaluated."""
+    if not value:
+        return None
+    text = value.strip().lower()
+    if not text or "var(" in text:
+        return None
+    try:
+        return _ExpressionParser(text).parse()
+    except (ValueError, OverflowError, ZeroDivisionError):
+        return None
+
+
+def length_in_pixels(value):
+    """Pixels for a length (unitless 0 counts as 0px); None for percentages, keywords and unknowns."""
+    parsed = numeric_value(value)
+    if parsed is None:
+        return None
+    number, kind = parsed
+    if kind == "length":
+        return number
+    if kind == "number" and number == 0:
+        return 0.0
+    return None
+
+
+def plain_number(value):
+    """A unitless number (or a percentage as a fraction, 50% -> 0.5); None otherwise."""
+    parsed = numeric_value(value)
+    if parsed is None:
+        return None
+    number, kind = parsed
+    if kind == "number":
+        return number
+    if kind == "percent":
+        return number / 100
+    return None

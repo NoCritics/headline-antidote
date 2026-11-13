@@ -1,0 +1,2050 @@
+{
+ "feed_titles": {
+  "count": 907,
+  "flagged": [
+   {
+    "source": "Kommersant",
+    "title": "Оператор «Турецкого потока» подал иск к голландской Gаsuniе и «Нафтогазу»",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "mixed_script_word",
+      "severity": "high",
+      "original": "Gаsuniе",
+      "detail": "Latin word containing U+0430 CYRILLIC SMALL LETTER A, U+0435 CYRILLIC SMALL LETTER IE"
+     }
+    ]
+   }
+  ],
+  "microseconds_per_title": 159.8
+ },
+ "pages": [
+  {
+   "file": "page_001.html",
+   "source": "CNBC",
+   "language": "en",
+   "url": "https://www.cnbc.com/2026/11/07/cosm-immersive-movie-screenings.html",
+   "feed_title": "Cosm rides premium moviegoing wave with more immersive screenings and a wider library",
+   "fetch_milliseconds": 896.0,
+   "bytes": 838508,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 69.5,
+   "html_mode_milliseconds": 194.5,
+   "html_mode": {
+    "scraped_headline": "Cosm rides premium moviegoing wave with more immersive screenings and a wider library",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1724.7,
+    "walker_milliseconds": 291.0,
+    "guard_milliseconds": 273.0,
+    "status": "ok",
+    "visible_headline": "Cosm rides premium moviegoing wave with more immersive screenings and a wider library",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1390.1,
+    "walker_milliseconds": 422.1,
+    "guard_milliseconds": 436.3,
+    "status": "ok",
+    "visible_headline": "Cosm rides premium moviegoing wave with more immersive screenings and a wider library",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_002.html",
+   "source": "CNBC",
+   "language": "en",
+   "url": "https://www.cnbc.com/2026/11/06/automakers-rising-costs-flat-production-2027.html",
+   "feed_title": "Where's the growth? Legacy automakers face a tougher 2027 as costs rise, market tightens",
+   "fetch_milliseconds": 1828.6,
+   "bytes": 836662,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 56.1,
+   "html_mode_milliseconds": 183.6,
+   "html_mode": {
+    "scraped_headline": "Where's the growth? Legacy automakers face a tougher 2027 as costs rise, market tightens",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 5474.3,
+    "walker_milliseconds": 937.7,
+    "guard_milliseconds": 465.0,
+    "status": "ok",
+    "visible_headline": "Where’s the growth? Legacy automakers face a tougher 2027 as costs rise, market tightens",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1210.0,
+    "walker_milliseconds": 446.5,
+    "guard_milliseconds": 296.6,
+    "status": "ok",
+    "visible_headline": "Where’s the growth? Legacy automakers face a tougher 2027 as costs rise, market tightens",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_003.html",
+   "source": "CNBC",
+   "language": "en",
+   "url": "https://www.cnbc.com/2026/11/06/small-business-holiday-shipping-costs.html",
+   "feed_title": "Small retailers brace for 'huge hit' this holiday season as shipping costs spike",
+   "fetch_milliseconds": 1358.9,
+   "bytes": 791722,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 79.5,
+   "html_mode_milliseconds": 217.6,
+   "html_mode": {
+    "scraped_headline": "Small retailers brace for 'huge hit' this holiday season as shipping costs spike",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1720.2,
+    "walker_milliseconds": 1044.5,
+    "guard_milliseconds": 547.6,
+    "status": "ok",
+    "visible_headline": "Small retailers brace for ‘huge hit’ this holiday season as shipping costs spike",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1114.6,
+    "walker_milliseconds": 387.9,
+    "guard_milliseconds": 314.0,
+    "status": "ok",
+    "visible_headline": "Small retailers brace for ‘huge hit’ this holiday season as shipping costs spike",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_004.html",
+   "source": "CNBC",
+   "language": "en",
+   "url": "https://www.cnbc.com/2026/11/06/tesla-cybertruck-texas-musk.html",
+   "feed_title": "Tesla to wind down Cybertruck production in Texas next year to ramp Cybercab, Musk says",
+   "fetch_milliseconds": 1246.6,
+   "bytes": 806734,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 96.5,
+   "html_mode_milliseconds": 186.8,
+   "html_mode": {
+    "scraped_headline": "Tesla to wind down Cybertruck production in Texas next year to ramp Cybercab, Musk says",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1098.4,
+    "walker_milliseconds": 270.6,
+    "guard_milliseconds": 395.8,
+    "status": "ok",
+    "visible_headline": "Tesla to wind down Cybertruck production in Texas next year to ramp Cybercab, Musk says",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1025.7,
+    "walker_milliseconds": 506.5,
+    "guard_milliseconds": 240.0,
+    "status": "ok",
+    "visible_headline": "Tesla to wind down Cybertruck production in Texas next year to ramp Cybercab, Musk says",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_005.html",
+   "source": "BBC Business",
+   "language": "en",
+   "url": "https://www.bbc.co.uk/news/articles/c35ynnpzdq51o?at_medium=RSS&at_campaign=rss",
+   "feed_title": "AI stocks climb after trillions wiped from market values",
+   "fetch_milliseconds": 1019.9,
+   "bytes": 405429,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 73.3,
+   "html_mode_milliseconds": 47.6,
+   "html_mode": {
+    "scraped_headline": "AI stocks climb after trillions wiped from market values",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 526.7,
+    "status": "error: Error: Page.content: Unable to retrieve content because the page is navigating and changing the content."
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 491.6,
+    "walker_milliseconds": 61.7,
+    "guard_milliseconds": 31.8,
+    "status": "ok",
+    "visible_headline": "AI stocks climb after trillions wiped from market values",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_006.html",
+   "source": "BBC Business",
+   "language": "en",
+   "url": "https://www.bbc.co.uk/news/articles/crlykkzwwpydo?at_medium=RSS&at_campaign=rss",
+   "feed_title": "Why the US midterms sparked an AI stock selloff",
+   "fetch_milliseconds": 978.3,
+   "bytes": 407309,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 74.3,
+   "html_mode_milliseconds": 48.9,
+   "html_mode": {
+    "scraped_headline": "Why the US midterms sparked an AI stock selloff",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 896.4,
+    "walker_milliseconds": 122.1,
+    "guard_milliseconds": 49.1,
+    "status": "ok",
+    "visible_headline": "Why the US midterms sparked an AI stock selloff",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 524.3,
+    "status": "error: Error: Locator.evaluate: Execution context was destroyed, most likely because of a navigation"
+   }
+  },
+  {
+   "file": "page_007.html",
+   "source": "BBC Business",
+   "language": "en",
+   "url": "https://www.bbc.co.uk/news/articles/c33zdz2m1e2o?at_medium=RSS&at_campaign=rss",
+   "feed_title": "How does it affect me if share prices fall?",
+   "fetch_milliseconds": 906.9,
+   "bytes": 433533,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 178.2,
+   "html_mode_milliseconds": 52.1,
+   "html_mode": {
+    "scraped_headline": "How does it affect me if share prices fall?",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 241.2,
+    "walker_milliseconds": 531.0,
+    "guard_milliseconds": 32.5,
+    "status": "ok",
+    "visible_headline": "How does it affect me if share prices fall?",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 626.1,
+    "status": "error: Error: Locator.evaluate: Execution context was destroyed, most likely because of a navigation"
+   }
+  },
+  {
+   "file": "page_008.html",
+   "source": "BBC Business",
+   "language": "en",
+   "url": "https://www.bbc.co.uk/news/articles/cm1dwwqrr1kvo?at_medium=RSS&at_campaign=rss",
+   "feed_title": "Why smoky bacon crisps threaten to reignite rows over EU rules",
+   "fetch_milliseconds": 887.3,
+   "bytes": 411880,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 71.7,
+   "html_mode_milliseconds": 49.3,
+   "html_mode": {
+    "scraped_headline": "Why smoky bacon crisps threaten to reignite rows over EU rules",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 2341.5,
+    "walker_milliseconds": 54.3,
+    "guard_milliseconds": 19.4,
+    "status": "ok",
+    "visible_headline": "Why smoky bacon crisps threaten to reignite rows over EU rules",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 706.1,
+    "walker_milliseconds": 84.5,
+    "guard_milliseconds": 89.3,
+    "status": "ok",
+    "visible_headline": "Why smoky bacon crisps threaten to reignite rows over EU rules",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_009.html",
+   "source": "Guardian Business",
+   "language": "en",
+   "url": "https://www.theguardian.com/uk-news/2026/nov/07/lanarkshire-ai-datacentre-datavita-chapelhall-national-grid-renewable-energy",
+   "feed_title": "Lanarkshire AI datacentre to fully rely on National Grid despite renewables claim",
+   "fetch_milliseconds": 1379.4,
+   "bytes": 427928,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 66.8,
+   "html_mode_milliseconds": 46.6,
+   "html_mode": {
+    "scraped_headline": "Lanarkshire AI datacentre to fully rely on National Grid despite renewables claim",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 576.4,
+    "walker_milliseconds": 87.1,
+    "guard_milliseconds": 40.3,
+    "status": "ok",
+    "visible_headline": "Lanarkshire AI datacentre to fully rely on National Grid despite renewables claim",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 483.2,
+    "walker_milliseconds": 114.9,
+    "guard_milliseconds": 48.0,
+    "status": "ok",
+    "visible_headline": "Lanarkshire AI datacentre to fully rely on National Grid despite renewables claim",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_010.html",
+   "source": "Guardian Business",
+   "language": "en",
+   "url": "https://www.theguardian.com/politics/2026/nov/07/reform-uk-councillor-promoted-alleged-ponzi-scheme-hyperverse",
+   "feed_title": "Reform UK councillor promoted collapsed $1.9bn ‘Ponzi scheme’ HyperVerse that left victims suicidal",
+   "fetch_milliseconds": 1223.2,
+   "bytes": 351725,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 74.4,
+   "html_mode_milliseconds": 32.3,
+   "html_mode": {
+    "scraped_headline": "Reform UK councillor promoted collapsed $1.9bn ‘Ponzi scheme’ HyperVerse that left victims suicidal",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 317.2,
+    "walker_milliseconds": 66.7,
+    "guard_milliseconds": 38.1,
+    "status": "ok",
+    "visible_headline": "Reform UK councillor promoted collapsed $1.9bn ‘Ponzi scheme’ HyperVerse that left victims suicidal",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 659.2,
+    "walker_milliseconds": 110.0,
+    "guard_milliseconds": 64.5,
+    "status": "ok",
+    "visible_headline": "Reform UK councillor promoted collapsed $1.9bn ‘Ponzi scheme’ HyperVerse that left victims suicidal",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_011.html",
+   "source": "Guardian Business",
+   "language": "en",
+   "url": "https://www.theguardian.com/business/2026/nov/07/job-cuts-lost-customers-and-a-22bn-debt-pile-what-has-gone-wrong-at-virgin-media-o2",
+   "feed_title": "Job cuts, lost customers and a £22bn debt pile: what has gone wrong at Virgin Media O2?",
+   "fetch_milliseconds": 1152.0,
+   "bytes": 320418,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 101.9,
+   "html_mode_milliseconds": 37.9,
+   "html_mode": {
+    "scraped_headline": "Job cuts, lost customers and a £22bn debt pile: what has gone wrong at Virgin Media O2?",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 391.6,
+    "walker_milliseconds": 82.1,
+    "guard_milliseconds": 66.6,
+    "status": "ok",
+    "visible_headline": "Job cuts, lost customers and a £22bn debt pile: what has gone wrong at Virgin Media O2?",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 829.0,
+    "walker_milliseconds": 74.1,
+    "guard_milliseconds": 55.9,
+    "status": "ok",
+    "visible_headline": "Job cuts, lost customers and a £22bn debt pile: what has gone wrong at Virgin Media O2?",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_012.html",
+   "source": "Guardian Business",
+   "language": "en",
+   "url": "https://www.theguardian.com/business/2026/nov/07/great-british-railways-new-dawn-for-a-new-network-but-with-plenty-of-old-problems-to-fix",
+   "feed_title": "Great British Railways: new dawn for a new network but with plenty of old problems to fix",
+   "fetch_milliseconds": 1381.4,
+   "bytes": 470076,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 77.0,
+   "html_mode_milliseconds": 49.5,
+   "html_mode": {
+    "scraped_headline": "Great British Railways: new dawn for a new network but with plenty of old problems to fix",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 403.4,
+    "walker_milliseconds": 79.6,
+    "guard_milliseconds": 55.3,
+    "status": "ok",
+    "visible_headline": "Great British Railways: new dawn for a new network but with plenty of old problems to fix",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 507.8,
+    "walker_milliseconds": 110.2,
+    "guard_milliseconds": 50.6,
+    "status": "ok",
+    "visible_headline": "Great British Railways: new dawn for a new network but with plenty of old problems to fix",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_013.html",
+   "source": "NPR Business",
+   "language": "en",
+   "url": "https://www.npr.org/2026/11/06/nx-s1-6032607/the-cybertrucks-cause-of-death-insufficient-demand",
+   "feed_title": "The Cybertruck's 'cause of death?' Insufficient demand",
+   "fetch_milliseconds": 1770.8,
+   "bytes": 155162,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 52.8,
+   "html_mode_milliseconds": 9.9,
+   "html_mode": {
+    "scraped_headline": "The Cybertruck's 'cause of death?' Insufficient demand",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "status": "error: TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.npr.org/2026/11/06/nx-s1-6032607/the-cybertrucks-cause-of-death-insuffic"
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1018.7,
+    "walker_milliseconds": 361.1,
+    "guard_milliseconds": 49.4,
+    "status": "ok",
+    "visible_headline": "The Cybertruck's 'cause of death?' Insufficient demand",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_014.html",
+   "source": "NPR Business",
+   "language": "en",
+   "url": "https://www.npr.org/2026/11/06/nx-s1-6032695/this-was-the-week-the-ai-trade-cracked-so-whats-next",
+   "feed_title": "This was the week the AI trade cracked. So what's next?",
+   "fetch_milliseconds": 1823.9,
+   "bytes": 158837,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 70.3,
+   "html_mode_milliseconds": 13.2,
+   "html_mode": {
+    "scraped_headline": "This was the week the AI trade cracked. So what's next?",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 6991.6,
+    "walker_milliseconds": 1460.5,
+    "guard_milliseconds": 118.2,
+    "status": "ok",
+    "visible_headline": "This was the week the AI trade cracked. So what's next?",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1850.9,
+    "walker_milliseconds": 2729.5,
+    "guard_milliseconds": 77.0,
+    "status": "ok",
+    "visible_headline": "This was the week the AI trade cracked. So what's next?",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_015.html",
+   "source": "NPR Business",
+   "language": "en",
+   "url": "https://www.npr.org/2026/11/06/nx-s1-6030867/jobs-labor-market-economy-wages-inflation",
+   "feed_title": "Hiring jumps: The economy added 165,000 jobs last month",
+   "fetch_milliseconds": 1939.8,
+   "bytes": 159750,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 153.5,
+   "html_mode_milliseconds": 23.5,
+   "html_mode": {
+    "scraped_headline": "Hiring jumps: The economy added 165,000 jobs last month",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 6194.9,
+    "walker_milliseconds": 1070.5,
+    "guard_milliseconds": 118.2,
+    "status": "ok",
+    "visible_headline": "Hiring jumps: The economy added 165,000 jobs last month",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1670.1,
+    "walker_milliseconds": 349.5,
+    "guard_milliseconds": 58.5,
+    "status": "ok",
+    "visible_headline": "Hiring jumps: The economy added 165,000 jobs last month",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_016.html",
+   "source": "NPR Business",
+   "language": "en",
+   "url": "https://www.npr.org/sections/planet-money/2026/11/06/nx-s1-6030995/why-gold-prices-are-surprisingly-low",
+   "feed_title": "Why gold prices are surprisingly low",
+   "fetch_milliseconds": 1813.2,
+   "bytes": 177343,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 66.7,
+   "html_mode_milliseconds": 6.0,
+   "html_mode": {
+    "scraped_headline": "Why gold prices are surprisingly low",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 5424.2,
+    "walker_milliseconds": 1389.4,
+    "guard_milliseconds": 37.7,
+    "status": "ok",
+    "visible_headline": "Why gold prices are surprisingly low",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1125.5,
+    "walker_milliseconds": 219.5,
+    "guard_milliseconds": 29.1,
+    "status": "ok",
+    "visible_headline": "Why gold prices are surprisingly low",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_017.html",
+   "source": "Fortune",
+   "language": "en",
+   "url": "https://fortune.com/2026/11/07/berkshire-hathaway-stock-brk-q3-earnings-investment-portfolio-buybacks/",
+   "feed_title": "Berkshire Hathaway stock is a haven again as investors flee AI bloodbath while its own portfolio takes a hit amid reshuffling",
+   "fetch_milliseconds": 944.5,
+   "bytes": 448328,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 8,
+   "beautifulsoup_milliseconds": 64.3,
+   "html_mode_milliseconds": 18.8,
+   "html_mode": {
+    "scraped_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 4361.8,
+    "walker_milliseconds": 197.4,
+    "guard_milliseconds": 88.2,
+    "status": "ok",
+    "visible_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 5287.1,
+    "walker_milliseconds": 180.5,
+    "guard_milliseconds": 60.2,
+    "status": "ok",
+    "visible_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_018.html",
+   "source": "Fortune",
+   "language": "en",
+   "url": "https://fortune.com/article/why-did-airbnb-ceo-brian-cheskys-mom-worry-he-would-have-only-job-pays-less-social-worker/",
+   "feed_title": "Billionaire Brian Chesky’s social-worker parents told him to pick a high-paying career. He went to art school—and started Airbnb with 3 air beds",
+   "fetch_milliseconds": 654.1,
+   "bytes": 490873,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 8,
+   "beautifulsoup_milliseconds": 113.3,
+   "html_mode_milliseconds": 17.3,
+   "html_mode": {
+    "scraped_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 5503.1,
+    "walker_milliseconds": 265.4,
+    "guard_milliseconds": 67.4,
+    "status": "ok",
+    "visible_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 3572.8,
+    "walker_milliseconds": 243.2,
+    "guard_milliseconds": 70.5,
+    "status": "ok",
+    "visible_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_019.html",
+   "source": "Fortune",
+   "language": "en",
+   "url": "https://fortune.com/article/starter-homes-cost-1-million-in-a-record-242-us-cities-affordability-crisis-younger-buyers/",
+   "feed_title": "Starter homes cost $1 million in a record 242 U.S. cities—proof the affordability crisis has hit the homes meant for first-time buyers",
+   "fetch_milliseconds": 763.1,
+   "bytes": 470491,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 8,
+   "beautifulsoup_milliseconds": 64.1,
+   "html_mode_milliseconds": 19.2,
+   "html_mode": {
+    "scraped_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 5446.6,
+    "walker_milliseconds": 301.3,
+    "guard_milliseconds": 60.2,
+    "status": "ok",
+    "visible_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 5330.1,
+    "walker_milliseconds": 225.7,
+    "guard_milliseconds": 55.6,
+    "status": "ok",
+    "visible_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_020.html",
+   "source": "Fortune",
+   "language": "en",
+   "url": "https://fortune.com/article/acely-ceo-ron-schneidermann-work-life-balance-ate-canned-soup-startup-hustle-gen-z-advice-former-alltrails/",
+   "feed_title": "This CEO lived on canned soup and took just two days off for his daughter’s birth. Now, he admits he lost sight of proper work-life balance",
+   "fetch_milliseconds": 823.5,
+   "bytes": 475397,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 8,
+   "beautifulsoup_milliseconds": 84.5,
+   "html_mode_milliseconds": 20.7,
+   "html_mode": {
+    "scraped_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 5160.9,
+    "walker_milliseconds": 339.5,
+    "guard_milliseconds": 69.4,
+    "status": "ok",
+    "visible_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 5777.7,
+    "walker_milliseconds": 288.5,
+    "guard_milliseconds": 92.8,
+    "status": "ok",
+    "visible_headline": "Trendingnow",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_021.html",
+   "source": "Business Insider",
+   "language": "en",
+   "url": "https://www.businessinsider.com/mom-stopped-kids-streaming-netflix-disney-vhs-2026-11",
+   "feed_title": "I replaced our smart TV with an old VHS player. My kids watch less TV, fight less, and don't throw tantrums.",
+   "fetch_milliseconds": 1260.7,
+   "bytes": 473048,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 32.9,
+   "html_mode_milliseconds": 15.2,
+   "html_mode": {
+    "scraped_headline": "I replaced our smart TV with an old VHS player. My kids watch less TV, fight less, and don't throw tantrums.",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1055.7,
+    "walker_milliseconds": 577.0,
+    "guard_milliseconds": 46.9,
+    "status": "ok",
+    "visible_headline": "I replaced our smart TV with an old VHS player. My kids watch less TV, fight less, and don't throw tantrums.",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 270.9,
+    "walker_milliseconds": 202.7,
+    "guard_milliseconds": 39.5,
+    "status": "ok",
+    "visible_headline": "I replaced our smart TV with an old VHS player. My kids watch less TV, fight less, and don't throw tantrums.",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_022.html",
+   "source": "Business Insider",
+   "language": "en",
+   "url": "https://www.businessinsider.com/elon-musk-elizabeth-holmes-similarities-alex-gibney-2026-11",
+   "feed_title": "Elon Musk and Elizabeth Holmes share a 'superpower,' says documentary director Alex Gibney",
+   "fetch_milliseconds": 1126.9,
+   "bytes": 414690,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 94.0,
+   "html_mode_milliseconds": 33.3,
+   "html_mode": {
+    "scraped_headline": "Elon Musk and Elizabeth Holmes share a 'superpower,' says documentary director Alex Gibney",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 742.6,
+    "walker_milliseconds": 509.2,
+    "guard_milliseconds": 48.0,
+    "status": "ok",
+    "visible_headline": "Elon Musk and Elizabeth Holmes share a 'superpower,' says documentary director Alex Gibney",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 245.4,
+    "walker_milliseconds": 122.5,
+    "guard_milliseconds": 41.2,
+    "status": "ok",
+    "visible_headline": "Elon Musk and Elizabeth Holmes share a 'superpower,' says documentary director Alex Gibney",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_023.html",
+   "source": "Business Insider",
+   "language": "en",
+   "url": "https://www.businessinsider.com/favorite-day-trip-southern-california-what-to-do-ventura-amtrak-2026-11",
+   "feed_title": "As a Los Angeles local, I love taking a $22 train to this spot with low-key beaches, great shopping, and delicious food",
+   "fetch_milliseconds": 1199.7,
+   "bytes": 427913,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 91.3,
+   "html_mode_milliseconds": 34.0,
+   "html_mode": {
+    "scraped_headline": "As a Los Angeles local, I love taking a $22 train to this spot with low-key beaches, great shopping, and delicious food",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 712.3,
+    "walker_milliseconds": 554.9,
+    "guard_milliseconds": 43.6,
+    "status": "ok",
+    "visible_headline": "As a Los Angeles local, I love taking a $22 train to this spot with low-key beaches, great shopping, and delicious food",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 285.4,
+    "walker_milliseconds": 177.8,
+    "guard_milliseconds": 33.2,
+    "status": "ok",
+    "visible_headline": "As a Los Angeles local, I love taking a $22 train to this spot with low-key beaches, great shopping, and delicious food",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_024.html",
+   "source": "Business Insider",
+   "language": "en",
+   "url": "https://www.businessinsider.com/dont-allow-screens-toddler-envy-parents-who-do-2026-11",
+   "feed_title": "I don't allow my toddler screen time. Sometimes I envy the parents who do.",
+   "fetch_milliseconds": 1110.1,
+   "bytes": 431205,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 85.7,
+   "html_mode_milliseconds": 32.0,
+   "html_mode": {
+    "scraped_headline": "I don't allow my toddler screen time. Sometimes I envy the parents who do.",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 670.2,
+    "walker_milliseconds": 639.6,
+    "guard_milliseconds": 41.3,
+    "status": "ok",
+    "visible_headline": "I don't allow my toddler screen time. Sometimes I envy the parents who do.",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 211.5,
+    "walker_milliseconds": 227.2,
+    "guard_milliseconds": 39.5,
+    "status": "ok",
+    "visible_headline": "I don't allow my toddler screen time. Sometimes I envy the parents who do.",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_025.html",
+   "source": "Seeking Alpha",
+   "language": "en",
+   "url": "https://seekingalpha.com/news/4668736-nvidia-ceo-romantically-involved-alleged-chinese-spy?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+   "feed_title": "Nvidia CEO was romantically involved with alleged Chinese spy, U.S. memo says: FT",
+   "fetch_milliseconds": 689.7,
+   "bytes": 121607,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 99.5,
+   "html_mode_milliseconds": 8.6,
+   "html_mode": {
+    "scraped_headline": "Nvidia CEO was romantically involved with alleged Chinese spy, U.S. memo says: FT",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1453.6,
+    "walker_milliseconds": 158.4,
+    "guard_milliseconds": 9.9,
+    "status": "ok",
+    "visible_headline": "Nvidia CEO was romantically involved with alleged Chinese spy, U.S. memo says: FT",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 875.6,
+    "walker_milliseconds": 578.5,
+    "guard_milliseconds": 11.3,
+    "status": "ok",
+    "visible_headline": "Nvidia CEO was romantically involved with alleged Chinese spy, U.S. memo says: FT",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_026.html",
+   "source": "Seeking Alpha",
+   "language": "en",
+   "url": "https://seekingalpha.com/news/4668735-nvidia-sparks-valuation-debate-after-selloff?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+   "feed_title": "Bulls vs. Bears: NVIDIA sparks valuation debate as stock nears six-month low",
+   "fetch_milliseconds": 1261.8,
+   "bytes": 121872,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 34.5,
+   "html_mode_milliseconds": 3.6,
+   "html_mode": {
+    "scraped_headline": "Bulls vs. Bears: NVIDIA sparks valuation debate as stock nears six-month low",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 760.1,
+    "walker_milliseconds": 145.0,
+    "guard_milliseconds": 8.7,
+    "status": "ok",
+    "visible_headline": "Bulls vs. Bears: NVIDIA sparks valuation debate as stock nears six-month low",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 834.6,
+    "walker_milliseconds": 231.1,
+    "guard_milliseconds": 8.7,
+    "status": "ok",
+    "visible_headline": "Bulls vs. Bears: NVIDIA sparks valuation debate as stock nears six-month low",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_027.html",
+   "source": "Seeking Alpha",
+   "language": "en",
+   "url": "https://seekingalpha.com/news/4668540-real-estate-stocks-gain-as-the-blue-wave-sends-treasury-yields-lower?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+   "feed_title": "Real estate stocks gain as the Blue Wave sends Treasury yields lower",
+   "fetch_milliseconds": 1391.3,
+   "bytes": 152905,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 54.1,
+   "html_mode_milliseconds": 8.5,
+   "html_mode": {
+    "scraped_headline": "Real estate stocks gain as the Blue Wave sends Treasury yields lower",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 782.0,
+    "walker_milliseconds": 68.5,
+    "guard_milliseconds": 11.3,
+    "status": "ok",
+    "visible_headline": "Real estate stocks gain as the Blue Wave sends Treasury yields lower",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 338.9,
+    "walker_milliseconds": 184.1,
+    "guard_milliseconds": 9.9,
+    "status": "ok",
+    "visible_headline": "Real estate stocks gain as the Blue Wave sends Treasury yields lower",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_028.html",
+   "source": "Seeking Alpha",
+   "language": "en",
+   "url": "https://seekingalpha.com/news/4668733-energy-earnings-scorecard-strong-q3-results-drive-clean-sweep-across-major-players?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+   "feed_title": "Energy Earnings Scorecard: Strong Q3 results drive clean sweep across major players",
+   "fetch_milliseconds": 1019.9,
+   "bytes": 129300,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 52.5,
+   "html_mode_milliseconds": 9.4,
+   "html_mode": {
+    "scraped_headline": "Energy Earnings Scorecard: Strong Q3 results drive clean sweep across major players",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 682.7,
+    "walker_milliseconds": 162.3,
+    "guard_milliseconds": 9.6,
+    "status": "ok",
+    "visible_headline": "Energy Earnings Scorecard: Strong Q3 results drive clean sweep across major players",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 404.7,
+    "walker_milliseconds": 188.8,
+    "guard_milliseconds": 8.4,
+    "status": "ok",
+    "visible_headline": "Energy Earnings Scorecard: Strong Q3 results drive clean sweep across major players",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_029.html",
+   "source": "Al Jazeera",
+   "language": "en",
+   "url": "https://www.aljazeera.com/news/2026/11/7/pope-leo-hold-first-mass-in-uruguay-urges-crowd-to-be-bridge-builders?traffic_source=rss",
+   "feed_title": "Pope Leo hold first mass in Uruguay, urges crowd to be ‘bridge builders’",
+   "fetch_milliseconds": 901.0,
+   "bytes": 211217,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 86.8,
+   "html_mode_milliseconds": 9.5,
+   "html_mode": {
+    "scraped_headline": "Pope Leo hold first mass in Uruguay, urges crowd to be ‘bridge builders’",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "status": "error: TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.aljazeera.com/news/2026/11/7/pope-leo-hold-first-mass-in-uruguay-urges-c"
+   },
+   "browser_prefetched": {
+    "status": "error: TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://www.aljazeera.com/news/2026/11/7/pope-leo-hold-first-mass-in-uruguay-urges-c"
+   }
+  },
+  {
+   "file": "page_030.html",
+   "source": "Al Jazeera",
+   "language": "en",
+   "url": "https://www.aljazeera.com/video/newsfeed/2026/11/7/houthis-report-25-killed-in-yemen-strikes?traffic_source=rss",
+   "feed_title": "Houthis report 25 killed in Yemen strikes",
+   "fetch_milliseconds": 931.1,
+   "bytes": 208396,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 31.5,
+   "html_mode_milliseconds": 6.6,
+   "html_mode": {
+    "scraped_headline": "Houthis report 25 killed in Yemen strikes",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1809.7,
+    "walker_milliseconds": 180.3,
+    "guard_milliseconds": 51.8,
+    "status": "ok",
+    "visible_headline": "Houthis report 25 killed in Yemen strikes",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 2195.9,
+    "walker_milliseconds": 52.9,
+    "guard_milliseconds": 12.3,
+    "status": "ok",
+    "visible_headline": "Houthis report 25 killed in Yemen strikes",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_031.html",
+   "source": "Al Jazeera",
+   "language": "en",
+   "url": "https://www.aljazeera.com/video/newsfeed/2026/11/7/lebanese-footballer-refuses-to-give-up-after-injuries-from-israeli-strike?traffic_source=rss",
+   "feed_title": "Lebanese footballer refuses to give up after injuries from Israeli strike",
+   "fetch_milliseconds": 1132.4,
+   "bytes": 213613,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 43.1,
+   "html_mode_milliseconds": 13.0,
+   "html_mode": {
+    "scraped_headline": "Lebanese footballer refuses to give up after injuries from Israeli strike",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1072.4,
+    "walker_milliseconds": 35.5,
+    "guard_milliseconds": 9.9,
+    "status": "ok",
+    "visible_headline": "Lebanese footballer refuses to give up after injuries from Israeli strike",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1442.5,
+    "walker_milliseconds": 102.7,
+    "guard_milliseconds": 27.3,
+    "status": "ok",
+    "visible_headline": "Lebanese footballer refuses to give up after injuries from Israeli strike",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_032.html",
+   "source": "Al Jazeera",
+   "language": "en",
+   "url": "https://www.aljazeera.com/video/newsfeed/2026/11/7/jerusalem-daily-heavy-rains-flood-gaza?traffic_source=rss",
+   "feed_title": "Jerusalem Daily: Heavy rains flood Gaza",
+   "fetch_milliseconds": 987.6,
+   "bytes": 196598,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 20.2,
+   "html_mode_milliseconds": 5.1,
+   "html_mode": {
+    "scraped_headline": "Jerusalem Daily: Heavy rains flood Gaza",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 913.8,
+    "walker_milliseconds": 26.5,
+    "guard_milliseconds": 5.6,
+    "status": "ok",
+    "visible_headline": "Jerusalem Daily: Heavy rains flood Gaza",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 2119.2,
+    "walker_milliseconds": 93.1,
+    "guard_milliseconds": 26.8,
+    "status": "ok",
+    "visible_headline": "Jerusalem Daily: Heavy rains flood Gaza",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_033.html",
+   "source": "Nikkei Asia",
+   "language": "en",
+   "url": "https://asia.nikkei.com/business/finance/credit-saison-adb-to-partner-on-loans-for-asia-s-small-businesses",
+   "feed_title": "Credit Saison, ADB to partner on loans for Asia's small businesses",
+   "fetch_milliseconds": 1629.7,
+   "bytes": 282586,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 79.3,
+   "html_mode_milliseconds": 12.4,
+   "html_mode": {
+    "scraped_headline": "Credit Saison, ADB to partner on loans for Asia's small businesses",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "status": "error: TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://asia.nikkei.com/business/finance/credit-saison-adb-to-partner-on-loans-for-a"
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 6341.5,
+    "walker_milliseconds": 93.3,
+    "guard_milliseconds": 23.0,
+    "status": "ok",
+    "visible_headline": "Credit Saison, ADB to partner on loans for Asia's small businesses",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_034.html",
+   "source": "Nikkei Asia",
+   "language": "en",
+   "url": "https://asia.nikkei.com/spotlight/sports/us-sports-investment-fund-redbird-hunts-for-tie-ups-in-japan",
+   "feed_title": "US sports investment fund RedBird hunts for tie-ups in Japan",
+   "fetch_milliseconds": 1282.8,
+   "bytes": 290761,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 171.7,
+   "html_mode_milliseconds": 13.4,
+   "html_mode": {
+    "scraped_headline": "US sports investment fund RedBird hunts for tie-ups in Japan",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 7006.8,
+    "walker_milliseconds": 146.4,
+    "guard_milliseconds": 18.1,
+    "status": "ok",
+    "visible_headline": "US sports investment fund RedBird hunts for tie-ups in Japan",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 5202.6,
+    "walker_milliseconds": 98.1,
+    "guard_milliseconds": 20.8,
+    "status": "ok",
+    "visible_headline": "US sports investment fund RedBird hunts for tie-ups in Japan",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_035.html",
+   "source": "Nikkei Asia",
+   "language": "en",
+   "url": "https://asia.nikkei.com/politics/international-relations/astellas-employee-jailed-in-china-on-spy-charge-set-for-december-release",
+   "feed_title": "Astellas employee jailed in China on spy charge set for December release",
+   "fetch_milliseconds": 2685.0,
+   "bytes": 288740,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 67.2,
+   "html_mode_milliseconds": 6.0,
+   "html_mode": {
+    "scraped_headline": "Astellas employee jailed in China on spy charge set for December release",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 5245.9,
+    "walker_milliseconds": 82.0,
+    "guard_milliseconds": 23.4,
+    "status": "ok",
+    "visible_headline": "Astellas employee jailed in China on spy charge set for December release",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 4055.2,
+    "walker_milliseconds": 126.8,
+    "guard_milliseconds": 35.9,
+    "status": "ok",
+    "visible_headline": "Astellas employee jailed in China on spy charge set for December release",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_036.html",
+   "source": "Nikkei Asia",
+   "language": "en",
+   "url": "https://asia.nikkei.com/politics/new-zealand-s-knife-edge-election-puts-coalition-talks-in-focus",
+   "feed_title": "New Zealand's knife-edge election puts coalition talks in focus",
+   "fetch_milliseconds": 1584.2,
+   "bytes": 287534,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 75.4,
+   "html_mode_milliseconds": 5.3,
+   "html_mode": {
+    "scraped_headline": "New Zealand's knife-edge election puts coalition talks in focus",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 3314.7,
+    "walker_milliseconds": 171.8,
+    "guard_milliseconds": 21.7,
+    "status": "ok",
+    "visible_headline": "New Zealand's knife-edge election puts coalition talks in focus",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 4359.4,
+    "walker_milliseconds": 102.5,
+    "guard_milliseconds": 26.5,
+    "status": "ok",
+    "visible_headline": "New Zealand's knife-edge election puts coalition talks in focus",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_037.html",
+   "source": "Economic Times",
+   "language": "en",
+   "url": "https://economictimes.indiatimes.com/markets/stocks/news/dalal-street-week-ahead-nifty-bulls-come-back-to-life-but-2500025200-zone-poses-next-test/articleshow/135634291.cms",
+   "feed_title": "Dalal Street Week Ahead: Nifty bulls come back to life, but 25,000–25,200 zone poses next test",
+   "fetch_milliseconds": 1032.1,
+   "bytes": 334488,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 114.1,
+   "html_mode_milliseconds": 21.7,
+   "html_mode": {
+    "scraped_headline": "Dalal Street Week Ahead: Nifty bulls come back to life, but 25,000–25,200 zone poses next test",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "status": "error: TimeoutError: Page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://economictimes.indiatimes.com/markets/stocks/news/dalal-street-week-ahead-nif"
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 11761.9,
+    "walker_milliseconds": 195.1,
+    "guard_milliseconds": 79.7,
+    "status": "ok",
+    "visible_headline": "Dalal Street Week Ahead: Nifty bulls come back to life, but 25,000–25,200 zone poses next test",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_038.html",
+   "source": "Economic Times",
+   "language": "en",
+   "url": "https://economictimes.indiatimes.com/markets/stocks/news/concurrent-gainers-9-stocks-gain-for-5-days-in-a-row/slideshow/135631187.cms",
+   "feed_title": "Concurrent Gainers: 9 stocks gain for 5 days in a row",
+   "fetch_milliseconds": 1165.1,
+   "bytes": 248326,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 46.4,
+   "html_mode_milliseconds": 7.5,
+   "html_mode": {
+    "scraped_headline": "Concurrent Gainers: 9 stocks gain for 5 days in a row",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 6147.4,
+    "walker_milliseconds": 175.1,
+    "guard_milliseconds": 30.3,
+    "status": "ok",
+    "visible_headline": "Concurrent Gainers: 9 stocks gain for 5 days in a row",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 8841.3,
+    "walker_milliseconds": 137.4,
+    "guard_milliseconds": 39.6,
+    "status": "ok",
+    "visible_headline": "Concurrent Gainers: 9 stocks gain for 5 days in a row",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_039.html",
+   "source": "Economic Times",
+   "language": "en",
+   "url": "https://economictimes.indiatimes.com/markets/us-stocks/news/wall-street-grapples-with-5-7-trillion-rout-as-ai-bets-unwind/articleshow/135628032.cms",
+   "feed_title": "Wall Street grapples with $5.7 trillion rout as AI bets unwind",
+   "fetch_milliseconds": 837.6,
+   "bytes": 334557,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 2,
+   "beautifulsoup_milliseconds": 57.1,
+   "html_mode_milliseconds": 24.2,
+   "html_mode": {
+    "scraped_headline": "Wall Street grapples with $5.7 trillion rout as AI bets unwind",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 3271.0,
+    "walker_milliseconds": 176.0,
+    "guard_milliseconds": 50.5,
+    "status": "ok",
+    "visible_headline": "Wall Street grapples with $5.7 trillion rout as AI bets unwind",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 3151.8,
+    "walker_milliseconds": 170.3,
+    "guard_milliseconds": 50.4,
+    "status": "ok",
+    "visible_headline": "Wall Street grapples with $5.7 trillion rout as AI bets unwind",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_040.html",
+   "source": "Economic Times",
+   "language": "en",
+   "url": "https://economictimes.indiatimes.com/markets/stocks/news/patakha-stock-picks-icici-bank-bel-6-other-stocks-with-62-to-buy-this-samvat-2023-see-full-list/slideshow/135627923.cms",
+   "feed_title": "Patakha stock picks! ICICI Bank, BEL, 6 other stocks with 62% to buy this Samvat 2083. See full list",
+   "fetch_milliseconds": 1087.0,
+   "bytes": 240484,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 87.4,
+   "html_mode_milliseconds": 14.9,
+   "html_mode": {
+    "scraped_headline": "Patakha stock picks! ICICI Bank, BEL, 6 other stocks with 62% to buy this Samvat 2083. See full list",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 5625.4,
+    "walker_milliseconds": 238.2,
+    "guard_milliseconds": 82.1,
+    "status": "ok",
+    "visible_headline": "Patakha stock picks! ICICI Bank, BEL, 6 other stocks with 62% to buy this Samvat 2083. See full list",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 3432.2,
+    "walker_milliseconds": 141.9,
+    "guard_milliseconds": 30.7,
+    "status": "ok",
+    "visible_headline": "Patakha stock picks! ICICI Bank, BEL, 6 other stocks with 62% to buy this Samvat 2083. See full list",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_041.html",
+   "source": "Interfax",
+   "language": "ru",
+   "url": "https://www.interfax.ru/russia/1127608",
+   "feed_title": "Производственное здание горит в Пензенской области на 1,5 тыс. кв. м",
+   "fetch_milliseconds": 1049.3,
+   "bytes": 61711,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 23.6,
+   "html_mode_milliseconds": 4.5,
+   "html_mode": {
+    "scraped_headline": "Производственное здание горит в Пензенской области на 1,5 тыс. кв. м",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 4233.6,
+    "walker_milliseconds": 123.7,
+    "guard_milliseconds": 6.9,
+    "status": "ok",
+    "visible_headline": "Производственное здание горит в Пензенской области на 1,5 тыс. кв. м",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 4005.4,
+    "walker_milliseconds": 94.2,
+    "guard_milliseconds": 7.8,
+    "status": "ok",
+    "visible_headline": "Производственное здание горит в Пензенской области на 1,5 тыс. кв. м",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_042.html",
+   "source": "Interfax",
+   "language": "ru",
+   "url": "https://www.interfax.ru/world/1127607",
+   "feed_title": "МВД Франции заявило о почти 150 тыс. участников протестов 7 ноября",
+   "fetch_milliseconds": 1151.0,
+   "bytes": 66756,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 34.4,
+   "html_mode_milliseconds": 4.2,
+   "html_mode": {
+    "scraped_headline": "МВД Франции заявило о почти 150 тыс. участников протестов 7 ноября",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 961.9,
+    "walker_milliseconds": 56.5,
+    "guard_milliseconds": 6.1,
+    "status": "ok",
+    "visible_headline": "МВД Франции заявило о почти 150 тыс. участников протестов 7 ноября",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 3322.0,
+    "walker_milliseconds": 61.8,
+    "guard_milliseconds": 8.2,
+    "status": "ok",
+    "visible_headline": "МВД Франции заявило о почти 150 тыс. участников протестов 7 ноября",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_043.html",
+   "source": "Interfax",
+   "language": "ru",
+   "url": "https://www.interfax.ru/russia/1127606",
+   "feed_title": "Ликвидировано открытое горение на складе масел в Ростове-на-Дону",
+   "fetch_milliseconds": 1855.2,
+   "bytes": 62089,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 20.5,
+   "html_mode_milliseconds": 4.5,
+   "html_mode": {
+    "scraped_headline": "Ликвидировано открытое горение на складе масел в Ростове-на-Дону",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 978.1,
+    "walker_milliseconds": 41.5,
+    "guard_milliseconds": 6.5,
+    "status": "ok",
+    "visible_headline": "Ликвидировано открытое горение на складе масел в Ростове-на-Дону",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 1215.9,
+    "walker_milliseconds": 50.8,
+    "guard_milliseconds": 6.1,
+    "status": "ok",
+    "visible_headline": "Ликвидировано открытое горение на складе масел в Ростове-на-Дону",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_044.html",
+   "source": "Interfax",
+   "language": "ru",
+   "url": "https://www.interfax.ru/world/1127605",
+   "feed_title": "Сирия не планирует отправлять войска в Йемен",
+   "fetch_milliseconds": 1015.4,
+   "bytes": 64183,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 14.2,
+   "html_mode_milliseconds": 2.5,
+   "html_mode": {
+    "scraped_headline": "Сирия не планирует отправлять войска в Йемен",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 971.9,
+    "walker_milliseconds": 45.1,
+    "guard_milliseconds": 5.7,
+    "status": "ok",
+    "visible_headline": "Сирия не планирует отправлять войска в Йемен",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 2665.2,
+    "walker_milliseconds": 45.7,
+    "guard_milliseconds": 6.4,
+    "status": "ok",
+    "visible_headline": "Сирия не планирует отправлять войска в Йемен",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_045.html",
+   "source": "Globes",
+   "language": "he",
+   "url": "https://www.globes.co.il/news/article.aspx?did=1001562369#utm_source=RSS",
+   "feed_title": "אחרי פריצת המיליארדים: סמנכ\"ל הכספים של בייננס מתפטר",
+   "fetch_milliseconds": 880.3,
+   "bytes": 80955,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 33.8,
+   "html_mode_milliseconds": 5.2,
+   "html_mode": {
+    "scraped_headline": "אחרי פריצת המיליארדים: סמנכ\"ל הכספים של בייננס מתפטר",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 7415.0,
+    "walker_milliseconds": 136.6,
+    "guard_milliseconds": 63.9,
+    "status": "ok",
+    "visible_headline": "אחרי פריצת המיליארדים: סמנכ\"ל הכספים של בייננס מתפטר",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 8800.5,
+    "walker_milliseconds": 171.7,
+    "guard_milliseconds": 50.5,
+    "status": "ok",
+    "visible_headline": "אחרי פריצת המיליארדים: סמנכ\"ל הכספים של בייננס מתפטר",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_046.html",
+   "source": "Globes",
+   "language": "he",
+   "url": "https://www.globes.co.il/news/article.aspx?did=1001562185#utm_source=RSS",
+   "feed_title": "הוא חזה את גל העליות הגדול בבורסה. מה לדעתו יקרה עכשיו - ועוד 4 כתבות על המצב בשווקים",
+   "fetch_milliseconds": 739.1,
+   "bytes": 73142,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 24.5,
+   "html_mode_milliseconds": 4.2,
+   "html_mode": {
+    "scraped_headline": "הוא חזה את גל העליות הגדול בבורסה. מה לדעתו יקרה עכשיו - ועוד 4 כתבות על המצב בשווקים",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 4605.5,
+    "walker_milliseconds": 87.7,
+    "guard_milliseconds": 9.0,
+    "status": "ok",
+    "visible_headline": "הוא חזה את גל העליות הגדול בבורסה. מה לדעתו יקרה עכשיו - ועוד 4 כתבות על המצב בשווקים",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 3625.2,
+    "walker_milliseconds": 74.8,
+    "guard_milliseconds": 12.5,
+    "status": "ok",
+    "visible_headline": "הוא חזה את גל העליות הגדול בבורסה. מה לדעתו יקרה עכשיו - ועוד 4 כתבות על המצב בשווקים",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_047.html",
+   "source": "Globes",
+   "language": "he",
+   "url": "https://www.globes.co.il/news/article.aspx?did=1001562365#utm_source=RSS",
+   "feed_title": "הנתון שישפיע על כיוון השווקים השבוע, והפרט החריג שמסתתר בו",
+   "fetch_milliseconds": 3242.2,
+   "bytes": 81936,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 11.6,
+   "html_mode_milliseconds": 4.5,
+   "html_mode": {
+    "scraped_headline": "הנתון שישפיע על כיוון השווקים השבוע, והפרט החריג שמסתתר בו",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 3675.7,
+    "walker_milliseconds": 182.2,
+    "guard_milliseconds": 49.8,
+    "status": "ok",
+    "visible_headline": "הנתון שישפיע על כיוון השווקים השבוע, והפרט החריג שמסתתר בו",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 5168.0,
+    "walker_milliseconds": 77.6,
+    "guard_milliseconds": 12.9,
+    "status": "ok",
+    "visible_headline": "הנתון שישפיע על כיוון השווקים השבוע, והפרט החריג שמסתתר בו",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_048.html",
+   "source": "Globes",
+   "language": "he",
+   "url": "https://www.globes.co.il/news/article.aspx?did=1001562356#utm_source=RSS",
+   "feed_title": "הרווח התפעולי של ברקשייר ירד ברבעון, ויש מניה אחת שהיא לא הפסיקה לקנות",
+   "fetch_milliseconds": 1169.0,
+   "bytes": 85222,
+   "encoding": "utf-8",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 36.6,
+   "html_mode_milliseconds": 6.2,
+   "html_mode": {
+    "scraped_headline": "הרווח התפעולי של ברקשייר ירד ברבעון, ויש מניה אחת שהיא לא הפסיקה לקנות",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 5699.8,
+    "walker_milliseconds": 389.5,
+    "guard_milliseconds": 62.2,
+    "status": "ok",
+    "visible_headline": "הרווח התפעולי של ברקשייר ירד ברבעון, ויש מניה אחת שהיא לא הפסיקה לקנות",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 5087.5,
+    "walker_milliseconds": 90.6,
+    "guard_milliseconds": 21.6,
+    "status": "ok",
+    "visible_headline": "הרווח התפעולי של ברקשייר ירד ברבעון, ויש מניה אחת שהיא לא הפסיקה לקנות",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_049.html",
+   "source": "Handelsblatt",
+   "language": "de",
+   "url": "https://www.handelsblatt.com/finanzen/maerkte/quartalszahlen-berkshire-meldet-gewinnrueckgang-doch-die-aktie-profitiert/100268115.html",
+   "feed_title": "Quartalszahlen: Berkshire meldet Gewinnrückgang, doch die Aktie profitiert",
+   "fetch_milliseconds": 1279.2,
+   "bytes": 978478,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 61.9,
+   "html_mode_milliseconds": 143.8,
+   "html_mode": {
+    "scraped_headline": "Quartalszahlen: Berkshire meldet Gewinnrückgang, doch die Aktie profitiert",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 2385.0,
+    "walker_milliseconds": 258.1,
+    "guard_milliseconds": 175.4,
+    "status": "ok",
+    "visible_headline": "Quartalszahlen: Berkshire meldet Gewinnrückgang, doch die Aktie profitiert",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 885.8,
+    "walker_milliseconds": 226.8,
+    "guard_milliseconds": 104.3,
+    "status": "ok",
+    "visible_headline": "Quartalszahlen: Berkshire meldet Gewinnrückgang, doch die Aktie profitiert",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_050.html",
+   "source": "Handelsblatt",
+   "language": "de",
+   "url": "https://www.handelsblatt.com/finanzen/immobilien/immobilien-wo-um-hamburg-herum-fuer-pendler-noch-schnaeppchen-locken/100262282.html",
+   "feed_title": "Immobilien: Wo um Hamburg herum für Pendler noch Schnäppchen locken",
+   "fetch_milliseconds": 2688.6,
+   "bytes": 1076407,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 125.5,
+   "html_mode_milliseconds": 74.9,
+   "html_mode": {
+    "scraped_headline": "Immobilien: Wo um Hamburg herum für Pendler noch Schnäppchen locken",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1327.3,
+    "walker_milliseconds": 241.6,
+    "guard_milliseconds": 116.5,
+    "status": "ok",
+    "visible_headline": "Immobilien: Wo um Hamburg herum für Pendler noch Schnäppchen locken",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 448.4,
+    "walker_milliseconds": 383.3,
+    "guard_milliseconds": 85.3,
+    "status": "ok",
+    "visible_headline": "Immobilien: Wo um Hamburg herum für Pendler noch Schnäppchen locken",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_051.html",
+   "source": "Handelsblatt",
+   "language": "de",
+   "url": "https://www.handelsblatt.com/finanzen/steuern-recht/steuern/vermoegen-schenkung-an-kinder-diese-zusatzkosten-sollten-sie-kennen/100265997.html",
+   "feed_title": "Vermögen: Schenkung an Kinder – Diese Zusatzkosten sollten Sie kennen",
+   "fetch_milliseconds": 5029.4,
+   "bytes": 1083746,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 135.8,
+   "html_mode_milliseconds": 68.8,
+   "html_mode": {
+    "scraped_headline": "Vermögen: Schenkung an Kinder – Diese Zusatzkosten sollten Sie kennen",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 412.8,
+    "walker_milliseconds": 189.5,
+    "guard_milliseconds": 91.0,
+    "status": "ok",
+    "visible_headline": "Vermögen: Schenkung an Kinder – Diese Zusatzkosten sollten Sie kennen",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 471.1,
+    "walker_milliseconds": 397.6,
+    "guard_milliseconds": 91.2,
+    "status": "ok",
+    "visible_headline": "Vermögen: Schenkung an Kinder – Diese Zusatzkosten sollten Sie kennen",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_052.html",
+   "source": "Handelsblatt",
+   "language": "de",
+   "url": "https://www.handelsblatt.com/finanzen/geldpolitik/ezb-spanien-nominiertpablo-hernandez-de-cos-fuer-lagarde-nachfolge/100267919.html",
+   "feed_title": "EZB: Spanien nominiert Pablo Hernandez de Cos für Lagarde-Nachfolge",
+   "fetch_milliseconds": 8723.4,
+   "bytes": 1068113,
+   "encoding": "ISO-8859-1",
+   "h1_count_in_raw_html": 1,
+   "beautifulsoup_milliseconds": 155.6,
+   "html_mode_milliseconds": 72.7,
+   "html_mode": {
+    "scraped_headline": "EZB: Spanien nominiert Pablo Hernandez de Cos für Lagarde-Nachfolge",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 432.8,
+    "walker_milliseconds": 205.7,
+    "guard_milliseconds": 73.6,
+    "status": "ok",
+    "visible_headline": "EZB: Spanien nominiert Pablo Hernandez de Cos für Lagarde-Nachfolge",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 637.2,
+    "walker_milliseconds": 363.5,
+    "guard_milliseconds": 84.4,
+    "status": "ok",
+    "visible_headline": "EZB: Spanien nominiert Pablo Hernandez de Cos für Lagarde-Nachfolge",
+    "verdict": "pass",
+    "flags": []
+   }
+  },
+  {
+   "file": "page_053.html",
+   "source": "Yahoo Japan Business",
+   "language": "ja",
+   "url": "https://news.yahoo.co.jp/articles/5797786776c560e549b6ee6bc56eb4f597086b82?source=rss",
+   "feed_title": "鮮やかなポルシェ948、堂々登場!!!(GQ JAPAN)",
+   "fetch_milliseconds": 1876.5,
+   "bytes": 153834,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 2,
+   "beautifulsoup_milliseconds": 25.8,
+   "html_mode_milliseconds": 10.5,
+   "html_mode": {
+    "scraped_headline": "Yahoo!ニュース",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 6888.9,
+    "walker_milliseconds": 93.7,
+    "guard_milliseconds": 25.8,
+    "status": "ok",
+    "visible_headline": "",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "hidden_html_text",
+      "severity": "high",
+      "original": "Yahoo!ニュース",
+      "detail": "text the rendered page hides from readers (CSS or JavaScript this parser cannot evaluate) but HTML-based scrapers would pass on"
+     }
+    ]
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 3314.1,
+    "walker_milliseconds": 112.9,
+    "guard_milliseconds": 25.6,
+    "status": "ok",
+    "visible_headline": "",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "hidden_html_text",
+      "severity": "high",
+      "original": "Yahoo!ニュース",
+      "detail": "text the rendered page hides from readers (CSS or JavaScript this parser cannot evaluate) but HTML-based scrapers would pass on"
+     }
+    ]
+   }
+  },
+  {
+   "file": "page_054.html",
+   "source": "Yahoo Japan Business",
+   "language": "ja",
+   "url": "https://news.yahoo.co.jp/articles/17e53eb601ba8c79525a932de9d43d8ca1594c34?source=rss",
+   "feed_title": "前代未聞の新型ゲームオーバー登場！ S-KLUB LAが手がけた、別名“CLK750S”に迫る！(GQ JAPAN)",
+   "fetch_milliseconds": 1932.4,
+   "bytes": 156445,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 2,
+   "beautifulsoup_milliseconds": 15.6,
+   "html_mode_milliseconds": 9.3,
+   "html_mode": {
+    "scraped_headline": "Yahoo!ニュース",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1704.3,
+    "walker_milliseconds": 113.6,
+    "guard_milliseconds": 25.8,
+    "status": "ok",
+    "visible_headline": "",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "hidden_html_text",
+      "severity": "high",
+      "original": "Yahoo!ニュース",
+      "detail": "text the rendered page hides from readers (CSS or JavaScript this parser cannot evaluate) but HTML-based scrapers would pass on"
+     }
+    ]
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 3055.2,
+    "walker_milliseconds": 103.8,
+    "guard_milliseconds": 28.8,
+    "status": "ok",
+    "visible_headline": "",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "hidden_html_text",
+      "severity": "high",
+      "original": "Yahoo!ニュース",
+      "detail": "text the rendered page hides from readers (CSS or JavaScript this parser cannot evaluate) but HTML-based scrapers would pass on"
+     }
+    ]
+   }
+  },
+  {
+   "file": "page_055.html",
+   "source": "Yahoo Japan Business",
+   "language": "ja",
+   "url": "https://news.yahoo.co.jp/articles/ee06915526611781d92e7a270dce54b3b9e3465e?source=rss",
+   "feed_title": "「月給30万円の手取り」はいくら？月給（額面）別の手取り額一覧表を年代別にみる(LIMO)",
+   "fetch_milliseconds": 1953.7,
+   "bytes": 164098,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 2,
+   "beautifulsoup_milliseconds": 27.7,
+   "html_mode_milliseconds": 9.4,
+   "html_mode": {
+    "scraped_headline": "Yahoo!ニュース",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 2178.4,
+    "walker_milliseconds": 138.2,
+    "guard_milliseconds": 23.8,
+    "status": "ok",
+    "visible_headline": "",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "hidden_html_text",
+      "severity": "high",
+      "original": "Yahoo!ニュース",
+      "detail": "text the rendered page hides from readers (CSS or JavaScript this parser cannot evaluate) but HTML-based scrapers would pass on"
+     }
+    ]
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 2798.5,
+    "walker_milliseconds": 102.3,
+    "guard_milliseconds": 43.7,
+    "status": "ok",
+    "visible_headline": "",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "hidden_html_text",
+      "severity": "high",
+      "original": "Yahoo!ニュース",
+      "detail": "text the rendered page hides from readers (CSS or JavaScript this parser cannot evaluate) but HTML-based scrapers would pass on"
+     }
+    ]
+   }
+  },
+  {
+   "file": "page_056.html",
+   "source": "Yahoo Japan Business",
+   "language": "ja",
+   "url": "https://news.yahoo.co.jp/articles/b8d446b919866e4fc30a51e37b57c947f2c25e51?source=rss",
+   "feed_title": "レクサスのトラック、遂に登場か!? 新型TX1デビュー!!!(GQ JAPAN)",
+   "fetch_milliseconds": 2028.6,
+   "bytes": 157744,
+   "encoding": "UTF-8",
+   "h1_count_in_raw_html": 2,
+   "beautifulsoup_milliseconds": 36.0,
+   "html_mode_milliseconds": 10.9,
+   "html_mode": {
+    "scraped_headline": "Yahoo!ニュース",
+    "verdict": "pass",
+    "flags": []
+   },
+   "browser_live": {
+    "load_milliseconds": 1552.8,
+    "walker_milliseconds": 89.1,
+    "guard_milliseconds": 32.0,
+    "status": "ok",
+    "visible_headline": "",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "hidden_html_text",
+      "severity": "high",
+      "original": "Yahoo!ニュース",
+      "detail": "text the rendered page hides from readers (CSS or JavaScript this parser cannot evaluate) but HTML-based scrapers would pass on"
+     }
+    ]
+   },
+   "browser_prefetched": {
+    "load_milliseconds": 3174.5,
+    "walker_milliseconds": 104.4,
+    "guard_milliseconds": 31.2,
+    "status": "ok",
+    "visible_headline": "",
+    "verdict": "quarantine",
+    "flags": [
+     {
+      "kind": "hidden_html_text",
+      "severity": "high",
+      "original": "Yahoo!ニュース",
+      "detail": "text the rendered page hides from readers (CSS or JavaScript this parser cannot evaluate) but HTML-based scrapers would pass on"
+     }
+    ]
+   }
+  }
+ ]
+}
