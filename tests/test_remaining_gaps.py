@@ -295,6 +295,37 @@ def body_page(injected_html, body_extra="", head_extra=""):
 
 
 @unittest.skipUnless(TRAFILATURA_AVAILABLE, "trafilatura not installed")
+@unittest.skipUnless(TRAFILATURA_AVAILABLE, "trafilatura not installed")
+class HeadlineScriptByTagTests(unittest.TestCase):
+    """Review item C: a script that finds the headline by its tag and rewrites or hides it.
+    The title matches the static heading, so only a browser shows readers' headline."""
+
+    def assert_sent_to_browser(self, script):
+        article = GUARD.extract_article(article_page(HEADLINE, body_extra=f"<script>{script}</script>"))
+        self.assertTrue(article.needs_browser_check, script)
+
+    def test_lookups_by_the_headline_tag_that_change_it_send_the_page_to_a_browser(self):
+        for script in (
+            "document.querySelector('h1').textContent = 'Alphabet faces breakup after court loss';",
+            'document.getElementsByTagName("h1")[0].style.display = "none";',
+            "document.querySelectorAll('article h1').forEach(function (h) { h.innerHTML = 'x'; });",
+            "$('main h1:first-of-type').text('Alphabet faces breakup');",
+            "document.querySelector('h1').remove();",
+        ):
+            with self.subTest(script=script):
+                self.assert_sent_to_browser(script)
+
+    def test_reading_the_headline_or_changing_another_tag_does_not(self):
+        for script in (
+            "var title = document.querySelector('h1').textContent; console.log(title);",
+            "document.querySelector('h2').textContent = 'Related stories';",
+            "document.querySelector('.h1-like').style.color = 'red';",
+        ):
+            with self.subTest(script=script):
+                article = GUARD.extract_article(article_page(HEADLINE, body_extra=f"<script>{script}</script>"))
+                self.assertFalse(article.needs_browser_check, article.browser_check_reasons)
+
+
 class BodyBrowserTriageTests(unittest.TestCase):
     """Found by splicing attacks into real pages (real_world_test/evaluate_injections.py)."""
 
