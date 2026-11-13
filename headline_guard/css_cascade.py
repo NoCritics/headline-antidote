@@ -6,6 +6,14 @@ specificity, source order, !important, inline styles, @media rules answered as t
 browser check's Chrome answers them (media_queries), and CSS variables (var(--name, fallback)). It reads <style> blocks
 and any external stylesheets the caller supplies (it never fetches anything).
 
+At-rules and nesting, as Chrome applies them:
+* cascade layers (@layer, revert-layer) in Chrome's order; nested style rules (&);
+* @document is never applied (Chrome does not support it);
+* @supports, @container and @scope depend on what Chrome supports, on layout, or on how close
+  the scope root is, which this reader cannot answer. Chrome may apply any subset of those
+  blocks, so text that any subset hides counts as hidden (CascadeRules.declaration_alternatives
+  and without_undecided_blocks). This errs towards hiding: text Chrome shows can be removed.
+
 Speed, since real pages ship hundreds of kilobytes of CSS:
 * compiled stylesheets are cached, so every later page from a site reuses them. A site's
   external stylesheets and the pages' own <style> blocks have separate caches, so the many
@@ -26,10 +34,11 @@ parts of the page, or hiding applied by JavaScript.
 
 import hashlib
 import re
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
 import cssselect2
 import tinycss2
+from tinycss2.serializer import serialize_identifier
 
 from .css_hiding import (
     CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_OPACITY, declared_background_color, filter_hiding_reason,
@@ -114,8 +123,14 @@ _page_rule_sets = _SizeBoundedCache(PAGE_RULE_SET_CACHE_CHARACTERS)
 
 def _declarations(tokens):
     """[(name, value, important)] for hiding properties and custom properties (--name)."""
+    return _hiding_declarations(tinycss2.parse_blocks_contents(tokens, skip_comments=True, skip_whitespace=True))
+
+
+def _hiding_declarations(items):
+    """The (name, value, important) of the hiding and custom properties among parsed block contents
+    (nested rules among them are left out)."""
     found = []
-    for declaration in tinycss2.parse_declaration_list(tokens, skip_comments=True, skip_whitespace=True):
+    for declaration in items:
         if declaration.type != "declaration":
             continue
         name = declaration.name if declaration.name.startswith("--") else declaration.lower_name
@@ -243,66 +258,276 @@ def _font_face_with_data_uri(rule):
     return None
 
 
-def _compile_rules(rules, compiled_rules, data_font_families):
-    for rule in rules:
+# Where a rule sits in its stylesheet:
+# * layer: the cascade layer's name path, () when unlayered;
+# * undecided: inside a block whose condition this reader cannot answer the way Chrome does
+#   (@supports, @container, @scope), so the rule may or may not apply;
+# * parent_selector: in a nested style rule, the selector that & stands for;
+# * scope_root: inside @scope, the selector of the scope root;
+# * depth: how many style rules and layers enclose it.
+_Context = namedtuple("_Context", "layer undecided parent_selector scope_root depth")
+_TOP_LEVEL = _Context((), False, None, None, 0)
+# Real stylesheets nest style rules and layers a few levels deep. Past this depth the rules count
+# as undecided and are matched without their enclosing selectors and layers (so they may apply more
+# widely than in Chrome), since following thousands of levels would take minutes.
+MAXIMUM_NESTING_DEPTH = 32
+
+# One compiled style rule. selector_text is the selector without whitespace, lowercased (to spot
+# rules on :root and html); could_hide is None when only the site's variables can decide it.
+_CompiledRule = namedtuple(
+    "_CompiledRule",
+    "selectors declarations selector_text font_family could_hide pseudo_candidate layer undecided scoped",
+)
+
+
+class _CompiledStylesheet:
+    """A stylesheet's style rules in source order, the font families it embeds as data: URIs, and
+    where cascade layers are first named: (index of the next rule, layer path, undecided)."""
+
+    def __init__(self):
+        self.rules = []
+        self.data_font_families = set()
+        self.layer_names = []
+
+
+# Always matches, and adds the specificity of one pseudo-class, as :scope does in Chrome.
+_SCOPE_SPECIFICITY = ":is(:root, :not(:root))"
+
+
+def _selector_text_with_stand_in(tokens, stand_in, scope):
+    """(text, replaced) for one selector: & (and in @scope, :scope) written as stand_in."""
+    pieces = []
+    replaced = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.type == "literal" and token.value == "&":
+            pieces.append(stand_in)
+            replaced = True
+        elif (scope and token.type == "literal" and token.value == ":" and index + 1 < len(tokens)
+              and tokens[index + 1].type == "ident" and tokens[index + 1].lower_value == "scope"):
+            pieces.append(stand_in + _SCOPE_SPECIFICITY)
+            replaced = True
+            index += 1
+        elif token.type == "function":
+            inner_text, inner_replaced = _selector_text_with_stand_in(token.arguments, stand_in, scope)
+            pieces.append(serialize_identifier(token.name) + "(" + inner_text + ")")
+            if inner_replaced:
+                replaced = True
+        else:
+            pieces.append(tinycss2.serialize([token]))
+        index += 1
+    return "".join(pieces), replaced
+
+
+def _relative_selector_texts(prelude, stand_in, scope):
+    """The selectors of a nested or scoped rule, each written relative to stand_in: & (and :scope)
+    replaced by it, and a selector without either matched below it. In @scope a selector also
+    matches the scope root itself, so that form is added (as a separate selector, since it is
+    invalid after a pseudo-element)."""
+    selector_tokens = [[]]
+    for token in prelude:
+        if token.type == "literal" and token.value == ",":
+            selector_tokens.append([])
+        else:
+            selector_tokens[-1].append(token)
+    relative_texts = []
+    root_texts = []
+    for tokens in selector_tokens:
+        text, replaced = _selector_text_with_stand_in(tokens, stand_in, scope)
+        text = text.strip()
+        if replaced:
+            relative_texts.append(text)
+        else:
+            relative_texts.append(f"{stand_in} {text}")
+            if scope:
+                root_texts.append(f"{text}{stand_in}")
+    return relative_texts, root_texts
+
+
+def _rule_selectors(prelude, context):
+    """(compiled selectors, selector text) of a style rule, or ([], None) when Chrome would drop it."""
+    root_texts = []
+    if context.parent_selector is not None:
+        relative_texts, _ = _relative_selector_texts(prelude, f":is({context.parent_selector})", False)
+        selector_text = ", ".join(relative_texts)
+    elif context.scope_root is not None:
+        relative_texts, root_texts = _relative_selector_texts(prelude, f":where({context.scope_root})", True)
+        selector_text = ", ".join(relative_texts)
+    else:
+        selector_text = tinycss2.serialize(prelude)
+    try:
+        selectors = cssselect2.compile_selector_list(
+            prelude if context.parent_selector is None and context.scope_root is None else selector_text
+        )
+    except cssselect2.SelectorError:
+        return [], None
+    for root_text in root_texts:
+        try:
+            selectors += cssselect2.compile_selector_list(root_text)
+        except cssselect2.SelectorError:
+            pass  # reason=a scoped selector ending in a pseudo-element has no form matching the root itself
+    return selectors, selector_text
+
+
+def _add_style_rule(selectors, selector_text, declarations, context, compiled):
+    # Properties needed only rarely are kept only where they matter, so the full cascade
+    # stays small: content on ::before/::after, direction next to unicode-bidi, and
+    # font-family apart (looked up only for a headline when the page embeds a font).
+    has_pseudo_element = False
+    for selector in selectors:
+        if selector.pseudo_element in ("before", "after"):
+            has_pseudo_element = True
+    has_bidi_override = False
+    for name, _, _ in declarations:
+        if name == "unicode-bidi":
+            has_bidi_override = True
+    font_family = None
+    kept_declarations = []
+    for declaration in declarations:
+        name = declaration[0]
+        if name == "font-family":
+            font_family = declaration[1]
+            continue
+        if name == "content" and not has_pseudo_element:
+            continue
+        if name == "direction" and not has_bidi_override:
+            continue
+        kept_declarations.append(declaration)
+    if not kept_declarations and font_family is None:
+        return
+    # Without var() the site's variables cannot change the answer, so it is decided once
+    # here instead of in every _RuleSet built from this stylesheet (None: decide there).
+    uses_variables = False
+    for _, value, _ in kept_declarations:
+        if "var(" in value:
+            uses_variables = True
+            break
+    could_hide = None if uses_variables else _rule_could_hide(kept_declarations, {})
+    compiled.rules.append(_CompiledRule(
+        selectors, kept_declarations, "".join(selector_text.split()).lower(), font_family, could_hide,
+        _is_pseudo_candidate(kept_declarations), context.layer, context.undecided, context.scope_root is not None,
+    ))
+
+
+def _layer_name_paths(prelude):
+    """The layer names of an @layer prelude, each split at its dots: "a.b, c" -> [("a", "b"), ("c",)]."""
+    paths = []
+    for name in tinycss2.serialize(prelude).split(","):
+        name = name.strip()
+        if name:
+            parts = []
+            for part in name.split("."):
+                parts.append(part.strip())
+            paths.append(tuple(parts))
+    return paths
+
+
+def _scope_root(prelude):
+    """(root selector, has a lower limit) of an @scope prelude: "(.a) to (.b)" -> (".a", True).
+    A rule without a root (scoped to the <style> element's parent) gets None."""
+    blocks = []
+    for token in prelude:
+        if token.type == "() block":
+            blocks.append(tinycss2.serialize(token.content).strip())
+    if not blocks:
+        return None, False
+    return blocks[0], len(blocks) > 1
+
+
+def _compile_rules(rules, compiled):
+    """Compiles style rules into compiled (a _CompiledStylesheet), in source order. Blocks are
+    followed with an explicit stack, so deeply nested CSS cannot exhaust Python's call stack."""
+    pending = [(iter(rules), _TOP_LEVEL)]
+    while pending:
+        items, context = pending[-1]
+        rule = next(items, None)
+        if rule is None:
+            pending.pop()
+            continue
         if rule.type == "qualified-rule":
-            declarations = _declarations(rule.content)
-            if not declarations:
+            contents = tinycss2.parse_blocks_contents(rule.content, skip_comments=True, skip_whitespace=True)
+            declarations = _hiding_declarations(contents)
+            nested_rules = []
+            for item in contents:
+                if item.type in ("qualified-rule", "at-rule"):
+                    nested_rules.append(item)
+            if not declarations and not nested_rules:
                 continue
-            try:
-                selectors = cssselect2.compile_selector_list(rule.prelude)
-            except cssselect2.SelectorError:
+            selectors, selector_text = _rule_selectors(rule.prelude, context)
+            if selector_text is None:
                 continue
-            # Properties needed only rarely are kept only where they matter, so the full cascade
-            # stays small: content on ::before/::after, direction next to unicode-bidi, and
-            # font-family apart (looked up only for a headline when the page embeds a font).
-            has_pseudo_element = False
-            for selector in selectors:
-                if selector.pseudo_element in ("before", "after"):
-                    has_pseudo_element = True
-            has_bidi_override = False
-            for name, _, _ in declarations:
-                if name == "unicode-bidi":
-                    has_bidi_override = True
-            font_family = None
-            kept_declarations = []
-            for declaration in declarations:
-                name = declaration[0]
-                if name == "font-family":
-                    font_family = declaration[1]
-                    continue
-                if name == "content" and not has_pseudo_element:
-                    continue
-                if name == "direction" and not has_bidi_override:
-                    continue
-                kept_declarations.append(declaration)
-            if not kept_declarations and font_family is None:
+            if declarations:
+                _add_style_rule(selectors, selector_text, declarations, context, compiled)
+            if nested_rules:
+                if context.depth < MAXIMUM_NESTING_DEPTH:
+                    inner_context = context._replace(parent_selector=selector_text, scope_root=None,
+                                                     depth=context.depth + 1)
+                else:
+                    inner_context = context._replace(parent_selector="*", scope_root=None, undecided=True)
+                pending.append((iter(nested_rules), inner_context))
+            continue
+        if rule.type != "at-rule":
+            continue
+        keyword = rule.lower_at_keyword
+        if keyword == "layer" and rule.content is None:
+            for path in _layer_name_paths(rule.prelude):
+                if len(context.layer) + len(path) <= MAXIMUM_NESTING_DEPTH:
+                    compiled.layer_names.append((len(compiled.rules), context.layer + path, context.undecided))
+            continue
+        if rule.content is None:
+            continue
+        if keyword == "font-face":
+            family = _font_face_with_data_uri(rule)
+            if family is not None:
+                compiled.data_font_families.add(family)
+            continue
+        if keyword == "media":
+            if not media_query_applies(tinycss2.serialize(rule.prelude)):
                 continue
-            prelude_text = "".join(tinycss2.serialize(rule.prelude).split()).lower()
-            # Without var() the site's variables cannot change the answer, so it is decided once
-            # here instead of in every _RuleSet built from this stylesheet (None: decide there).
-            uses_variables = False
-            for _, value, _ in kept_declarations:
-                if "var(" in value:
-                    uses_variables = True
-                    break
-            could_hide = None if uses_variables else _rule_could_hide(kept_declarations, {})
-            compiled_rules.append((selectors, kept_declarations, prelude_text, font_family, could_hide,
-                                   _is_pseudo_candidate(kept_declarations)))
-        elif rule.type == "at-rule" and rule.content is not None:
-            keyword = rule.lower_at_keyword
-            if keyword == "font-face":
-                family = _font_face_with_data_uri(rule)
-                if family is not None:
-                    data_font_families.add(family)
-                continue
-            if keyword == "media" and not media_query_applies(tinycss2.serialize(rule.prelude)):
-                continue
-            if keyword in ("media", "supports", "layer", "container", "document"):
-                _compile_rules(
-                    tinycss2.parse_rule_list(rule.content, skip_comments=True, skip_whitespace=True),
-                    compiled_rules, data_font_families,
+            inner_context = context
+        elif keyword in ("supports", "container"):
+            inner_context = context._replace(undecided=True)
+        elif keyword == "layer":
+            paths = _layer_name_paths(rule.prelude)
+            if len(paths) > 1:
+                continue  # Chrome drops a layer block that names several layers
+            # An unnamed layer is a new layer of its own.
+            layer = context.layer + (paths[0] if paths else (object(),))
+            if context.depth >= MAXIMUM_NESTING_DEPTH or len(layer) > MAXIMUM_NESTING_DEPTH:
+                inner_context = context._replace(undecided=True)
+            else:
+                compiled.layer_names.append((len(compiled.rules), layer, context.undecided))
+                inner_context = context._replace(layer=layer, depth=context.depth + 1)
+        elif keyword == "scope":
+            # Chrome ranks scoped rules by how close the scope root is, which this reader does
+            # not model, so every @scope block is undecided.
+            root, _ = _scope_root(rule.prelude)
+            inner_context = context._replace(
+                undecided=True, parent_selector=None, scope_root=root if root is not None else "*",
+            )
+        else:
+            continue  # @document (Chrome never applies it), @keyframes, @page, @starting-style...
+        if context.parent_selector is not None or keyword == "scope":
+            # Inside a style rule or @scope, a block holds declarations as well as rules.
+            contents = tinycss2.parse_blocks_contents(rule.content, skip_comments=True, skip_whitespace=True)
+            declarations = _hiding_declarations(contents)
+            if declarations and context.parent_selector is not None:
+                selectors, selector_text = _rule_selectors(
+                    tinycss2.parse_component_value_list("&"), inner_context,
                 )
+                if selector_text is not None:
+                    _add_style_rule(selectors, selector_text, declarations, inner_context, compiled)
+            nested_rules = []
+            for item in contents:
+                if item.type in ("qualified-rule", "at-rule"):
+                    nested_rules.append(item)
+            pending.append((iter(nested_rules), inner_context))
+        else:
+            pending.append((
+                iter(tinycss2.parse_rule_list(rule.content, skip_comments=True, skip_whitespace=True)),
+                inner_context,
+            ))
 
 
 def _stylesheet_key(css_text):
@@ -310,107 +535,203 @@ def _stylesheet_key(css_text):
 
 
 def _compiled_stylesheet(css_text, key, cache):
-    """([(selectors, declarations, selector text, font family, could_hide, pseudo_candidate)],
-    {embedded font families}) for one stylesheet, cached by content."""
+    """The _CompiledStylesheet of one stylesheet, cached by content."""
     cached = cache.lookup(key)
     if cached is not None:
         return cached
-    compiled_rules = []
-    data_font_families = set()
-    _compile_rules(
-        tinycss2.parse_stylesheet(css_text, skip_comments=True, skip_whitespace=True),
-        compiled_rules, data_font_families,
-    )
-    compiled = (compiled_rules, data_font_families)
+    compiled = _CompiledStylesheet()
+    _compile_rules(tinycss2.parse_stylesheet(css_text, skip_comments=True, skip_whitespace=True), compiled)
     cache.store(key, compiled, len(css_text))
     return compiled
 
 
-class _RuleSet:
-    """Matchers for a group of stylesheets: the rules that could hide text, and all rules."""
+_UNLAYERED = float("inf")
+_SCOPED_ORDER_OFFSET = 10 ** 12
 
-    def __init__(self, stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_variables, first_order):
+
+class _LayerOrder:
+    """Cascade layers in the order their names first appear, over all of a page's stylesheets.
+
+    A rule's rank is the positions of its layer path, then _UNLAYERED for the rules directly in
+    that layer, so a later layer outranks an earlier one, a layer's own rules outrank its sublayers,
+    and unlayered rules, ranked (_UNLAYERED,), outrank every layer. !important reverses the order:
+    its rank is the negated one.
+    Layers first named inside an undecided block (see _Context) are tentative: their place depends
+    on whether that block applies, so their rules are undecided too. A tentative layer takes the
+    place of its first naming outside such blocks, the later of its two possible places."""
+
+    def __init__(self, inherited=None):
+        self.positions = {}
+        self.tentative = set()
+        self.named_outside_undecided_blocks = set()
+        self.next_position = 0
+        if inherited is not None:
+            self.positions.update(inherited.positions)
+            self.tentative.update(inherited.tentative)
+            self.named_outside_undecided_blocks.update(inherited.named_outside_undecided_blocks)
+            self.next_position = inherited.next_position
+
+    def name(self, path, undecided):
+        for length in range(1, len(path) + 1):
+            prefix = path[:length]
+            if prefix not in self.positions:
+                self.positions[prefix] = self.next_position
+                self.next_position += 1
+                if undecided:
+                    self.tentative.add(prefix)
+            elif not undecided and prefix in self.tentative and prefix not in self.named_outside_undecided_blocks:
+                self.positions[prefix] = self.next_position
+                self.next_position += 1
+            if not undecided:
+                self.named_outside_undecided_blocks.add(prefix)
+
+    def rank(self, path):
+        rank = []
+        for length in range(1, len(path) + 1):
+            rank.append(self.positions[path[:length]])
+        rank.append(_UNLAYERED)
+        return tuple(rank)
+
+    def is_tentative(self, path):
+        for length in range(1, len(path) + 1):
+            if path[:length] in self.tentative:
+                return True
+        return False
+
+    def cache_key(self):
+        entries = []
+        for path, position in self.positions.items():
+            entries.append((position, path, path in self.tentative, path in self.named_outside_undecided_blocks))
+        entries.sort(key=lambda entry: entry[0])
+        return tuple(entries)
+
+
+def _negated(rank):
+    negated = []
+    for position in rank:
+        negated.append(-position)
+    return tuple(negated)
+
+
+class _RuleSet:
+    """Matchers for a group of stylesheets: the rules that could hide text, and all rules.
+
+    Matcher payloads are (order, layer rank, layer rank for !important, undecided, declarations)."""
+
+    def __init__(self, stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_variables,
+                 inherited_layers, first_order):
         compiled_stylesheets = []
         self.site_variables = dict(inherited_variables)
-        # Custom properties defined on narrower selectors, looked up through the full cascade.
+        # Custom properties defined on narrower selectors (or in undecided blocks), looked up
+        # through the full cascade.
         self.scoped_variable_names = set()
         self.data_font_families = set()
         for stylesheet_text, key in zip(stylesheet_texts, stylesheet_keys):
-            compiled_rules, data_font_families = _compiled_stylesheet(stylesheet_text, key, stylesheet_cache)
-            compiled_stylesheets.append(compiled_rules)
-            for family in data_font_families:
+            compiled = _compiled_stylesheet(stylesheet_text, key, stylesheet_cache)
+            compiled_stylesheets.append(compiled)
+            for family in compiled.data_font_families:
                 self.data_font_families.add(family)
-            for _, declarations, prelude_text, _, _, _ in compiled_rules:
-                site_wide = prelude_text in SITE_WIDE_SELECTORS
-                for name, value, _ in declarations:
+            for rule in compiled.rules:
+                site_wide = rule.selector_text in SITE_WIDE_SELECTORS and not rule.undecided
+                for name, value, _ in rule.declarations:
                     if name.startswith("--"):
                         if site_wide:
                             self.site_variables[name] = value
                         else:
                             self.scoped_variable_names.add(name)
+        self.layer_order = _LayerOrder(inherited_layers)
         self.hiding_matcher = cssselect2.Matcher()
         self.full_matcher = cssselect2.Matcher()
         self.pseudo_matcher = cssselect2.Matcher()
         # Only the rules that define custom properties on narrow selectors, for var() lookups.
         self.variable_matcher = cssselect2.Matcher()
+        # Every rule in an undecided block, to tell which elements those blocks can change.
+        self.undecided_matcher = cssselect2.Matcher()
         self.has_hiding_rules = False
         self.has_pseudo_rules = False
         self.has_variable_rules = False
         self.has_rules = False
+        self.has_undecided_rules = False
         # Rules setting font-family, matched only on demand (see CascadeRules.font_family_for).
         self.font_rules = []
         self._font_matcher = None
         order = first_order
-        for compiled_rules in compiled_stylesheets:
-            for selectors, declarations, prelude_text, font_family, could_hide, pseudo_candidate in compiled_rules:
+        for compiled in compiled_stylesheets:
+            next_layer_name = 0
+            for index, rule in enumerate(compiled.rules):
+                while next_layer_name < len(compiled.layer_names) and compiled.layer_names[next_layer_name][0] <= index:
+                    _, path, undecided = compiled.layer_names[next_layer_name]
+                    self.layer_order.name(path, undecided)
+                    next_layer_name += 1
                 order += 1
-                if font_family is not None:
-                    self.font_rules.append((selectors, order, font_family))
+                rank = self.layer_order.rank(rule.layer) if rule.layer else (_UNLAYERED,)
+                # Chrome ranks a scoped rule above unscoped ones of equal specificity (scope
+                # proximity comes before order), so its order is placed after all of them.
+                rule_order = order + _SCOPED_ORDER_OFFSET if rule.scoped else order
+                undecided = rule.undecided or self.layer_order.is_tentative(rule.layer)
+                if rule.font_family is not None:
+                    self.font_rules.append((rule.selectors, order, rank, rule.font_family))
+                declarations = rule.declarations
                 if not declarations:
                     continue
+                if undecided:
+                    self.has_undecided_rules = True
+                payload = (rule_order, rank, _negated(rank), undecided, declarations)
                 variable_declarations = []
-                if prelude_text not in SITE_WIDE_SELECTORS:
+                if rule.selector_text not in SITE_WIDE_SELECTORS or undecided:
                     for declaration in declarations:
                         if declaration[0].startswith("--"):
                             variable_declarations.append(declaration)
+                could_hide = rule.could_hide
                 if could_hide is None:
                     could_hide = _rule_could_hide(declarations, self.site_variables)
-                for selector in selectors:
-                    self.full_matcher.add_selector(selector, (order, declarations))
+                for selector in rule.selectors:
+                    self.full_matcher.add_selector(selector, payload)
                     self.has_rules = True
+                    if undecided:
+                        self.undecided_matcher.add_selector(selector, None)
                     if could_hide:
-                        self.hiding_matcher.add_selector(selector, (order, declarations))
+                        self.hiding_matcher.add_selector(selector, payload)
                         self.has_hiding_rules = True
-                    if pseudo_candidate and selector.pseudo_element in ("before", "after"):
-                        self.pseudo_matcher.add_selector(selector, (order, declarations))
+                    if rule.pseudo_candidate and selector.pseudo_element in ("before", "after"):
+                        self.pseudo_matcher.add_selector(selector, payload)
                         self.has_pseudo_rules = True
                     if variable_declarations and selector.pseudo_element is None:
-                        self.variable_matcher.add_selector(selector, (order, variable_declarations))
+                        self.variable_matcher.add_selector(
+                            selector, (rule_order, rank, _negated(rank), undecided, variable_declarations),
+                        )
                         self.has_variable_rules = True
+            while next_layer_name < len(compiled.layer_names):
+                _, path, undecided = compiled.layer_names[next_layer_name]
+                self.layer_order.name(path, undecided)
+                next_layer_name += 1
         self.last_order = order
 
     def font_matcher(self):
         if self._font_matcher is None:
             self._font_matcher = cssselect2.Matcher()
-            for selectors, order, font_family in self.font_rules:
+            for selectors, order, rank, font_family in self.font_rules:
                 for selector in selectors:
                     if selector.pseudo_element is None:
-                        self._font_matcher.add_selector(selector, (order, font_family))
+                        self._font_matcher.add_selector(selector, (order, rank, font_family))
         return self._font_matcher
 
 
-def _rule_set(stylesheet_texts, inherited_variables, first_order, stylesheet_cache, rule_set_cache):
+def _rule_set(stylesheet_texts, inherited_variables, inherited_layers, first_order, stylesheet_cache,
+              rule_set_cache):
     """A cached _RuleSet: a site's external stylesheets are shared by all its pages."""
     stylesheet_keys = []
     source_size = 0
     for stylesheet_text in stylesheet_texts:
         stylesheet_keys.append(_stylesheet_key(stylesheet_text))
         source_size += len(stylesheet_text)
-    cache_key = (tuple(stylesheet_keys), first_order, tuple(sorted(inherited_variables.items())))
+    layers_key = inherited_layers.cache_key() if inherited_layers is not None else ()
+    cache_key = (tuple(stylesheet_keys), first_order, tuple(sorted(inherited_variables.items())), layers_key)
     cached = rule_set_cache.lookup(cache_key)
     if cached is not None:
         return cached
-    rule_set = _RuleSet(stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_variables, first_order)
+    rule_set = _RuleSet(stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_variables,
+                        inherited_layers, first_order)
     rule_set_cache.store(cache_key, rule_set, source_size)
     return rule_set
 
@@ -418,7 +739,7 @@ def _rule_set(stylesheet_texts, inherited_variables, first_order, stylesheet_cac
 def external_rule_set(stylesheets):
     """The _RuleSet of a page's external stylesheets, compiled once and cached for the site's
     other pages (see EXTERNAL_CSS_CACHE_CHARACTERS)."""
-    return _rule_set(list(stylesheets or ()), {}, 0, _external_stylesheets, _external_rule_sets)
+    return _rule_set(list(stylesheets or ()), {}, None, 0, _external_stylesheets, _external_rule_sets)
 
 
 class _SharedElementWrapper(cssselect2.ElementWrapper):
@@ -436,18 +757,76 @@ class _SharedElementWrapper(cssselect2.ElementWrapper):
         return iter(children)
 
 
+# Cascade entries: (important, inline, layer rank, specificity, order, name, value, undecided),
+# sorted on their first five fields, so the last entry for a name wins.
+_INLINE_LAYER_RANK = (0,)
+# How many combinations of an element's undecided declarations are checked; past this the
+# element counts as hidden.
+MAXIMUM_UNDECIDED_COMBINATIONS = 64
+
+
+def _matched_entries(matcher, element_wrapper, entries):
+    """Adds the entries of the rules in matcher that match the element (not its pseudo-elements)."""
+    for specificity, _, pseudo_type, payload in matcher.match(element_wrapper):
+        if pseudo_type is not None:
+            continue
+        order, rank, important_rank, undecided, declarations = payload
+        for name, value, important in declarations:
+            entries.append((important, 0, important_rank if important else rank, specificity, order,
+                            name, value, undecided))
+
+
+def _inline_entries(inline_style, entries, custom_only=False):
+    for name, value, important in _declarations(inline_style):
+        if custom_only and not name.startswith("--"):
+            continue
+        entries.append((important, 1, _INLINE_LAYER_RANK, (0, 0, 0), 0, name, value, False))
+
+
 def _winning_values(entries):
-    """{name: value} from (important, inline, specificity, order, name, value) entries: sorted by
-    cascade priority, so the last entry for a name wins."""
-    entries.sort(key=lambda entry: entry[:4])
+    """{name: value} from cascade entries. revert-layer takes the value from the layers below."""
+    entries.sort(key=lambda entry: entry[:5])
     values = {}
+    history = {}
     for entry in entries:
-        values[entry[4]] = entry[5]
+        name = entry[5]
+        value = entry[6]
+        earlier = history.setdefault(name, [])
+        if value == "revert-layer":
+            value = None
+            for earlier_rank, earlier_value in reversed(earlier):
+                if earlier_rank < entry[2]:
+                    value = earlier_value
+                    break
+        earlier.append((entry[2], value))
+        if value is None:
+            values.pop(name, None)
+        else:
+            values[name] = value
     return values
 
 
+def _decided_entries(entries):
+    decided = []
+    for entry in entries:
+        if not entry[7]:
+            decided.append(entry)
+    return decided
+
+
+def _has_undecided_entry(entries):
+    for entry in entries:
+        if entry[7]:
+            return True
+    return False
+
+
 class CascadeRules:
-    """Drop-in replacement for the simple rule reader: declarations_for(element, tag) -> {property: value}."""
+    """Drop-in replacement for the simple rule reader: declarations_for(element, tag) -> {property: value}.
+
+    Rules in undecided blocks (see _Context) are applied here; without_undecided_blocks is the
+    same page with none of them applied (None when the page has none), and
+    declaration_alternatives() gives an element's declarations for each other subset of them."""
 
     def __init__(self, root, stylesheets=()):
         page_stylesheet_texts = []
@@ -456,15 +835,18 @@ class CascadeRules:
                 page_stylesheet_texts.append(style_element.text or "")
         # External stylesheets come first in the cascade, then the page's own <style> blocks.
         external_rules = external_rule_set(stylesheets)
-        page_rules = _rule_set(page_stylesheet_texts, external_rules.site_variables, external_rules.last_order,
-                               _page_stylesheets, _page_rule_sets)
+        page_rules = _rule_set(page_stylesheet_texts, external_rules.site_variables, external_rules.layer_order,
+                               external_rules.last_order, _page_stylesheets, _page_rule_sets)
         self._site_variables = page_rules.site_variables
         self._rule_sets = []
         self._scoped_variable_names = set()
         self.data_uri_font_families = set()
+        has_undecided_rules = False
         for rule_set in (external_rules, page_rules):
             if rule_set.has_rules or rule_set.font_rules:
                 self._rule_sets.append(rule_set)
+            if rule_set.has_undecided_rules:
+                has_undecided_rules = True
             for name in rule_set.scoped_variable_names:
                 self._scoped_variable_names.add(name)
             for family in rule_set.data_font_families:
@@ -477,6 +859,22 @@ class CascadeRules:
         # elements never are (inside <head>, <script>, hidden subtrees).
         self._examined = {}
         self._pseudo_candidates = {}
+        self._touched_by_undecided = {}
+        self._undecided_on_path = {}
+        self._matched = {}
+        self._applies_undecided = True
+        self._owns_wrappers = True
+        self._reset_resolved_caches()
+        self.without_undecided_blocks = None
+        if has_undecided_rules:
+            view = object.__new__(CascadeRules)
+            view.__dict__.update(self.__dict__)
+            view._applies_undecided = False
+            view._owns_wrappers = False
+            view._reset_resolved_caches()
+            self.without_undecided_blocks = view
+
+    def _reset_resolved_caches(self):
         self._cascaded = {}
         self._resolved = {}
         self._pseudo = {}
@@ -514,8 +912,56 @@ class CascadeRules:
     def __del__(self):
         # Frees the page's wrappers right away, not at the next full garbage collection (which
         # takes up to a second with a site's compiled CSS in memory).
-        for element_wrapper in getattr(self, "_all_wrappers", {}).values():
-            element_wrapper.__dict__.pop("shared_children", None)
+        if getattr(self, "_owns_wrappers", False):
+            for element_wrapper in getattr(self, "_all_wrappers", {}).values():
+                element_wrapper.__dict__.pop("shared_children", None)
+
+    def _is_touched_by_undecided(self, element):
+        touched = self._touched_by_undecided.get(element)
+        if touched is None:
+            touched = False
+            element_wrapper = self._all_wrappers.get(element)
+            if element_wrapper is not None:
+                for rule_set in self._rule_sets:
+                    if rule_set.has_undecided_rules and rule_set.undecided_matcher.match(element_wrapper):
+                        touched = True
+                        break
+            self._touched_by_undecided[element] = touched
+        return touched
+
+    def _undecided_rule_on_path(self, element):
+        """Whether an undecided rule matches the element or one of its ancestors."""
+        unanswered = []
+        node = element
+        on_path = False
+        while node is not None and isinstance(node.tag, str):
+            known = self._undecided_on_path.get(node)
+            if known is not None:
+                on_path = known
+                break
+            unanswered.append(node)
+            node = node.getparent()
+        for node in reversed(unanswered):
+            on_path = on_path or self._is_touched_by_undecided(node)
+            self._undecided_on_path[node] = on_path
+        return on_path
+
+    def undecided_rules_may_matter(self, element):
+        """Whether undecided rules can change how the element is drawn: they match it, an ancestor
+        (backgrounds, stacking, positioned containers, inherited variables) or a child (overlays)."""
+        if self.without_undecided_blocks is None and self._applies_undecided:
+            return False
+        if self._undecided_rule_on_path(element):
+            return True
+        for child in element:
+            if isinstance(child.tag, str) and self._is_touched_by_undecided(child):
+                return True
+        return False
+
+    def _applicable(self, entries):
+        if self._applies_undecided:
+            return entries
+        return _decided_entries(entries)
 
     def font_family_for(self, element):
         """The font-family that applies to an element (inherited from the nearest ancestor that
@@ -536,9 +982,9 @@ class CascadeRules:
                     for specificity, _, pseudo_type, payload in rule_set.font_matcher().match(element_wrapper):
                         if pseudo_type is not None:
                             continue
-                        order, font_family = payload
-                        if best is None or (specificity, order) > best[0]:
-                            best = ((specificity, order), font_family)
+                        order, rank, font_family = payload
+                        if best is None or (rank, specificity, order) > best[0]:
+                            best = ((rank, specificity, order), font_family)
                 if best is not None:
                     return self._resolve_variables(node, best[1])
             node = node.getparent()
@@ -553,49 +999,43 @@ class CascadeRules:
         element_wrapper = self._all_wrappers.get(element)
         if element_wrapper is not None:
             for rule_set in self._rule_sets:
-                if not rule_set.has_variable_rules:
-                    continue
-                for specificity, _, pseudo_type, payload in rule_set.variable_matcher.match(element_wrapper):
-                    if pseudo_type is not None:
-                        continue
-                    order, declarations = payload
-                    for name, value, important in declarations:
-                        entries.append((important, 0, specificity, order, name, value))
+                if rule_set.has_variable_rules:
+                    _matched_entries(rule_set.variable_matcher, element_wrapper, entries)
         inline_style = element.get("style")
         if inline_style and "--" in inline_style:
-            for name, value, important in _declarations(inline_style):
-                if name.startswith("--"):
-                    entries.append((important, 1, (0, 0, 0), 0, name, value))
-        variables = _winning_values(entries)
+            _inline_entries(inline_style, entries, custom_only=True)
+        variables = _winning_values(self._applicable(entries))
         self._scoped_variables_cache[element] = variables
         return variables
 
-    def _cascaded_declarations(self, element, full=False):
-        """Winning declarations for one element, before resolving var().
+    def _all_entries(self, element, full):
+        """Every cascade entry for one element, undecided ones included (shared by both views).
 
         Only elements touched by a rule that could hide text get the full cascade, unless
-        full is set (for background lookups); others get their inline style only.
-        """
+        full is set (for background lookups); others get their inline style only."""
+        key = (element, full)
+        entries = self._matched.get(key)
+        if entries is None:
+            entries = []
+            element_wrapper = self._all_wrappers.get(element) if full else None
+            if element_wrapper is not None:
+                # Step 2: the full cascade, so a later or more specific rule can show the text again.
+                for rule_set in self._rule_sets:
+                    _matched_entries(rule_set.full_matcher, element_wrapper, entries)
+            inline_style = element.get("style")
+            if inline_style:
+                _inline_entries(inline_style, entries)
+            entries.sort(key=lambda entry: entry[:5])
+            self._matched[key] = entries
+        return entries
+
+    def _cascaded_declarations(self, element, full=False):
+        """Winning declarations for one element, before resolving var()."""
         full = full or self._is_examined(element)
         cached = self._cascaded.get((element, full))
         if cached is not None:
             return cached
-        entries = []
-        element_wrapper = self._all_wrappers.get(element) if full else None
-        if element_wrapper is not None:
-            # Step 2: the full cascade, so a later or more specific rule can show the text again.
-            for rule_set in self._rule_sets:
-                for specificity, _, pseudo_type, payload in rule_set.full_matcher.match(element_wrapper):
-                    if pseudo_type is not None:
-                        continue
-                    order, declarations = payload
-                    for name, value, important in declarations:
-                        entries.append((important, 0, specificity, order, name, value))
-        inline_style = element.get("style")
-        if inline_style:
-            for name, value, important in _declarations(inline_style):
-                entries.append((important, 1, (0, 0, 0), 0, name, value))
-        cascaded = _winning_values(entries)
+        cascaded = _winning_values(list(self._applicable(self._all_entries(element, full))))
         self._cascaded[(element, full)] = cascaded
         return cascaded
 
@@ -653,6 +1093,61 @@ class CascadeRules:
         """Every winning declaration from all rules, also for elements no hiding rule touches."""
         return self._resolved_declarations(element, full=True)
 
+    def declaration_alternatives(self, element):
+        """The element's declarations for the other subsets of its undecided rules that may apply
+        in Chrome: [] when none touch it, None when there are too many combinations to check.
+
+        For each property the candidates are the value without undecided rules and every undecided
+        value that outranks it; var() is resolved both with and without the undecided blocks."""
+        full = self._is_examined(element)
+        entries = self._all_entries(element, full)
+        if not _has_undecided_entry(entries):
+            return []
+        undecided_view = self.without_undecided_blocks
+        candidates_by_name = {}
+        for entry in entries:  # sorted, lowest priority first
+            name = entry[5]
+            if name.startswith("--"):
+                continue
+            if not entry[7]:
+                candidates_by_name[name] = [entry[6]]
+            else:
+                candidates_by_name.setdefault(name, [None]).append(entry[6])
+        varying = []
+        for name, values in candidates_by_name.items():
+            resolved_values = []
+            for value in values:
+                if value is None:
+                    forms = [None]
+                else:
+                    forms = [self._resolve_variables(element, value).lower()]
+                    if undecided_view is not None:
+                        forms.append(undecided_view._resolve_variables(element, value).lower())
+                for form in forms:
+                    if form not in resolved_values:
+                        resolved_values.append(form)
+            if len(resolved_values) > 1:
+                varying.append((name, resolved_values))
+        combination_count = 1
+        for _, resolved_values in varying:
+            combination_count *= len(resolved_values)
+            if combination_count > MAXIMUM_UNDECIDED_COMBINATIONS:
+                return None
+        base = self._resolved_declarations(element)
+        alternatives = [dict(base)]
+        for name, resolved_values in varying:
+            extended = []
+            for alternative in alternatives:
+                for value in resolved_values:
+                    choice = dict(alternative)
+                    if value is None:
+                        choice.pop(name, None)
+                    else:
+                        choice[name] = value
+                    extended.append(choice)
+            alternatives = extended
+        return alternatives
+
     def pseudo_declarations(self, element):
         """{"before": {...}, "after": {...}} for elements with a positioned or wordy ::before/::after."""
         if not self._has_pseudo_element_rule(element):
@@ -667,15 +1162,18 @@ class CascadeRules:
                 for specificity, _, pseudo_type, payload in rule_set.full_matcher.match(element_wrapper):
                     if pseudo_type not in entries_by_pseudo:
                         continue
-                    order, declarations = payload
+                    order, rank, important_rank, undecided, declarations = payload
                     for name, value, important in declarations:
-                        entries_by_pseudo[pseudo_type].append((important, 0, specificity, order, name, value))
+                        entries_by_pseudo[pseudo_type].append((
+                            important, 0, important_rank if important else rank, specificity, order,
+                            name, value, undecided,
+                        ))
         result = {}
         for pseudo_type, entries in entries_by_pseudo.items():
             if not entries:
                 continue
             resolved = {}
-            for name, value in _winning_values(entries).items():
+            for name, value in _winning_values(self._applicable(entries)).items():
                 if name.startswith("--"):
                     continue
                 if name == "content":

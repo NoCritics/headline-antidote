@@ -420,7 +420,70 @@ def _element_hiding(element, tag, rules, inherited_background):
         pseudo_reason = _covering_pseudo_element(element, rules)
         if pseudo_reason is not None and _has_positioned_container(element, rules):
             hiding = (pseudo_reason, HIGH)
+    if hiding is None:
+        hiding = _hiding_under_undecided_rules(element, tag, rules)
     return hiding, inherited_background, declarations
+
+
+def _rule_worlds(rules, element):
+    """The rules with every undecided CSS block applied, then (when such blocks can change how
+    element is drawn) with none applied. See css_cascade.CascadeRules."""
+    other_rules = getattr(rules, "without_undecided_blocks", None)
+    if other_rules is None or not rules.undecided_rules_may_matter(element):
+        return (rules,)
+    return (rules, other_rules)
+
+
+def _hiding_under_undecided_rules(element, tag, rules):
+    """Why the element is hidden when only some of the page's undecided CSS blocks (@supports,
+    @container, @scope) apply, as Chrome may apply any of them; None when no subset hides it."""
+    if not hasattr(rules, "declaration_alternatives"):
+        return None
+    alternatives = rules.declaration_alternatives(element)
+    if alternatives is None:
+        return ("too many CSS rules under conditions this reader cannot answer (@supports, @container, @scope)",
+                HIGH)
+    hints = _presentational_hints(element, tag)
+    parent = element.getparent()
+    for alternative in alternatives:
+        if hints is not None:
+            merged = dict(hints)
+            merged.update(alternative)
+            alternative = merged
+
+        def lookup(alternative=alternative):
+            own_background = declared_background_color(alternative)
+            if own_background is not None or parent is None:
+                return own_background
+            return rules.background_for(parent)
+        hiding = _hiding_reason_from_declarations(alternative, None, lookup)
+        if hiding is None:
+            behind = _drawn_behind_background(element, alternative, rules)
+            if behind is not None:
+                hiding = (behind, HIGH)
+        if hiding is not None:
+            return hiding
+    for world_rules in _rule_worlds(rules, element)[1:]:
+        declarations = _declarations_with_hints(world_rules, element, tag)
+        hiding = _hiding_reason_from_declarations(declarations, None, _background_lookup(world_rules, element))
+        if hiding is not None:
+            return hiding
+        behind = _drawn_behind_background(element, declarations, world_rules)
+        if behind is not None:
+            return (behind, HIGH)
+        pseudo_reason = _covering_pseudo_element(element, world_rules)
+        if pseudo_reason is not None and _has_positioned_container(element, world_rules):
+            return (pseudo_reason, HIGH)
+    return None
+
+
+def _overlay_over_content(element, rules, skip_child=None):
+    """A child drawn as an opaque overlay over element's content (in either rule world), or None."""
+    for world_rules in _rule_worlds(rules, element):
+        overlay = _covering_child(element, world_rules)
+        if overlay is not None and overlay is not skip_child and _has_positioned_container(element, world_rules):
+            return overlay
+    return None
 
 
 def _ancestor_state(element, rules):
@@ -441,8 +504,7 @@ def _ancestor_state(element, rules):
             child_tag = child_on_path.tag.lower() if isinstance(child_on_path.tag, str) else ""
             if child_tag != "summary":
                 return inherited_background, ("inside a closed <details>", HIGH)
-        overlay = _covering_child(ancestor, rules)
-        if overlay is not None and overlay is not child_on_path and _has_positioned_container(ancestor, rules):
+        if _overlay_over_content(ancestor, rules, skip_child=child_on_path) is not None:
             return inherited_background, ("covered by an opaque overlay drawn over it", HIGH)
     return inherited_background, None
 
@@ -501,8 +563,8 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
         visible_parts.append(" ")
         return
 
-    overlay = _covering_child(element, rules)
-    if overlay is not None and _has_positioned_container(element, rules):
+    overlay = _overlay_over_content(element, rules)
+    if overlay is not None:
         _hide_loose_content(element, overlay, "covered by an opaque overlay drawn over it", hidden_fragments)
         _visit(overlay, inherited_background, rules, visible_parts, hidden_fragments)
         visible_parts.append(" ")
