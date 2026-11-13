@@ -229,6 +229,34 @@ class MediaQueryTests(unittest.TestCase):
             with self.subTest(query=query):
                 self.assert_visible(self.media_page(query))
 
+    def test_malformed_queries_are_read_as_chrome_reads_them(self):
+        # Each expectation is Chrome's matchMedia answer at the browser check's viewport.
+        from headline_guard.media_queries import media_query_applies
+
+        for query, chrome_answer in (
+            ("screen and(min-width: 1px)", False),
+            ("not(max-width: 600px)", False),
+            ("(min-width: 1px)and (orientation: landscape)", True),
+            ("(min-width: 1px) and(orientation: landscape)", False),
+            ("(400px <= width >= 100px)", False),
+            ("(2000px >= width <= 3000px)", False),
+            ("(100px < width < 2000px)", True),
+            ("(min-width: 1px)), screen", True),
+            ("screen, (min-width: 1px", True),
+            ("((min-width: 1px)", True),
+            ("(min-width: 1px)) and (orientation: landscape)", False),
+        ):
+            with self.subTest(query=query):
+                self.assertEqual(media_query_applies(query), chrome_answer)
+
+    def test_deep_nesting_is_evaluated_like_chrome(self):
+        from headline_guard.media_queries import media_query_applies
+
+        for depth in (1000, 20000):
+            self.assertTrue(media_query_applies("(" * depth + "min-width: 1px" + ")" * depth))
+            self.assertFalse(media_query_applies("not (" * depth + "max-width: 1px" + ")" * depth))
+            self.assertTrue(media_query_applies("not (" * (depth + 1) + "max-width: 1px" + ")" * (depth + 1)))
+
     def test_style_element_media_attribute(self):
         self.assert_hidden(page(".x { display: none }").replace("<style>", '<style media="not print">'))
         self.assert_visible(page(".x { display: none }").replace("<style>", '<style media="(width < 600px)">'))
