@@ -435,6 +435,18 @@ class FreshPageSetTests(unittest.TestCase):
         self.assertEqual(article.verdict, "review")
 
     @unittest.skipUnless(TRAFILATURA_AVAILABLE and CASCADE_AVAILABLE, "trafilatura or the CSS libraries not installed")
+    def test_long_hidden_ending_does_not_reach_the_model_as_body_text(self):
+        # Review finding 2: hidden text that is most of the article and runs to its end was put
+        # back into the body with only a medium flag, so a caller holding back only
+        # "quarantine" (the README's example) gave it to the model.
+        payload = ""
+        for number in range(4):
+            payload += f"<p>{INJECTED_PARAGRAPH_TEXT} Update {number}: sell before the open.</p>"
+        article = GUARD.extract_article(body_page(f'<div style="display:none">{payload}</div>'))
+        reaches_model = "fraud probe" in article.body and article.verdict != "quarantine"
+        self.assertFalse(reaches_model, (article.verdict, article.flags))
+
+    @unittest.skipUnless(TRAFILATURA_AVAILABLE and CASCADE_AVAILABLE, "trafilatura or the CSS libraries not installed")
     def test_hidden_paragraph_in_the_middle_is_still_removed(self):
         html = body_page(f'<p style="display:none">{INJECTED_PARAGRAPH_TEXT}</p>'
                          "<p>Analysts expect the company to update its guidance when it reports results "
