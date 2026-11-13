@@ -31,15 +31,14 @@ from collections import OrderedDict
 import cssselect2
 import tinycss2
 
-from .css_values import (
-    PIXELS_PER_EM, VIEWPORT_HEIGHT_PIXELS, VIEWPORT_WIDTH_PIXELS, length_in_pixels, parse_color, plain_number,
-    quoted_strings,
+from .css_hiding import (
+    CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_OPACITY, declared_background_color, filter_hiding_reason,
+    first_offset_is_off_screen, font_shorthand_is_unreadable, font_size_is_unreadable, is_covering_overlay,
+    leading_number, letters_collapsed, line_height_collapsed, opacity_is_invisible, relative_luminance,
+    scale_is_zero, translation_is_off_screen,
 )
-# html_visibility imports this module only inside functions, so importing it here is safe.
-from .html_visibility import (
-    CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_OPACITY, _background_color, _filter_hiding_reason,
-    _font_shorthand_size, _font_size_is_unreadable, _is_covering_overlay, _is_off_screen_offset, _leading_number,
-    _letters_collapsed, _relative_luminance, _translation_is_off_screen,
+from .css_values import (
+    PIXELS_PER_EM, VIEWPORT_HEIGHT_PIXELS, VIEWPORT_WIDTH_PIXELS, length_in_pixels, parse_color, quoted_strings,
 )
 
 MAXIMUM_VARIABLE_DEPTH = 10
@@ -210,40 +209,36 @@ def _could_hide(name, value):
     if name == "content-visibility":
         return value == "hidden"
     if name == "opacity":
-        number = plain_number(value)
-        return number is not None and number < MINIMUM_VISIBLE_OPACITY
+        return opacity_is_invisible(value)
     if name == "filter":
-        return _filter_hiding_reason(value) is not None
+        return filter_hiding_reason(value) is not None
     if name == "font-size":
-        return _font_size_is_unreadable(value)
+        return font_size_is_unreadable(value)
     if name == "font":
-        shorthand_size = _font_shorthand_size(value)
-        return shorthand_size is not None and _font_size_is_unreadable(shorthand_size)
+        return font_shorthand_is_unreadable(value)
     if name == "letter-spacing":
-        return _letters_collapsed(value)
+        return letters_collapsed(value)
     if name == "line-height":
-        pixels = length_in_pixels(value)
-        return (pixels is not None and pixels <= CLIPPED_BOX_MAXIMUM_PIXELS) or plain_number(value) == 0
+        return line_height_collapsed(value)
     if name in ("color", "-webkit-text-fill-color"):
         color = parse_color(value)
         return color is not None and (color[3] < MINIMUM_VISIBLE_OPACITY
-                                      or _relative_luminance(color) >= LIGHT_TEXT_LUMINANCE)
+                                      or relative_luminance(color) >= LIGHT_TEXT_LUMINANCE)
     if name in ("background", "background-color"):
         return False  # looked up on demand by background_for(), only for light text
     if name in ("clip", "clip-path", "transform"):
         return value not in ("auto", "none")
     if name == "translate":
-        return _translation_is_off_screen("", value)
+        return translation_is_off_screen("", value)
     if name == "scale":
-        return re.fullmatch(r"0(\.0*)?(\s+0(\.0*)?)?", value.strip()) is not None
+        return scale_is_zero(value)
     if name in ("width", "height", "max-width", "max-height"):
         pixels = length_in_pixels(value)
         return pixels is not None and pixels <= CLIPPED_BOX_MAXIMUM_PIXELS
     if name in ("left", "top", "right", "bottom", "margin-left", "margin-top", "text-indent", "inset"):
-        first_value = value.split()[0] if value.split() else ""
-        return bool(first_value) and _is_off_screen_offset(first_value)
+        return first_offset_is_off_screen(value)
     if name == "z-index":
-        number = _leading_number(value)
+        number = leading_number(value)
         return number is not None and number < 0
     if name == "unicode-bidi":
         return value in ("bidi-override", "isolate-override")
@@ -256,7 +251,7 @@ def _rule_could_cover(declarations, site_variables):
     for name, value, _ in declarations:
         if not name.startswith("--"):
             values[name] = _substitute_site_variables(value, site_variables).lower()
-    return _is_covering_overlay(values)
+    return is_covering_overlay(values)
 
 
 def _rule_could_hide(declarations, site_variables):
@@ -748,9 +743,9 @@ class CascadeRules:
         node = element
         while node is not None:
             if isinstance(node.tag, str):
-                background = _background_color(self._resolved_declarations(node, full=True))
+                background = declared_background_color(self._resolved_declarations(node, full=True))
                 if background is None and node.get("bgcolor"):
-                    background = _background_color({"background-color": node.get("bgcolor").strip().lower()})
+                    background = declared_background_color({"background-color": node.get("bgcolor").strip().lower()})
                 if background is not None:
                     return background
             node = node.getparent()

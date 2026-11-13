@@ -31,7 +31,7 @@ import re
 import time
 from dataclasses import dataclass
 
-from .html_visibility import (
+from .css_hiding import (
     MINIMUM_READABLE_FONT_SIZES,
     MINIMUM_VISIBLE_CONTRAST,
     MINIMUM_VISIBLE_OPACITY,

@@ -21,7 +21,13 @@ from dataclasses import dataclass
 import lxml.html
 from lxml import etree
 
-from .css_values import length_in_pixels, numeric_value, parse_color, plain_number
+from .css_hiding import (
+    CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_CONTRAST, MINIMUM_VISIBLE_OPACITY, OPAQUE_ALPHA, colors_in,
+    contrast_ratio, declared_background_color, filter_hiding_reason, first_offset_is_off_screen,
+    font_shorthand_is_unreadable, font_size_is_unreadable, is_covering_overlay, is_off_screen_offset, leading_number,
+    letters_collapsed, line_height_collapsed, opacity_is_invisible, scale_is_zero, translation_is_off_screen,
+)
+from .css_values import length_in_pixels, parse_color, plain_number
 
 # Contents are code or metadata, never headline text, so they are skipped without a flag.
 NON_TEXT_TAGS = {"script", "style", "head", "meta", "link"}
@@ -32,25 +38,8 @@ BLOCK_TAGS = {
     "section", "article", "header", "footer", "blockquote", "title", "details", "summary",
 }
 
-# Font sizes below these are unreadable, per unit.
-MINIMUM_READABLE_FONT_SIZES = {
-    "px": 2.0, "pt": 1.5, "em": 0.15, "rem": 0.15, "%": 15.0, "vw": 0.2, "vh": 0.2, "": 2.0,
-}
-MINIMUM_VISIBLE_OPACITY = 0.1
-# WCAG contrast ratio; 1.0 means identical colors and 4.5 is the usual accessibility minimum.
-MINIMUM_VISIBLE_CONTRAST = 1.5
 # When no background is declared, assume the usual white page; an external stylesheet may disagree.
 ASSUMED_PAGE_BACKGROUND = (255, 255, 255)
-OFF_SCREEN_THRESHOLD_PIXELS = -500
-# A box at most this tall or wide, with its overflow clipped, shows no readable text.
-CLIPPED_BOX_MAXIMUM_PIXELS = 1.0
-# Letters pulled this far together are drawn on top of each other.
-COLLAPSED_LETTER_SPACING_EM = -0.5
-COLLAPSED_LETTER_SPACING_PIXELS = -8.0
-# Blur that makes text unreadable.
-UNREADABLE_BLUR_PIXELS = 8.0
-# An overlay must be at least this opaque to cover the text under it.
-OPAQUE_ALPHA = 0.9
 # Fewer strong left-to-right letters than this under a right-to-left override is not reordered text.
 MINIMUM_REORDERED_LETTERS = 2
 
@@ -59,7 +48,6 @@ MEDIUM = "medium"
 SCREEN_READER_ONLY_REASON = "screen-reader-only box"
 
 POSITIONED = ("relative", "absolute", "fixed", "sticky")
-_COLOR_TOKEN = re.compile(r"(?:rgba?|hsla?|hwb|oklch|oklab|lch|lab)\([^()]*\)|#[0-9a-f]{3,8}\b|[a-z]+")
 
 
 @dataclass
@@ -84,140 +72,6 @@ def _parse_declarations(style_text):
     return declarations
 
 
-def _leading_number(value):
-    match = re.match(r"^\s*(-?\d*\.?\d+)", value)
-    if match is None:
-        return None
-    return float(match.group(1))
-
-
-def _relative_luminance(color):
-    channels = []
-    for channel in color[:3]:
-        fraction = channel / 255
-        if fraction <= 0.03928:
-            channels.append(fraction / 12.92)
-        else:
-            channels.append(((fraction + 0.055) / 1.055) ** 2.4)
-    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
-
-
-def _contrast_ratio(first_color, second_color):
-    first_luminance = _relative_luminance(first_color)
-    second_luminance = _relative_luminance(second_color)
-    lighter = max(first_luminance, second_luminance)
-    darker = min(first_luminance, second_luminance)
-    return (lighter + 0.05) / (darker + 0.05)
-
-
-def _colors_in(text):
-    """Every color a value such as a background or text-shadow mentions, in order."""
-    colors = []
-    for token in _COLOR_TOKEN.findall(text or ""):
-        color = parse_color(token)
-        if color is not None:
-            colors.append(color)
-    return colors
-
-
-def _background_color(declarations):
-    """The element's own background color when it is a plain, visible color; None otherwise."""
-    background = declarations.get("background-color")
-    if background is not None:
-        color = parse_color(background)
-    else:
-        background = declarations.get("background")
-        if background is None:
-            return None
-        without_images = re.sub(r"url\([^)]*\)", " ", background)
-        if "gradient(" in without_images or "image-set(" in without_images:
-            return None
-        colors = _colors_in(without_images)
-        color = colors[-1] if colors else None
-    if color is None or color[3] < MINIMUM_VISIBLE_OPACITY:
-        return None
-    return color
-
-
-def _font_size_is_unreadable(value):
-    value = (value or "").strip().lower()
-    match = re.fullmatch(r"(-?\d*\.?\d+)\s*([a-z%]*)", value)
-    if match is not None:
-        minimum_size = MINIMUM_READABLE_FONT_SIZES.get(match.group(2))
-        if minimum_size is not None:
-            return float(match.group(1)) < minimum_size
-        pixels = length_in_pixels(value)
-        return pixels is not None and pixels < MINIMUM_READABLE_FONT_SIZES["px"]
-    if value.startswith(("calc(", "min(", "max(", "clamp(")):
-        parsed = numeric_value(value)
-        if parsed is None:
-            return False
-        number, kind = parsed
-        if kind == "length":
-            return number < MINIMUM_READABLE_FONT_SIZES["px"]
-        if kind == "percent":
-            return number < MINIMUM_READABLE_FONT_SIZES["%"]
-        return number == 0
-    return False
-
-
-def _font_shorthand_size(value):
-    """The size in a `font` shorthand ('bold 0/0 a' -> '0'), or None."""
-    for token in (value or "").split():
-        size_text = token.split("/")[0]
-        if "/" in token or size_text == "0" or re.fullmatch(r"-?\d*\.?\d+[a-z%]+", size_text):
-            return size_text
-    return None
-
-
-def _is_off_screen_offset(value):
-    pixels = length_in_pixels(value or "")
-    if pixels is not None:
-        return pixels <= OFF_SCREEN_THRESHOLD_PIXELS
-    parsed = numeric_value(value or "")
-    return parsed is not None and parsed[1] == "percent" and parsed[0] <= -100
-
-
-def _translation_is_off_screen(transform_value, translate_value):
-    lengths = []
-    for function_name, arguments in re.findall(r"(translate3d|translatex|translatey|translate)\(([^()]*)\)",
-                                               transform_value or ""):
-        for argument in arguments.split(","):
-            lengths.append(argument.strip())
-    for part in (translate_value or "").split():
-        lengths.append(part)
-    for length in lengths:
-        pixels = length_in_pixels(length)
-        if pixels is not None and pixels <= OFF_SCREEN_THRESHOLD_PIXELS:
-            return True
-    return False
-
-
-def _filter_hiding_reason(filter_value):
-    if not filter_value or filter_value == "none":
-        return None
-    for function_name, argument in re.findall(r"([a-z-]+)\(([^()]*)\)", filter_value):
-        if function_name == "opacity":
-            amount = plain_number(argument.strip())
-            if amount is not None and amount < MINIMUM_VISIBLE_OPACITY:
-                return f"filter:opacity({argument.strip()})"
-        elif function_name == "blur":
-            radius = length_in_pixels(argument.strip())
-            if radius is not None and radius >= UNREADABLE_BLUR_PIXELS:
-                return f"filter:blur({argument.strip()})"
-    return None
-
-
-def _letters_collapsed(letter_spacing):
-    parsed = numeric_value(letter_spacing or "")
-    if parsed is None:
-        return False
-    text = letter_spacing.strip()
-    if text.endswith("em") and not text.endswith("rem"):
-        return parsed[0] / 16 <= COLLAPSED_LETTER_SPACING_EM
-    return parsed[1] == "length" and parsed[0] <= COLLAPSED_LETTER_SPACING_PIXELS
-
-
 def _text_painted_another_way(declarations):
     """Transparent text that is still drawn: by a background clipped to the text, or a shadow."""
     clip = declarations.get("background-clip", "") + " " + declarations.get("-webkit-background-clip", "")
@@ -225,10 +79,10 @@ def _text_painted_another_way(declarations):
         background = declarations.get("background", "") + " " + declarations.get("background-image", "")
         if "gradient(" in background or "url(" in background:
             return True
-        background_color = _background_color(declarations)
-        if background_color is not None:  # _background_color drops colors below MINIMUM_VISIBLE_OPACITY
+        background_color = declared_background_color(declarations)
+        if background_color is not None:  # declared_background_color drops colors below MINIMUM_VISIBLE_OPACITY
             return True
-    for shadow_color in _colors_in(declarations.get("text-shadow", "")):
+    for shadow_color in colors_in(declarations.get("text-shadow", "")):
         if shadow_color[3] >= MINIMUM_VISIBLE_OPACITY:
             return True
     return False
@@ -257,20 +111,16 @@ def _hiding_reason_from_declarations(declarations, background_color, background_
         return ("content-visibility:hidden", HIGH)
     if declarations.get("visibility") in ("hidden", "collapse"):
         return ("visibility:" + declarations["visibility"], HIGH)
-    if "opacity" in declarations:
-        opacity = plain_number(declarations["opacity"])
-        if opacity is not None and opacity < MINIMUM_VISIBLE_OPACITY:
-            return (f"opacity:{declarations['opacity']}", HIGH)
-    filter_reason = _filter_hiding_reason(declarations.get("filter"))
+    if "opacity" in declarations and opacity_is_invisible(declarations["opacity"]):
+        return (f"opacity:{declarations['opacity']}", HIGH)
+    filter_reason = filter_hiding_reason(declarations.get("filter"))
     if filter_reason is not None:
         return (filter_reason, HIGH)
-    if "font-size" in declarations and _font_size_is_unreadable(declarations["font-size"]):
+    if "font-size" in declarations and font_size_is_unreadable(declarations["font-size"]):
         return ("font-size:" + declarations["font-size"], HIGH)
-    if "font" in declarations:
-        shorthand_size = _font_shorthand_size(declarations["font"])
-        if shorthand_size is not None and _font_size_is_unreadable(shorthand_size):
-            return ("font:" + declarations["font"], HIGH)
-    if _letters_collapsed(declarations.get("letter-spacing")):
+    if "font" in declarations and font_shorthand_is_unreadable(declarations["font"]):
+        return ("font:" + declarations["font"], HIGH)
+    if letters_collapsed(declarations.get("letter-spacing")):
         return ("letter-spacing:" + declarations["letter-spacing"] + " draws the letters on top of each other", HIGH)
 
     text_color, declared_color = _text_color(declarations)
@@ -280,9 +130,9 @@ def _hiding_reason_from_declarations(declarations, background_color, background_
         if background_lookup is not None:
             background_color = background_lookup()
         if background_color is not None:
-            if _contrast_ratio(text_color, background_color) < MINIMUM_VISIBLE_CONTRAST:
+            if contrast_ratio(text_color, background_color) < MINIMUM_VISIBLE_CONTRAST:
                 return (f"text color {declared_color} nearly matches its background", HIGH)
-        elif _contrast_ratio(text_color, ASSUMED_PAGE_BACKGROUND) < MINIMUM_VISIBLE_CONTRAST:
+        elif contrast_ratio(text_color, ASSUMED_PAGE_BACKGROUND) < MINIMUM_VISIBLE_CONTRAST:
             return (
                 f"text color {declared_color} is invisible on a white page "
                 "(page background not declared here, so this is a guess)",
@@ -298,9 +148,9 @@ def _hiding_reason_from_declarations(declarations, background_color, background_
     transform = declarations.get("transform", "").replace(" ", "")
     if re.search(r"scale[xy]?\(0(\.0*)?[,)]", transform):
         return ("transform:scale(0)", HIGH)
-    if re.fullmatch(r"0(\.0*)?(\s+0(\.0*)?)?", declarations.get("scale", "").strip()):
+    if scale_is_zero(declarations.get("scale", "")):
         return ("scale:0", HIGH)
-    if _translation_is_off_screen(declarations.get("transform"), declarations.get("translate")):
+    if translation_is_off_screen(declarations.get("transform"), declarations.get("translate")):
         return ("moved off-screen by a transform", HIGH)
 
     overflow_words = []
@@ -319,17 +169,14 @@ def _hiding_reason_from_declarations(declarations, background_color, background_
                     return (reason, HIGH)
         line_height = declarations.get("line-height")
         if line_height is not None and "height" not in declarations and "min-height" not in declarations:
-            line_pixels = length_in_pixels(line_height)
-            line_number = plain_number(line_height)
-            if (line_pixels is not None and line_pixels <= CLIPPED_BOX_MAXIMUM_PIXELS) or line_number == 0:
+            if line_height_collapsed(line_height):
                 return (f"line-height:{line_height} with overflow:hidden", HIGH)
     if declarations.get("position") in ("absolute", "fixed"):
         for offset_property in ("left", "top", "right", "bottom", "margin-left", "margin-top", "inset"):
             offset_value = declarations.get(offset_property, "")
-            first_offset = offset_value.split()[0] if offset_value.split() else ""
-            if first_offset and _is_off_screen_offset(first_offset):
+            if first_offset_is_off_screen(offset_value):
                 return (f"positioned off-screen ({offset_property}:{offset_value})", HIGH)
-    if _is_off_screen_offset(declarations.get("text-indent", "")):
+    if is_off_screen_offset(declarations.get("text-indent", "")):
         return ("text-indent off-screen", HIGH)
     return None
 
@@ -342,44 +189,6 @@ def _full_declarations(rules, element):
         return rules.full_declarations(element)
     tag = element.tag.lower() if isinstance(element.tag, str) else ""
     return rules.declarations_for(element, tag)
-
-
-def _is_stretched_over_its_box(declarations):
-    inset = declarations.get("inset")
-    if inset is not None:
-        for part in inset.split():
-            if length_in_pixels(part) != 0:
-                return False
-        return True
-    top = length_in_pixels(declarations.get("top", ""))
-    left = length_in_pixels(declarations.get("left", ""))
-    if top != 0 or left != 0:
-        return False
-    right = length_in_pixels(declarations.get("right", ""))
-    bottom = length_in_pixels(declarations.get("bottom", ""))
-    width = numeric_value(declarations.get("width", ""))
-    height = numeric_value(declarations.get("height", ""))
-    full_width = right == 0 or (width is not None and width[1] == "percent" and width[0] >= 100)
-    full_height = bottom == 0 or (height is not None and height[1] == "percent" and height[0] >= 100)
-    return full_width and full_height
-
-
-def _is_covering_overlay(declarations):
-    """An absolutely positioned, opaque box stretched over its containing block."""
-    if declarations.get("position") != "absolute":
-        return False
-    if declarations.get("display") == "none" or declarations.get("visibility") in ("hidden", "collapse"):
-        return False
-    background = _background_color(declarations)
-    if background is None or background[3] < OPAQUE_ALPHA:
-        return False
-    opacity = plain_number(declarations.get("opacity", "1"))
-    if opacity is not None and opacity < OPAQUE_ALPHA:
-        return False
-    z_index = _leading_number(declarations.get("z-index", ""))
-    if z_index is not None and z_index < 0:
-        return False
-    return _is_stretched_over_its_box(declarations)
 
 
 def _has_positioned_container(element, rules):
@@ -409,7 +218,7 @@ def _covering_pseudo_element(element, rules):
             continue
         if declarations.get("content", "normal") in ("none", "normal"):
             continue
-        if _is_covering_overlay(declarations):
+        if is_covering_overlay(declarations):
             return f"covered by its own ::{pseudo_name} overlay"
     return None
 
@@ -422,7 +231,7 @@ def _covering_child(element, rules):
         child_tag = child.tag.lower()
         if child_tag in NON_TEXT_TAGS:
             continue
-        if _is_covering_overlay(_declarations_with_hints(rules, child, child_tag)):
+        if is_covering_overlay(_declarations_with_hints(rules, child, child_tag)):
             return child
     return None
 
@@ -451,7 +260,7 @@ def _drawn_behind_background(element, declarations, rules):
     nearest one that starts a stacking context."""
     if declarations.get("position") not in POSITIONED:
         return None
-    z_index = _leading_number(declarations.get("z-index", ""))
+    z_index = leading_number(declarations.get("z-index", ""))
     if z_index is None or z_index >= 0:
         return None
     for ancestor in element.iterancestors():
@@ -460,7 +269,7 @@ def _drawn_behind_background(element, declarations, rules):
         ancestor_declarations = _full_declarations(rules, ancestor)
         if _creates_stacking_context(ancestor_declarations):
             return None
-        background = _background_color(ancestor_declarations)
+        background = declared_background_color(ancestor_declarations)
         if background is not None and background[3] >= OPAQUE_ALPHA:
             return f"drawn behind an enclosing background (z-index:{declarations['z-index']})"
     return None
@@ -597,7 +406,7 @@ def _element_hiding(element, tag, rules, inherited_background):
     if _is_svg_tooltip(element, tag):
         return ("SVG tooltip text", HIGH), inherited_background, None
     declarations = _declarations_with_hints(rules, element, tag)
-    own_background = _background_color(declarations)
+    own_background = declared_background_color(declarations)
     if own_background is not None:
         inherited_background = own_background
     hiding = _hiding_reason_from_declarations(
