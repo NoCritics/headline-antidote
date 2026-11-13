@@ -472,6 +472,13 @@ class HeadlineDrawingTests(unittest.TestCase):
         self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
         self.assertEqual(article.verdict, "review")
 
+    def test_css_generated_words_hidden_only_by_an_undecided_block_are_flagged(self):
+        css = ('.k::before { content: "Exclusive: losses ahead " } '
+               '@supports (bogus: 1) { .k::before { display: none } }')
+        article = GUARD.extract_article(article_page(f'<span class="k"></span>{HEADLINE}',
+                                                     head_extra=f"<style>{css}</style>"))
+        self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
+
     def test_icon_glyph_from_css_is_not_text(self):
         html = article_page(f'<span class="k"></span>{HEADLINE}',
                             head_extra='<style>.k::before { content: "\\2022" }</style>')

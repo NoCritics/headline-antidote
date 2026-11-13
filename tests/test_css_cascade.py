@@ -328,7 +328,8 @@ CHROME_DECIDED_CASES = (
 
 # Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
 # @scope, whose rules Chrome ranks by the scope root's nearness): Chrome may apply any of them, so
-# text that some combination of them hides counts as hidden. Each of these is hidden in Chrome.
+# text that some combination of them hides counts as hidden. Each of these is hidden under at least
+# one combination of the blocks' conditions (most of them in Chrome itself, which this does not check).
 UNDECIDED_BLOCK_CASES = (
     "@scope (.a){.x{display:none}}",
     "@scope (.a){:scope .x{display:none}}",
@@ -340,6 +341,8 @@ UNDECIDED_BLOCK_CASES = (
     ".x{height:0} @supports (display:block){.x{overflow:hidden}} @supports (bogus:1){.x{height:auto}}",
     ":root{--d:none} @supports (bogus:1){:root{--d:inline}} .x{display:var(--d)}",
     "@supports (bogus:1){@layer b{}} @layer a{.x{display:inline}} @layer b{.x{display:none}}",
+    "@supports (display:block){:root{--d:none}} @supports (bogus:1){:root{--d:inline}} .x{display:var(--d)}",
+    ":root{--d:inline} @supports (display:block){:root{--d:none}} .x{display:var(--d)}",
     ".x{display:none} @supports (bogus:1){.x{display:inline}}",
     ".x{display:none} @supports not (display:block){.x{display:inline}}",
     ".x{display:none} @supports (display:bogus){.x{display:inline}}",
@@ -423,6 +426,24 @@ class AtRuleTests(unittest.TestCase):
             "<span class=\"cover\"></span></span></h1></article></body></html>"
         )
         self.assertEqual(GUARD.analyze_html(html, "//h1").clean_text, HEADLINE)
+
+    def test_overlay_split_between_undecided_blocks_still_covers(self):
+        html = (
+            "<html><head><style>.cover{position:absolute;inset:0} "
+            "@supports (display:block){.cover{background:#fff}} @supports (bogus:1){.cover{position:static}}"
+            "</style></head><body><article>"
+            f"<h1>{HEADLINE}<span style=\"position:relative\"> losses and layoffs"
+            "<span class=\"cover\"></span></span></h1></article></body></html>"
+        )
+        self.assertEqual(GUARD.analyze_html(html, "//h1").clean_text, HEADLINE)
+
+    def test_selector_lists_nested_many_levels_deep_are_read_quickly(self):
+        import time
+
+        css = ".a, .b, .c {" * 10 + ".x { display: none }" + "}" * 10
+        started = time.perf_counter()
+        GUARD.analyze_html(at_rule_page(css), "//h1")
+        self.assertLess(time.perf_counter() - started, 2)
 
     def test_layers_order_across_external_and_page_stylesheets(self):
         external_css = "@layer b, a; @layer a{.x{display:none}}"
