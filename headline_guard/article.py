@@ -199,12 +199,15 @@ def _comparison_words(text):
     return re.findall(r"\w+", unicodedata.normalize("NFKC", text or "").casefold())
 
 
-def _word_trigrams(text):
-    words = _comparison_words(text)
+def _trigrams(words):
     trigrams = set()
     for position in range(len(words) - 2):
         trigrams.add((words[position], words[position + 1], words[position + 2]))
     return trigrams
+
+
+def _word_trigrams(text):
+    return _trigrams(_comparison_words(text))
 
 
 def _leading_label_words(headline_element):

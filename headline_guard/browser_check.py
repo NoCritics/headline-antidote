@@ -10,21 +10,21 @@ same HTML in Chrome (browser_visibility.BrowserVerifier) and compares:
   doubt is cleared, and the model gets the full heading back;
 * body text the browser hides: removed from the body. Live pages hide plenty of
   harmless text with scripts (collapsed boxes, promotions, labels), so removed passages
-  are flagged medium (review), short labels low. When most of the body is hidden (a
-  paywall script), nothing is removed and the page is flagged for review;
+  are flagged low, as in the static reading. When most of the body is hidden (a paywall
+  script), nothing is removed and the page is flagged for review;
 * text cut off by a preview window (a metered paywall, a collapsed section) is the
   publisher's own text: kept, with a low flag.
 
 A render that shows almost none of the article (a consent wall, the page navigating
 away, a script error) is inconclusive: the static result is returned unchanged, with a
-low flag, and the page still counts as needing a check.
+flag (medium when the static reading had asked for the check), and the page still counts
+as needing a check.
 """
 
 import re
-import unicodedata
 from dataclasses import replace
 
-from .article import _comparison_words
+from .article import _comparison_words, _trigrams
 from .text_guard import HIGH, LOW, MEDIUM, Flag
 
 # Hidden runs shorter than this inside a visible paragraph are left alone (word-boundary noise).
@@ -48,16 +48,11 @@ CLIPPED = "clipped"
 HIDDEN = "hidden"
 
 
-def _word_counts(words):
-    counts = {}
-    for word in words:
-        counts[word] = counts.get(word, 0) + 1
-    return counts
-
-
 def _missing_words(words, available_words):
     """Words (with repeats) that are not in available_words, in order."""
-    available = _word_counts(available_words)
+    available = {}
+    for word in available_words:
+        available[word] = available.get(word, 0) + 1
     missing = []
     for word in words:
         if available.get(word, 0) > 0:
@@ -67,19 +62,12 @@ def _missing_words(words, available_words):
     return missing
 
 
-def _trigrams(words):
-    trigrams = set()
-    for position in range(len(words) - 2):
-        trigrams.add((words[position], words[position + 1], words[position + 2]))
-    return trigrams
-
-
 def _words_with_spans(text):
     """Comparison words of text, each with the (start, end) of the original token it came from."""
     words = []
     spans = []
     for match in re.finditer(r"\w+", text):
-        for word in re.findall(r"\w+", unicodedata.normalize("NFKC", match.group()).casefold()):
+        for word in _comparison_words(match.group()):
             words.append(word)
             spans.append((match.start(), match.end()))
     return words, spans
@@ -192,69 +180,9 @@ def _compare_headline(guard, article, rendered, flags):
     return headline, headline_source, flags
 
 
-def compare_with_rendered_page(guard, article, rendered):
-    """A new ArticleResult with the browser's findings merged in (see the module docstring)."""
-    flags = []
-    for flag in article.flags:
-        flags.append(flag)
-    if not rendered.complete:
-        flags.append(Flag(
-            "browser_check_incomplete", LOW, None, None, rendered.note,
-            "the page did not finish loading in the browser; the check used what had rendered", "page",
-        ))
-    visible = _text_index(rendered.page_text)
-    clipped = _text_index(rendered.clipped_text)
-    paragraphs = []
-    all_states = []
-    for paragraph in article.body.split("\n"):
-        words, spans = _words_with_spans(paragraph)
-        states = _word_states(words, visible, clipped)
-        for state in states:
-            all_states.append(state)
-        paragraphs.append((paragraph, words, spans, states))
-    body_words = len(all_states)
-    shown_words = 0
-    for state in all_states:
-        if state != HIDDEN:
-            shown_words += 1
-    if body_words >= INCONCLUSIVE_MINIMUM_WORDS and shown_words < INCONCLUSIVE_VISIBLE_SHARE * body_words:
-        # On a page the static reading sent to the browser, the reason for checking still stands.
-        flags.append(Flag(
-            "browser_check_inconclusive", MEDIUM if article.needs_browser_check else LOW, None, None, rendered.note,
-            f"the browser showed {shown_words} of the body's {body_words} words (a consent wall, a redirect "
-            "or a script error); nothing was concluded, the static result stands"
-            + (", and the reason for the check is unresolved" if article.needs_browser_check else ""),
-            "page",
-        ))
-        return replace(article, flags=flags, browser_milliseconds=rendered.milliseconds)
-
-    headline, headline_source, flags = _compare_headline(guard, article, rendered, flags)
-    hidden_words = 0
-    first_hidden = None
-    for position, state in enumerate(all_states):
-        if state == HIDDEN:
-            hidden_words += 1
-            if first_hidden is None:
-                first_hidden = position
-    trailing_block = False
-    if first_hidden is not None:
-        hidden_after_first = 0
-        for state in all_states[first_hidden:]:
-            if state == HIDDEN:
-                hidden_after_first += 1
-        trailing_block = hidden_after_first >= TRAILING_BLOCK_HIDDEN_SHARE * (body_words - first_hidden)
-    if body_words and hidden_words >= MOSTLY_HIDDEN_SHARE * body_words and trailing_block:
-        flags.append(Flag(
-            "most_of_article_hidden", MEDIUM, None, None, "",
-            f"a browser hides the last {hidden_words} of the body's {body_words} words from readers: "
-            "usually a paywall, but it could be a hidden ending; kept in the body",
-            "body",
-        ))
-        return replace(
-            article, headline=headline, headline_source=headline_source, flags=flags,
-            browser_check_reasons=[], browser_verified=True, browser_milliseconds=rendered.milliseconds,
-        )
-
+def _remove_hidden_runs(paragraphs, flags):
+    """(body, clipped paragraph count): each paragraph without its hidden runs, one LOW flag
+    appended per paragraph that lost text."""
     kept_paragraphs = []
     clipped_paragraphs = 0
     for paragraph, words, spans, states in paragraphs:
@@ -283,6 +211,70 @@ def compare_with_rendered_page(guard, article, rendered):
         ))
         if remaining:
             kept_paragraphs.append(remaining)
+    return "\n".join(kept_paragraphs).strip(), clipped_paragraphs
+
+
+def compare_with_rendered_page(guard, article, rendered):
+    """A new ArticleResult with the browser's findings merged in (see the module docstring)."""
+    flags = []
+    for flag in article.flags:
+        flags.append(flag)
+    if not rendered.complete:
+        flags.append(Flag(
+            "browser_check_incomplete", LOW, None, None, rendered.note,
+            "the page did not finish loading in the browser; the check used what had rendered", "page",
+        ))
+    visible = _text_index(rendered.page_text)
+    clipped = _text_index(rendered.clipped_text)
+    paragraphs = []
+    all_states = []
+    for paragraph in article.body.split("\n"):
+        words, spans = _words_with_spans(paragraph)
+        states = _word_states(words, visible, clipped)
+        for state in states:
+            all_states.append(state)
+        paragraphs.append((paragraph, words, spans, states))
+    body_words = len(all_states)
+    hidden_words = 0
+    first_hidden = None
+    for position, state in enumerate(all_states):
+        if state == HIDDEN:
+            hidden_words += 1
+            if first_hidden is None:
+                first_hidden = position
+    shown_words = body_words - hidden_words
+    if body_words >= INCONCLUSIVE_MINIMUM_WORDS and shown_words < INCONCLUSIVE_VISIBLE_SHARE * body_words:
+        # On a page the static reading sent to the browser, the reason for checking still stands.
+        flags.append(Flag(
+            "browser_check_inconclusive", MEDIUM if article.needs_browser_check else LOW, None, None, rendered.note,
+            f"the browser showed {shown_words} of the body's {body_words} words (a consent wall, a redirect "
+            "or a script error); nothing was concluded, the static result stands"
+            + (", and the reason for the check is unresolved" if article.needs_browser_check else ""),
+            "page",
+        ))
+        return replace(article, flags=flags, browser_milliseconds=rendered.milliseconds)
+
+    headline, headline_source, flags = _compare_headline(guard, article, rendered, flags)
+    trailing_block = False
+    if first_hidden is not None:
+        hidden_after_first = 0
+        for state in all_states[first_hidden:]:
+            if state == HIDDEN:
+                hidden_after_first += 1
+        trailing_block = hidden_after_first >= TRAILING_BLOCK_HIDDEN_SHARE * (body_words - first_hidden)
+    if body_words and hidden_words >= MOSTLY_HIDDEN_SHARE * body_words and trailing_block:
+        flags.append(Flag(
+            "most_of_article_hidden", MEDIUM, None, None, "",
+            f"a browser hides the last {hidden_words} of the body's {body_words} words from readers: "
+            "usually a paywall, but it could be a hidden ending; kept in the body",
+            "body",
+        ))
+        return replace(
+            article, headline=headline, headline_source=headline_source, flags=flags,
+            browser_check_reasons=[], browser_verified=True, browser_milliseconds=rendered.milliseconds,
+        )
+
+    body, clipped_paragraphs = _remove_hidden_runs(paragraphs, flags)
     if clipped_paragraphs:
         flags.append(Flag(
             "text_behind_preview_window", LOW, None, None, "",
@@ -290,8 +282,6 @@ def compare_with_rendered_page(guard, article, rendered):
             "paywall or a collapsed section); this is the publisher's text, kept in the body",
             "body",
         ))
-    body = "\n".join(kept_paragraphs).strip()
-
     return replace(
         article, headline=headline, headline_source=headline_source, body=body, flags=flags,
         browser_check_reasons=[], browser_verified=True, browser_milliseconds=rendered.milliseconds,

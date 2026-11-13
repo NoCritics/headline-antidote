@@ -94,8 +94,22 @@ class Flag:
     end: int | None
     original: str
     detail: str
-    # For article extraction: which output the flag belongs to ("headline", "body", "metadata").
+    # For article extraction: which output the flag belongs to ("headline", "body", "metadata", "page").
     field: str | None = None
+
+
+def _html_comment_flag(fragment):
+    return Flag(
+        "html_comment_text", MEDIUM, None, None, fragment.text,
+        "text inside an HTML comment; some scrapers pass it on to the model",
+    )
+
+
+def _hidden_fragment_flag(fragment, severity):
+    return Flag(
+        "hidden_html_text", severity, None, None, fragment.text,
+        f"text a reader cannot see ({fragment.reason}) but a scraper would pass on",
+    )
 
 
 def verdict_for_flags(flags):
@@ -296,17 +310,11 @@ class HeadlineGuard:
                 result.flags.append(scraper_flag)
         for fragment in hidden_fragments:
             if fragment.kind == "html_comment":
-                result.flags.append(Flag(
-                    "html_comment_text", MEDIUM, None, None, fragment.text,
-                    "text inside an HTML comment; some scrapers pass it on to the model",
-                ))
+                result.flags.append(_html_comment_flag(fragment))
             elif fragment.kind == "reordered_text":
                 result.flags.append(reordered_text_flag(fragment))
             else:
-                result.flags.append(Flag(
-                    "hidden_html_text", fragment.severity, None, None, fragment.text,
-                    f"text a reader cannot see ({fragment.reason}) but a scraper would pass on",
-                ))
+                result.flags.append(_hidden_fragment_flag(fragment, fragment.severity))
         return result
 
     def _analyze_browser_rendered(self, parser_visible_text, hidden_fragments, browser_visible_text):
@@ -315,10 +323,7 @@ class HeadlineGuard:
         browser_compact = _compact(browser_visible_text)
         for fragment in hidden_fragments:
             if fragment.kind == "html_comment":
-                result.flags.append(Flag(
-                    "html_comment_text", MEDIUM, None, None, fragment.text,
-                    "text inside an HTML comment; some scrapers pass it on to the model",
-                ))
+                result.flags.append(_html_comment_flag(fragment))
                 continue
             if fragment.kind == "reordered_text":
                 result.flags.append(reordered_text_flag(fragment))
@@ -326,10 +331,7 @@ class HeadlineGuard:
             if fragment.severity == MEDIUM and _compact(fragment.text) in browser_compact:
                 # The parser only guessed the background; the browser knows it and shows this text.
                 continue
-            result.flags.append(Flag(
-                "hidden_html_text", HIGH, None, None, fragment.text,
-                f"text a reader cannot see ({fragment.reason}) but a scraper would pass on",
-            ))
+            result.flags.append(_hidden_fragment_flag(fragment, HIGH))
         added_words, dropped_words = _word_differences(parser_visible_text, browser_visible_text)
         if dropped_words:
             result.flags.append(Flag(
