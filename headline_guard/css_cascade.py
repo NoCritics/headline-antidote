@@ -488,6 +488,16 @@ class _SharedElementWrapper(cssselect2.ElementWrapper):
         return iter(children)
 
 
+def _winning_values(entries):
+    """{name: value} from (important, inline, specificity, order, name, value) entries: sorted by
+    cascade priority, so the last entry for a name wins."""
+    entries.sort(key=lambda entry: entry[:4])
+    values = {}
+    for entry in entries:
+        values[entry[4]] = entry[5]
+    return values
+
+
 class CascadeRules:
     """Drop-in replacement for the simple rule reader: declarations_for(element, tag) -> {property: value}."""
 
@@ -608,10 +618,7 @@ class CascadeRules:
             for name, value, important in _declarations(inline_style):
                 if name.startswith("--"):
                     entries.append((important, 1, (0, 0, 0), 0, name, value))
-        entries.sort(key=lambda entry: entry[:4])
-        variables = {}
-        for entry in entries:
-            variables[entry[4]] = entry[5]
+        variables = _winning_values(entries)
         self._scoped_variables_cache[element] = variables
         return variables
 
@@ -640,10 +647,7 @@ class CascadeRules:
         if inline_style:
             for name, value, important in _declarations(inline_style):
                 entries.append((important, 1, (0, 0, 0), 0, name, value))
-        entries.sort(key=lambda entry: entry[:4])
-        cascaded = {}
-        for entry in entries:
-            cascaded[entry[4]] = entry[5]
+        cascaded = _winning_values(entries)
         self._cascaded[(element, full)] = cascaded
         return cascaded
 
@@ -717,17 +721,13 @@ class CascadeRules:
                         continue
                     order, declarations = payload
                     for name, value, important in declarations:
-                        entries_by_pseudo[pseudo_type].append((important, specificity, order, name, value))
+                        entries_by_pseudo[pseudo_type].append((important, 0, specificity, order, name, value))
         result = {}
         for pseudo_type, entries in entries_by_pseudo.items():
             if not entries:
                 continue
-            entries.sort(key=lambda entry: entry[:3])
-            cascaded = {}
-            for entry in entries:
-                cascaded[entry[3]] = entry[4]
             resolved = {}
-            for name, value in cascaded.items():
+            for name, value in _winning_values(entries).items():
                 if name.startswith("--"):
                     continue
                 if name == "content":
