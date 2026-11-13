@@ -373,6 +373,7 @@ Bugs and false alarms found this way, each fixed with a test:
 | `embedded_font` | medium | the headline is drawn with a font embedded in the CSS (`data:` URI) |
 | `most_of_article_hidden` | medium | most of the body is hidden as one block running to its end, statically or in a browser (a "Read more" collapse, a paywall, or a hidden ending): the body is incomplete, and the hidden text is in `hidden_ending`, not the body |
 | `browser_check_inconclusive` | medium / low | the browser showed almost none of the article; medium when the static reading had asked for the check |
+| `headline_not_found_in_browser` | high | in a browser no heading matches the static headline (a script removed or rewrote it): readers see another headline, or none, so the page stays unverified and keeps its reasons for the check |
 | `body_text_not_in_page_copy` | low | body passages missing from the page's JSON-LD copy (asks for a browser check) |
 | `text_behind_preview_window` | low | in a browser, paragraphs cut off by a paywall preview or collapsed section (kept) |
 | `browser_check_incomplete` | low | the page didn't finish loading in the browser |

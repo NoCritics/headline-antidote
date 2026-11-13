@@ -8,6 +8,8 @@ same HTML in Chrome (browser_visibility.BrowserVerifier) and compares:
   drawn over them): flagged high, and the model gets the browser's headline;
 * headline words the static reading feared were hidden but the browser shows: the
   doubt is cleared, and the model gets the full heading back;
+* no rendered heading matching the static one (a script removed or rewrote it): flagged
+  high, and the page is not marked verified;
 * body text the browser hides: removed from the body. Live pages hide plenty of
   harmless text with scripts (collapsed boxes, promotions, labels), so removed passages
   are flagged low, as in the static reading. When most of the body is hidden as one block
@@ -138,7 +140,17 @@ def _compare_headline(guard, article, rendered, flags):
     """(headline, headline_source, flags) after comparing the heading with the browser's."""
     headline = article.headline
     headline_source = article.headline_source
-    if rendered.headline_text is None or not article.heading_text:
+    if not article.heading_text:
+        return headline, headline_source, flags
+    if rendered.headline_text is None:
+        # No rendered heading shares even half its words with the static one: a script removed or
+        # rewrote it, so readers see another headline (or none) than the one the model would get.
+        flags.append(Flag(
+            "headline_not_found_in_browser", HIGH, None, None, article.heading_text,
+            "in a browser no heading on the page matches this headline (a script removed or replaced it); "
+            "readers do not see the headline the model would get",
+            "headline",
+        ))
         return headline, headline_source, flags
     static_words = _comparison_words(article.heading_text)
     rendered_words = _comparison_words(rendered.headline_text)
@@ -258,6 +270,9 @@ def compare_with_rendered_page(guard, article, rendered):
         return replace(article, flags=flags, browser_milliseconds=rendered.milliseconds)
 
     headline, headline_source, flags = _compare_headline(guard, article, rendered, flags)
+    # The check settles the page only when it found the headline it was sent to confirm.
+    headline_confirmed = rendered.headline_text is not None or not article.heading_text
+    remaining_reasons = [] if headline_confirmed else list(article.browser_check_reasons)
     trailing_block = False
     if first_hidden is not None:
         hidden_after_first = 0
@@ -282,8 +297,8 @@ def compare_with_rendered_page(guard, article, rendered):
         ))
         return replace(
             article, headline=headline, headline_source=headline_source, body=body,
-            hidden_ending="\n".join(set_aside), flags=flags,
-            browser_check_reasons=[], browser_verified=True, browser_milliseconds=rendered.milliseconds,
+            hidden_ending="\n".join(set_aside), flags=flags, browser_check_reasons=remaining_reasons,
+            browser_verified=headline_confirmed, browser_milliseconds=rendered.milliseconds,
         )
 
     body, clipped_paragraphs, _ = _remove_hidden_runs(paragraphs, flags)
@@ -296,7 +311,8 @@ def compare_with_rendered_page(guard, article, rendered):
         ))
     return replace(
         article, headline=headline, headline_source=headline_source, body=body, flags=flags,
-        browser_check_reasons=[], browser_verified=True, browser_milliseconds=rendered.milliseconds,
+        browser_check_reasons=remaining_reasons, browser_verified=headline_confirmed,
+        browser_milliseconds=rendered.milliseconds,
     )
 
 
