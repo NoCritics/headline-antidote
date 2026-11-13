@@ -282,5 +282,122 @@ class MediaQueryTests(unittest.TestCase):
         self.assert_visible(page(".x { display: none }").replace("<style>", '<style media="(width < 600px)">'))
 
 
+
+# Rules inside at-rules and nested style rules, with Chrome's answer: True when the span is hidden.
+# AtRuleChromeTests in test_browser_check.py checks every answer against the installed Chrome.
+# Each case: (css, the span's inline style, hidden in Chrome).
+CHROME_DECIDED_CASES = (
+    # Chrome never applies @document.
+    (".x{display:none} @document url-prefix(){.x{display:inline}}", "", True),
+    # Cascade layers: unlayered rules beat layered ones, later layers beat earlier ones, and
+    # !important reverses both. Layer order comes before specificity.
+    (".x{display:none} @layer a{.x{display:inline}}", "", True),
+    (".x{display:inline} @layer a{.x{display:none}}", "", False),
+    ("@layer a{.x{display:none}} .x{display:inline}", "", False),
+    ("@layer a{#x{display:inline}} .x{display:none}", "", True),
+    ("@layer a{.x{display:none}} @layer b{.x{display:inline}}", "", False),
+    ("@layer b, a; @layer a{.x{display:none}} @layer b{.x{display:inline}}", "", True),
+    ("@layer a{.x{display:none !important}} .x{display:inline !important}", "", True),
+    ("@layer a{.x{display:inline !important}} .x{display:none !important}", "", False),
+    ("@layer a{.x{display:none !important}}", "display:inline !important", False),
+    ("@layer a{.x{display:inline}} @layer b{.x{display:none}} @layer a{#x{display:inline}}", "", True),
+    ("@layer a{.x{display:inline} @layer b{#x{display:none}}}", "", False),
+    ("@layer a{@layer b{.x{display:none}} .x{display:inline}}", "", False),
+    ("@layer a{@layer b{.x{display:none !important}} .x{display:inline !important}}", "", True),
+    ("@layer a.b{.x{display:none}} @layer a{.x{display:inline}}", "", False),
+    ("@layer{.x{display:inline}} .x{display:none}", "", True),
+    ("@media screen{@layer a{.x{display:inline}}} .x{display:none}", "", True),
+    # A layer named only inside a block that does not apply takes no place in the order.
+    ("@media print{@layer a{.y{color:red}}} @layer b{.x{display:none}} @layer a{.x{display:inline}}", "", False),
+    # @scope: the rules apply inside the scope root (the root included).
+    ("@scope (.a){.x{display:none}}", "", True),
+    ("@scope (.a){:scope .x{display:none}}", "", True),
+    ("@scope (h1){:scope > .x{display:none}}", "", True),
+    ("@scope (.b){.x{display:none}}", "", False),
+    (".x{display:none} @scope (.a){.x{display:inline}}", "", False),
+    # Nested style rules: a nested selector without & is a descendant of its parent.
+    (".a{.x{display:none}}", "", True),
+    (".a{& .x{display:none}}", "", True),
+    ("h1{> .x{display:none}}", "", True),
+    (".b{.x{display:none}}", "", False),
+    (".x{display:none} .a{.x{display:inline}}", "", False),
+    (".a{@media screen{.x{display:none}}}", "", True),
+    (".a{@media print{.x{display:none}}}", "", False),
+    (".x{display:none; .q{color:red} display:inline}", "", False),
+    (".a{.x{display:none} #x{display:inline}}", "", False),
+)
+
+# Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
+# @scope with a lower limit): their rules may hide text but never show it again.
+UNDECIDED_BLOCK_CASES = (
+    ".x{display:none} @supports (bogus:1){.x{display:inline}}",
+    ".x{display:none} @supports not (display:block){.x{display:inline}}",
+    ".x{display:none} @supports (display:bogus){.x{display:inline}}",
+    ".x{display:none} @container (min-width:1px){.x{display:inline}}",
+    ".x{display:none} @scope (.a) to (h1){.x{display:inline}}",
+    ".x{display:none} @supports (bogus:1){@layer a{.x{display:inline}}}",
+    "@supports (display:block){.x{display:none}}",
+    "@container (min-width:0px){.x{display:none}}",
+)
+
+
+def at_rule_page(css, inline_style=""):
+    style_attribute = f' style="{inline_style}"' if inline_style else ""
+    return (
+        f"<html><head><style>{css}</style></head><body><article class=\"a\">"
+        f"<h1>{HEADLINE}<span class=\"x\" id=\"x\"{style_attribute}> losses and layoffs</span></h1>"
+        "</article></body></html>"
+    )
+
+
+@unittest.skipUnless(CASCADE_AVAILABLE, "tinycss2 and cssselect2 not installed")
+class AtRuleTests(unittest.TestCase):
+    assert_hidden = CascadeHidingTests.assert_hidden
+    assert_visible = CascadeHidingTests.assert_visible
+
+    def test_rules_read_as_chrome_reads_them(self):
+        for css, inline_style, hidden in CHROME_DECIDED_CASES:
+            with self.subTest(css=css, inline_style=inline_style):
+                if hidden:
+                    self.assert_hidden(at_rule_page(css, inline_style))
+                else:
+                    self.assert_visible(at_rule_page(css, inline_style))
+
+    def test_undecided_blocks_never_show_hidden_text_again(self):
+        for css in UNDECIDED_BLOCK_CASES:
+            with self.subTest(css=css):
+                self.assert_hidden(at_rule_page(css))
+
+    def test_layers_order_across_external_and_page_stylesheets(self):
+        external_css = "@layer b, a; @layer a{.x{display:none}}"
+        self.assert_hidden(at_rule_page("@layer b{.x{display:inline}}"), stylesheets=[external_css])
+        self.assert_visible(at_rule_page("@layer a{.x{display:inline}}"), stylesheets=["@layer a{.x{display:none}}"])
+
+    def test_layer_order_of_one_page_does_not_leak_into_the_next(self):
+        page_css = "@layer a{.x{display:none}} @layer b{.x{display:inline}}"
+        self.assert_hidden(at_rule_page(page_css), stylesheets=["@layer b, a;"])
+        self.assert_visible(at_rule_page(page_css), stylesheets=["@layer a, b;"])
+
+    def test_body_paragraph_shown_again_from_an_undecided_block_stays_out_of_the_body(self):
+        if importlib.util.find_spec("trafilatura") is None:
+            self.skipTest("trafilatura not installed")
+        css = ".tip{display:none} @supports (bogus:1){.tip{display:block}}"
+        paragraphs = ""
+        for sentence in (
+            "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup.",
+            "The decision lifted other large technology stocks as investors bet regulators would struggle.",
+            "Analysts said the ruling removes a major overhang that had weighed on the shares all year.",
+        ):
+            paragraphs += f"<p>{sentence} {sentence}</p>"
+        html = (
+            f"<!doctype html><html><head><title>{HEADLINE}</title><style>{css}</style></head><body><article>"
+            f"<h1>{HEADLINE}</h1>{paragraphs}<p class=\"tip\">Insiders expect mass layoffs and a profit "
+            "warning next quarter.</p></article></body></html>"
+        )
+        article = GUARD.extract_article(html)
+        self.assertIn("Alphabet rose sharply", article.body)
+        self.assertNotIn("mass layoffs", article.body)
+
+
 if __name__ == "__main__":
     unittest.main()

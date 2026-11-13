@@ -125,6 +125,31 @@ class MediaFeatureTableTests(unittest.TestCase):
                     self.assertEqual(media_query_applies(f"not {condition}"), self.matches(f"not {condition}"))
 
 
+
+@unittest.skipUnless(importlib.util.find_spec("playwright") is not None, "playwright not installed")
+class AtRuleChromeTests(unittest.TestCase):
+    """The answers in test_css_cascade.CHROME_DECIDED_CASES, checked against the installed Chrome."""
+
+    def test_answers_match_chrome(self):
+        from playwright.sync_api import sync_playwright
+
+        from headline_guard.browser_visibility import VIEWPORT
+        from tests.test_css_cascade import CHROME_DECIDED_CASES, at_rule_page
+
+        with sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch(channel="chrome")
+            except Exception as error:  # Chrome missing or not launchable here
+                self.skipTest(f"Chrome not available: {error}")
+            tab = browser.new_context(viewport=VIEWPORT).new_page()
+            for css, inline_style, hidden in CHROME_DECIDED_CASES:
+                with self.subTest(css=css, inline_style=inline_style):
+                    tab.set_content(at_rule_page(css, inline_style))
+                    chrome_hidden = tab.evaluate("getComputedStyle(document.getElementById('x')).display === 'none'")
+                    self.assertEqual(chrome_hidden, hidden)
+            browser.close()
+
+
 @unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
 class BrowserCheckTests(unittest.TestCase):
     verifier = None
