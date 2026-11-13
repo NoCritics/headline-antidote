@@ -420,7 +420,9 @@ class FreshPageSetTests(unittest.TestCase):
         self.assertEqual(article.verdict, "pass", article.flags)
 
     @unittest.skipUnless(TRAFILATURA_AVAILABLE and CASCADE_AVAILABLE, "trafilatura or the CSS libraries not installed")
-    def test_article_collapsed_behind_read_more_is_kept(self):
+    def test_article_collapsed_behind_read_more_is_set_aside(self):
+        # The hidden rest of the story stays out of the body (readers can't see it without a click,
+        # and an attacker's hidden ending looks the same); the pipeline can choose to use it.
         rest = ""
         for number in range(6):
             rest += (f"<p>Paragraph {number} of the rest of the story explains how the ruling affects "
@@ -428,7 +430,10 @@ class FreshPageSetTests(unittest.TestCase):
         html = body_page(f'<div class="readmore"><div id="ControlPara1">{rest}</div></div>',
                          head_extra='<style>.readmore div[id^="ControlPara"] > * { display: none }</style>')
         article = GUARD.extract_article(html)
-        self.assertIn("Paragraph 5 of the rest", article.body)
+        self.assertNotIn("Paragraph 5 of the rest", article.body)
+        self.assertIn("Shares of Alphabet rose sharply", article.body)
+        self.assertIn("Paragraph 0 of the rest", article.hidden_ending)
+        self.assertIn("Paragraph 5 of the rest", article.hidden_ending)
         kinds = [flag.kind for flag in article.flags]
         self.assertIn("most_of_article_hidden", kinds)
         self.assertNotIn("hidden_text_in_article", kinds)
@@ -445,6 +450,8 @@ class FreshPageSetTests(unittest.TestCase):
         article = GUARD.extract_article(body_page(f'<div style="display:none">{payload}</div>'))
         reaches_model = "fraud probe" in article.body and article.verdict != "quarantine"
         self.assertFalse(reaches_model, (article.verdict, article.flags))
+        self.assertIn("fraud probe", article.hidden_ending)
+        self.assertIn("most_of_article_hidden", [flag.kind for flag in article.flags])
 
     @unittest.skipUnless(TRAFILATURA_AVAILABLE and CASCADE_AVAILABLE, "trafilatura or the CSS libraries not installed")
     def test_hidden_paragraph_in_the_middle_is_still_removed(self):
