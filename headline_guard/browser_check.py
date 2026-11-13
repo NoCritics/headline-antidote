@@ -10,8 +10,9 @@ same HTML in Chrome (browser_visibility.BrowserVerifier) and compares:
   doubt is cleared, and the model gets the full heading back;
 * body text the browser hides: removed from the body. Live pages hide plenty of
   harmless text with scripts (collapsed boxes, promotions, labels), so removed passages
-  are flagged low, as in the static reading. When most of the body is hidden (a paywall
-  script), nothing is removed and the page is flagged for review;
+  are flagged low, as in the static reading. When most of the body is hidden as one block
+  running to its end (a paywall script, or a hidden ending), it goes to hidden_ending with
+  one medium flag saying the body is incomplete;
 * text cut off by a preview window (a metered paywall, a collapsed section) is the
   publisher's own text: kept, with a low flag.
 
@@ -181,9 +182,10 @@ def _compare_headline(guard, article, rendered, flags):
 
 
 def _remove_hidden_runs(paragraphs, flags):
-    """(body, clipped paragraph count): each paragraph without its hidden runs, one LOW flag
-    appended per paragraph that lost text."""
+    """(body, clipped paragraph count, removed passages): each paragraph without its hidden runs,
+    one LOW flag appended per paragraph that lost text."""
     kept_paragraphs = []
+    removed_passages = []
     clipped_paragraphs = 0
     for paragraph, words, spans, states in paragraphs:
         if not words:
@@ -203,6 +205,7 @@ def _remove_hidden_runs(paragraphs, flags):
         for first, last in runs:
             removed_parts.append(paragraph[spans[first][0]:spans[last][1]])
         remaining = _without_runs(paragraph, spans, runs)
+        removed_passages.append(" ".join(removed_parts))
         # Low, as in the static reading: removed, so the model never sees it.
         flags.append(Flag(
             "hidden_text_in_article", LOW, None, None, " … ".join(removed_parts)[:500],
@@ -211,7 +214,7 @@ def _remove_hidden_runs(paragraphs, flags):
         ))
         if remaining:
             kept_paragraphs.append(remaining)
-    return "\n".join(kept_paragraphs).strip(), clipped_paragraphs
+    return "\n".join(kept_paragraphs).strip(), clipped_paragraphs, removed_passages
 
 
 def compare_with_rendered_page(guard, article, rendered):
@@ -263,18 +266,27 @@ def compare_with_rendered_page(guard, article, rendered):
                 hidden_after_first += 1
         trailing_block = hidden_after_first >= TRAILING_BLOCK_HIDDEN_SHARE * (body_words - first_hidden)
     if body_words and hidden_words >= MOSTLY_HIDDEN_SHARE * body_words and trailing_block:
+        # Set aside, as in the static reading: one MEDIUM flag instead of a LOW flag per passage.
+        body, _, removed_passages = _remove_hidden_runs(paragraphs, [])
+        set_aside = []
+        if article.hidden_ending:
+            set_aside.append(article.hidden_ending)
+        for passage in removed_passages:
+            set_aside.append(passage)
         flags.append(Flag(
             "most_of_article_hidden", MEDIUM, None, None, "",
-            f"a browser hides the last {hidden_words} of the body's {body_words} words from readers: "
-            "usually a paywall, but it could be a hidden ending; kept in the body",
+            f"a browser hides the last {hidden_words} of the body's {body_words} words from readers (usually a "
+            "paywall, but it could be a hidden ending): the body is incomplete; the hidden text is in "
+            "hidden_ending, not in the body",
             "body",
         ))
         return replace(
-            article, headline=headline, headline_source=headline_source, flags=flags,
+            article, headline=headline, headline_source=headline_source, body=body,
+            hidden_ending="\n".join(set_aside), flags=flags,
             browser_check_reasons=[], browser_verified=True, browser_milliseconds=rendered.milliseconds,
         )
 
-    body, clipped_paragraphs = _remove_hidden_runs(paragraphs, flags)
+    body, clipped_paragraphs, _ = _remove_hidden_runs(paragraphs, flags)
     if clipped_paragraphs:
         flags.append(Flag(
             "text_behind_preview_window", LOW, None, None, "",

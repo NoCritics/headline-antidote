@@ -42,6 +42,7 @@ def article_record(article):
         "headline_xpath": article.headline_xpath,
         "heading_text": article.heading_text,
         "heading_full_text": article.heading_full_text,
+        "hidden_ending": article.hidden_ending,
     }
 
 

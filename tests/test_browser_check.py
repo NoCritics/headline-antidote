@@ -27,6 +27,36 @@ def page(headline_html, head_extra="", body_extra="", title=HEADLINE, article_ex
     )
 
 
+@unittest.skipUnless(importlib.util.find_spec("trafilatura") is not None, "trafilatura not installed")
+class RenderedPageComparisonTests(unittest.TestCase):
+    """compare_with_rendered_page on a constructed render (no Chrome needed)."""
+
+    def test_long_hidden_ending_is_set_aside_not_kept_in_the_body(self):
+        # Review finding 2: hidden text running to the end that is most of the article was kept in
+        # the body. It now goes to hidden_ending, which a pipeline uses only by choice.
+        from headline_guard.browser_check import compare_with_rendered_page
+        from headline_guard.browser_visibility import RenderedPage
+
+        visible_paragraph = ("Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
+                             "a breakup of the company, a ruling analysts said removes a major overhang.")
+        hidden_lines = ""
+        for number in range(6):
+            hidden_lines += (f"<p>Insiders say restructuring wave {number} will bring mass layoffs, a profit "
+                             "warning and a regulatory probe that analysts expect to hit the shares.</p>")
+        html = (f"<!doctype html><html><head><title>{HEADLINE}</title></head><body><article>"
+                f"<h1>{HEADLINE}</h1><p>{visible_paragraph}</p>{hidden_lines}</article></body></html>")
+        article = GUARD.extract_article(html)
+        self.assertIn("layoffs", article.body)
+        rendered = RenderedPage(HEADLINE, f"{HEADLINE}\n{visible_paragraph}", "", 5.0, True)
+        verified = compare_with_rendered_page(GUARD, article, rendered)
+        self.assertNotIn("layoffs", verified.body)
+        self.assertIn("Shares of Alphabet rose sharply", verified.body)
+        self.assertIn("restructuring wave 0", verified.hidden_ending)
+        self.assertIn("restructuring wave 5", verified.hidden_ending)
+        self.assertIn("most_of_article_hidden", [flag.kind for flag in verified.flags])
+        self.assertEqual(verified.verdict, "review")
+
+
 @unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
 class MediaFeatureTableTests(unittest.TestCase):
     """media_queries' feature tables against the installed Chrome: a feature or value Chrome knows
@@ -171,25 +201,6 @@ class BrowserCheckTests(unittest.TestCase):
         self.assertIn("layoffs", article.body)
         self.assertNotIn("layoffs", verified.body)
         self.assertNotIn("most_of_article_hidden", [flag.kind for flag in verified.flags])
-
-    def test_long_hidden_ending_is_set_aside_not_kept_in_the_body(self):
-        # Review finding 2: hidden text running to the end that is most of the article was kept in
-        # the body. It now goes to hidden_ending, which a pipeline uses only by choice.
-        hidden_lines = ""
-        for number in range(6):
-            hidden_lines += (f'<p class="x">Insiders say restructuring wave {number} will bring mass layoffs, '
-                             "a profit warning and a regulatory probe that analysts expect to hit the shares.</p>")
-        html = (f"<!doctype html><html><head><title>{HEADLINE}</title></head><body><article>"
-                f"<h1>{HEADLINE}</h1>{BODY}{hidden_lines}</article>"
-                "<script>for (const p of document.querySelectorAll('.x')) p.style.display='none';</script>"
-                "</body></html>")
-        article, verified = self.check(html)
-        self.assertIn("layoffs", article.body)  # hidden by a script: the static reading can't see it
-        self.assertNotIn("layoffs", verified.body)
-        self.assertIn("Shares of Alphabet rose sharply", verified.body)
-        self.assertIn("restructuring wave 5", verified.hidden_ending)
-        self.assertIn("most_of_article_hidden", [flag.kind for flag in verified.flags])
-        self.assertEqual(verified.verdict, "review")
 
     def test_visible_extra_words_are_cleared(self):
         # The heading has words the title lacks, but readers do see them.

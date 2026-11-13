@@ -31,12 +31,15 @@ article = guard.extract_article(page_html, feed_title=rss_title)  # feed_title i
 article.headline   # the visible headline, found by matching <h1>s against og:title / JSON-LD / feed title
 article.body       # the visible article text: hidden elements removed, nav/sidebars/comments left out
 article.verdict    # "pass" | "review" | "quarantine"
-article.flags      # each with .field: "headline", "body" or "metadata"
+article.flags      # each with .field: "headline", "body", "metadata" or "page"
+article.hidden_ending  # usually "": hidden text that is most of the article, set aside (see below)
 article.needs_browser_check   # True for the pages a static reading can't settle (15% of 228 real pages)
 # optional, for those pages only: a warm Chrome renders the HTML you already fetched
 #   with BrowserVerifier() as verifier:          # from headline_guard.browser_visibility
 #       article = guard.verify_article_in_browser(article, page_html, page_url, verifier)
 # then: your_llm(article.headline, article.body) -> sentiment, unless the verdict says otherwise
+# Give the model only headline and body. hidden_ending is text readers can't see: append it only
+# for publishers you trust to collapse articles behind "Read more", never for every page.
 
 # 1. Plain-text feeds
 result = guard.analyze("Теsla shares surge")
@@ -263,7 +266,7 @@ The 56 pages above were too few to trust the rates, and detection had only been 
 | Static verdicts | 56 `pass` | 223 `pass`, 5 `review` |
 | Sent to the browser check | 4 | 34 (15%) |
 | After the browser check | all 4 `pass` | all 34 `pass` |
-| **End to end** | **56 `pass`** | **223 `pass`, 5 `review`** (Hindu BusinessLine's "Read more" collapse: the text is kept, so the page is reviewed) |
+| **End to end** | **56 `pass`** | **223 `pass`, 5 `review`** (Hindu BusinessLine's "Read more" collapse: the hidden rest of the article is set aside in `hidden_ending`, so the body is incomplete and the page is reviewed) |
 
 At the start of the testing phase the fresh set gave 27 `review` and 52 browser checks.
 
@@ -331,7 +334,8 @@ Bugs and false alarms found this way, each fixed with a test:
   - A topic label in its own element before the headline (Tagesschau's "Handel mit Wertpapieren") is a kicker: `low` and a browser check. The model still gets the title's wording.
   - Short hidden labels ("Advertisement", "Share options") are removed with a `low` flag.
   - Standfirsts that a page's JSON-LD copy lacks but its description holds no longer go to the browser.
-  - Articles collapsed behind "Read more" (Hindu BusinessLine) lost 80% of their text. Hidden passages that are most of the article and run as one block to its end are now kept, with one `most_of_article_hidden` (`medium`) flag, the browser check's rule.
+  - Articles collapsed behind "Read more" (Hindu BusinessLine) lost 80% of their text. Hidden passages that are most of the article and run as one block to its end now get one `most_of_article_hidden` (`medium`) flag instead of a `low` flag each, and their text goes to `hidden_ending`, the same rule in the static reading and the browser check.
+  - They are not put back into the body. An earlier version did, and the 2026-11-13 review showed the hole: an attacker's long hidden ending looks the same, and with only a `medium` flag it reached any pipeline that holds back just `quarantine`. Codex, agy and Fable each recommended setting it aside. On the five BusinessLine pages the body keeps the visible lead (106-216 words), and `hidden_ending` has the rest (166-919 words).
 - **Browser check:**
   - It put bidi-reversed headline words back into the headline, because a browser's text gives the letters in source order.
   - The Guardian's consent dialog locks scrolling by fixing `<body>` with `overflow: hidden`. The walker then judged the whole article clipped or off the page. `<body>` and `<html>` no longer count as clipping boxes, and the page's extent includes `<body>`'s.
@@ -367,7 +371,7 @@ Bugs and false alarms found this way, each fixed with a test:
 | `reordered_text` | high / medium | letters readers see in reverse order (`<bdo dir="rtl">`, `unicode-bidi: bidi-override`); high in the headline |
 | `css_generated_text` | medium | words `::before`/`::after` add to the headline, which the model never receives |
 | `embedded_font` | medium | the headline is drawn with a font embedded in the CSS (`data:` URI) |
-| `most_of_article_hidden` | medium | most of the body is hidden as one block running to its end, statically or in a browser (a "Read more" collapse or a paywall; kept) |
+| `most_of_article_hidden` | medium | most of the body is hidden as one block running to its end, statically or in a browser (a "Read more" collapse, a paywall, or a hidden ending): the body is incomplete, and the hidden text is in `hidden_ending`, not the body |
 | `browser_check_inconclusive` | medium / low | the browser showed almost none of the article; medium when the static reading had asked for the check |
 | `body_text_not_in_page_copy` | low | body passages missing from the page's JSON-LD copy (asks for a browser check) |
 | `text_behind_preview_window` | low | in a browser, paragraphs cut off by a paywall preview or collapsed section (kept) |

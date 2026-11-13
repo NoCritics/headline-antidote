@@ -109,6 +109,10 @@ class ArticleResult:
     heading_full_text: str = ""  # all of the heading element's text, hidden parts included
     browser_verified: bool = False
     browser_milliseconds: float = None
+    # Hidden text that is most of the article and runs to its end: usually a "Read more" collapse
+    # or a paywall, but an attacker's hidden ending looks the same. Readers can't see it, so it is
+    # never part of body; it is untrusted text a pipeline may use only by choice (see the README).
+    hidden_ending: str = ""
 
     @property
     def verdict(self):
@@ -372,6 +376,7 @@ class _ArticleExtraction:
         self.flags = []
         self.tickers = []
         self.browser_check_reasons = []
+        self.hidden_ending = ""
         self._page_wrappers = set()
 
     def _add_browser_reason(self, reason):
@@ -413,6 +418,7 @@ class _ArticleExtraction:
             model_headline, headline_source, body_result.clean_text,
             self.flags, self.tickers, metadata_titles, self.browser_check_reasons, headline_xpath,
             headline_text if headline_element is not None else "", heading_full_text,
+            hidden_ending=self.hidden_ending,
         )
 
     # ---- headline ---------------------------------------------------------
@@ -751,14 +757,14 @@ class _ArticleExtraction:
 
     # ---- body -------------------------------------------------------------
 
-    def _collapsed_article_body(self, hidden_passages, unpruned_compact, body):
-        """The body with its hidden ending put back, when the hidden passages are most of the
-        article (at least MOSTLY_HIDDEN_SHARE of it) and run as one block to its end: an
-        article collapsed behind "Read more" or a metered paywall, the publisher's own text.
-        The same rule as the browser check's. Hidden text anywhere else stays removed, so a
-        payload can't use this unless it is most of the page's article. None otherwise."""
+    def _set_aside_hidden_ending(self, hidden_passages, unpruned_compact, body):
+        """When the hidden passages are most of the article (at least MOSTLY_HIDDEN_SHARE of it)
+        and run as one block to its end, as in an article collapsed behind "Read more" or a
+        metered paywall: one MEDIUM flag saying the body is incomplete replaces their LOW flags,
+        and their text goes to self.hidden_ending. It stays out of the body either way, since
+        an attacker's hidden ending looks the same. The same rule as the browser check's."""
         if not hidden_passages:
-            return None
+            return
         hidden_passages.sort()
         first_hidden_position = hidden_passages[0][0]
         hidden_characters = 0
@@ -771,14 +777,14 @@ class _ArticleExtraction:
                 visible_after += len(line_compact)
         all_characters = hidden_characters + len(_compact(body))
         if hidden_characters < MOSTLY_HIDDEN_SHARE * all_characters:
-            return None
+            return
         if hidden_characters < TRAILING_BLOCK_HIDDEN_SHARE * (hidden_characters + visible_after):
-            return None
+            return
         flag_positions = set()
-        restored = [body]
+        set_aside = []
         for _, _, passage_text, flag_position in hidden_passages:
             flag_positions.add(flag_position)
-            restored.append(" ".join(passage_text.split()))
+            set_aside.append(" ".join(passage_text.split()))
         kept_flags = []
         for position, flag in enumerate(self.flags):
             if position not in flag_positions:
@@ -787,11 +793,11 @@ class _ArticleExtraction:
         self.flags.append(Flag(
             "most_of_article_hidden", MEDIUM, None, None, "",
             f"{len(hidden_passages)} passage(s) running to the end of the article, most of its text, are hidden "
-            "from readers: usually a \"Read more\" collapse or a paywall, but it could be a hidden ending; "
-            "kept in the body",
+            "from readers (usually a \"Read more\" collapse or a paywall, but it could be a hidden ending): "
+            "the body is incomplete; the hidden text is in hidden_ending, not in the body",
             "body",
         ))
-        return "\n".join(restored)
+        self.hidden_ending = "\n".join(set_aside)
 
     def _check_guessed_hiding(self, guessed_fragments, body):
         body_compact = _compact(body)
@@ -891,9 +897,7 @@ class _ArticleExtraction:
                     if not short_label:
                         hidden_passages.append((unpruned_compact.find(fragment_compact), fragment_compact,
                                                 fragment_full_text, len(self.flags) - 1))
-            collapsed_body = self._collapsed_article_body(hidden_passages, unpruned_compact, body)
-            if collapsed_body is not None:
-                body = collapsed_body
+            self._set_aside_hidden_ending(hidden_passages, unpruned_compact, body)
         return _without_repeated_headline(body, headline_text)
 
     def _is_article_candidate(self, element, headline_element):
