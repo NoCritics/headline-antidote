@@ -337,9 +337,9 @@ MAXIMUM_PARENT_SELECTOR_CHARACTERS = 4000
 # The selector library recurses once per nested function, as in :is(:is(.x)), and a few hundred
 # levels exhaust Python's call stack. Real selectors nest at most 6 deep (in 3,102 stylesheets), so a
 # rule whose selector, counted with the selectors it is nested in, nests deeper than this is read as
-# * in an undecided block: it may hide any element.
+# * in an undecided block: it may hide any element, or add text before or after it.
 MAXIMUM_SELECTOR_DEPTH = 32
-_UNIVERSAL_SELECTOR = tinycss2.parse_component_value_list("*")
+_ANY_ELEMENT_OR_GENERATED_BOX = "*, *::before, *::after"
 
 
 def _token_depth(tokens, limit):
@@ -448,9 +448,9 @@ def _rule_selectors(prelude, context):
     MAXIMUM_SELECTOR_DEPTH is read as * in an undecided context."""
     depth = _token_depth(prelude, MAXIMUM_SELECTOR_DEPTH) + _stand_in_depth(context)
     if depth > MAXIMUM_SELECTOR_DEPTH:
-        prelude = _UNIVERSAL_SELECTOR
-        depth = 0
-        context = context._replace(undecided=True, parent_selector=None, scope_root=None, parent_depth=0)
+        # The text is plain * so that rules nested in this one can be written relative to it.
+        undecided_context = context._replace(undecided=True, parent_selector=None, scope_root=None, parent_depth=0)
+        return cssselect2.compile_selector_list(_ANY_ELEMENT_OR_GENERATED_BOX), "*", 0, undecided_context
     root_texts = []
     if context.parent_selector is not None:
         relative_texts, _ = _relative_selector_texts(prelude, f":is({context.parent_selector})", False)
