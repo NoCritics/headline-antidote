@@ -511,5 +511,61 @@ class AtRuleTests(unittest.TestCase):
         self.assertNotIn("mass layoffs", article.body)
 
 
+def nested(opening, middle, closing, depth):
+    return opening * depth + middle + closing * depth
+
+
+# Selectors this deep are read as Chrome reads them; deeper ones are not (see DeepNestingTests).
+SELECTOR_DEPTH_READ_EXACTLY = 32
+
+
+@unittest.skipUnless(CASCADE_AVAILABLE, "tinycss2 and cssselect2 not installed")
+class DeepNestingTests(unittest.TestCase):
+    """CSS nested thousands of levels deep must neither crash the reader nor let hidden text through."""
+
+    assert_hidden = CascadeHidingTests.assert_hidden
+
+    def assert_payload_not_passed(self, html):
+        result = GUARD.analyze_html(html, "//h1")
+        self.assertNotIn("losses and layoffs", result.clean_text)
+        self.assertNotEqual(result.verdict, "pass")
+
+    def test_a_selector_nested_too_deep_to_read_hides_the_payload(self):
+        for depth in (300, 3000):
+            with self.subTest(depth=depth):
+                self.assert_payload_not_passed(at_rule_page(nested(":is(", ".x", ")", depth) + "{display:none}"))
+
+    def test_a_selector_at_the_reading_depth_is_read_exactly(self):
+        self.assert_hidden(at_rule_page(nested(":is(", ".x", ")", SELECTOR_DEPTH_READ_EXACTLY) + "{display:none}"))
+
+    def test_nested_rules_whose_selectors_compose_too_deep_hide_the_payload(self):
+        levels = 8
+        css = nested(":is(", ".x", ")", 30) + "{"
+        for _ in range(levels - 1):
+            css += nested(":is(", "&", ")", 30) + "{"
+        css += "display:none" + "}" * levels
+        self.assert_payload_not_passed(at_rule_page(css))
+
+    def test_a_scope_root_nested_too_deep_hides_the_payload(self):
+        root = nested(":is(", "article", ")", 300)
+        self.assert_payload_not_passed(at_rule_page("@scope (" + root + "){.x{display:none}}"))
+
+    def test_values_and_preludes_nested_thousands_deep_are_read(self):
+        deep_value = nested("f(", "1", ")", 3000)
+        deep_parentheses = nested("(", "screen", ")", 3000)
+        for css in (
+            ".x{display:none;--a:" + deep_value + "}",
+            ".x{display:none;transform:" + deep_value + "}",
+            ".x{display:none} @media " + deep_parentheses + "{.y{color:red}}",
+            ".x{display:none} @layer " + deep_parentheses + "{.y{color:red}}",
+            ".x{display:none} @font-face{font-family:f;src:" + deep_value + "}",
+        ):
+            with self.subTest(css=css[:40]):
+                self.assert_hidden(at_rule_page(css))
+
+    def test_an_inline_style_nested_thousands_deep_is_read(self):
+        self.assert_hidden(at_rule_page("", "display:none;--a:" + nested("f(", "1", ")", 3000)))
+
+
 if __name__ == "__main__":
     unittest.main()
