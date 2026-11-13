@@ -22,9 +22,15 @@ RANGE_FEATURES = {
     "color": ("number", 8.0),
     "color-index": ("number", 0.0),
     "monochrome": ("number", 0.0),
+    "horizontal-viewport-segments": ("number", 1.0),
+    "vertical-viewport-segments": ("number", 1.0),
+    "-webkit-transform-3d": ("number", 1.0),
 }
-# Discrete features: (the desktop screen's value, every valid value). A value outside the list
-# makes Chrome drop the whole query, even under 'not'.
+# Range features Chrome reads only in range syntax: (min-horizontal-viewport-segments: 1) is unknown.
+NO_PREFIX_RANGE_FEATURES = ("horizontal-viewport-segments", "vertical-viewport-segments", "-webkit-transform-3d")
+# Discrete features: (the desktop screen's value, every value Chrome knows). Chrome reads any
+# other value as unknown: neither (feature: value) nor not (feature: value) matches. Checked
+# against Chrome 157 (tests/test_browser_check.py compares these tables with the installed Chrome).
 DISCRETE_FEATURES = {
     "orientation": ("landscape", ("portrait", "landscape")),
     "prefers-color-scheme": ("light", ("light", "dark")),
@@ -32,7 +38,6 @@ DISCRETE_FEATURES = {
     "prefers-reduced-transparency": ("no-preference", ("no-preference", "reduce")),
     "prefers-contrast": ("no-preference", ("no-preference", "more", "less", "custom")),
     "forced-colors": ("none", ("none", "active")),
-    "inverted-colors": ("none", ("none", "inverted")),
     "scripting": ("enabled", ("none", "initial-only", "enabled")),
     "hover": ("hover", ("none", "hover")),
     "any-hover": ("hover", ("none", "hover")),
@@ -43,10 +48,11 @@ DISCRETE_FEATURES = {
     "overflow-inline": ("scroll", ("none", "scroll")),
     "color-gamut": ("srgb", ("srgb", "p3", "rec2020")),
     "dynamic-range": ("standard", ("standard", "high")),
-    "video-dynamic-range": ("standard", ("standard", "high")),
     "display-mode": ("browser", ("fullscreen", "standalone", "minimal-ui", "browser", "picture-in-picture",
-                                 "window-controls-overlay")),
+                                 "window-controls-overlay", "tabbed")),
     "grid": ("0", ("0", "1")),
+    "scan": (None, ("interlace", "progressive")),  # a screen is neither
+    "device-posture": ("continuous", ("continuous", "folded")),
 }
 SCREEN_MEDIA_TYPES = ("all", "screen")
 # CSS white space and case folding are ASCII only: a no-break space is not a separator, and a
@@ -243,15 +249,15 @@ def _feature_matches(content):
     if name in RANGE_FEATURES:
         return RANGE_FEATURES[name][1] != 0
     if name in DISCRETE_FEATURES:
-        return DISCRETE_FEATURES[name][0] not in ("none", "no-preference", "0")
+        return DISCRETE_FEATURES[name][0] not in (None, "none", "no-preference", "0")
     return None
 
 
 def _plain_feature_matches(name, value):
     if name in DISCRETE_FEATURES:
-        screen_value, valid_values = DISCRETE_FEATURES[name]
-        if value not in valid_values:
-            raise _Unparsable(value)
+        screen_value, known_values = DISCRETE_FEATURES[name]
+        if value not in known_values:
+            return None
         return value == screen_value
     for prefix, comparison in (("min-", ">="), ("max-", "<=")):
         base_name = None
@@ -260,7 +266,7 @@ def _plain_feature_matches(name, value):
         elif name.startswith("-webkit-" + prefix):
             base_name = "-webkit-" + name[len("-webkit-" + prefix):]
         if base_name is not None:
-            if base_name not in RANGE_FEATURES:
+            if base_name not in RANGE_FEATURES or base_name in NO_PREFIX_RANGE_FEATURES:
                 return None
             return _compare_with_screen(base_name, comparison, value)
     if name in RANGE_FEATURES:

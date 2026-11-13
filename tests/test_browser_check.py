@@ -28,6 +28,74 @@ def page(headline_html, head_extra="", body_extra="", title=HEADLINE, article_ex
 
 
 @unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
+class MediaFeatureTableTests(unittest.TestCase):
+    """media_queries' feature tables against the installed Chrome: a feature or value Chrome knows
+    and the tables don't would let '@media not (...)' rules apply in Chrome but not here."""
+
+    FEATURE_NAMES = (
+        "width", "height", "aspect-ratio", "orientation", "resolution", "scan", "grid", "update",
+        "overflow-block", "overflow-inline", "color", "color-index", "monochrome", "color-gamut", "pointer",
+        "hover", "any-pointer", "any-hover", "prefers-reduced-motion", "prefers-reduced-transparency",
+        "prefers-contrast", "forced-colors", "prefers-color-scheme", "scripting", "dynamic-range",
+        "video-dynamic-range", "inverted-colors", "display-mode", "device-width", "device-height",
+        "device-aspect-ratio", "-webkit-device-pixel-ratio", "-webkit-transform-3d", "prefers-reduced-data",
+        "device-posture", "horizontal-viewport-segments", "vertical-viewport-segments", "shape",
+        "navigation-controls", "environment-blending", "video-color-gamut", "light-level",
+    )
+    EXTRA_VALUES = ("blue", "auto", "true", "borderless", "optional-paged", "inverted", "high", "2")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+
+        from headline_guard.browser_visibility import VIEWPORT
+
+        cls.playwright = sync_playwright().start()
+        try:
+            cls.browser = cls.playwright.chromium.launch(channel="chrome")
+        except Exception as error:  # Chrome missing or not launchable here
+            cls.playwright.stop()
+            raise unittest.SkipTest(f"Chrome not available: {error}")
+        cls.page = cls.browser.new_context(viewport=VIEWPORT).new_page()
+        cls.page.set_content("<html><body></body></html>")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.playwright.stop()
+
+    def matches(self, query):
+        return self.page.evaluate("query => matchMedia(query).matches", query)
+
+    def chrome_knows(self, condition):
+        # A known feature or value makes the condition or its negation match; an unknown one neither.
+        return self.matches(condition) or self.matches(f"not {condition}")
+
+    def test_feature_names(self):
+        from headline_guard.media_queries import DISCRETE_FEATURES, RANGE_FEATURES
+
+        for name in self.FEATURE_NAMES:
+            with self.subTest(feature=name):
+                in_tables = name in RANGE_FEATURES or name in DISCRETE_FEATURES
+                self.assertEqual(self.chrome_knows(f"({name})"), in_tables)
+
+    def test_discrete_feature_values(self):
+        from headline_guard.media_queries import DISCRETE_FEATURES, media_query_applies
+
+        all_values = set(self.EXTRA_VALUES)
+        for _, known_values in DISCRETE_FEATURES.values():
+            for value in known_values:
+                all_values.add(value)
+        for name, (screen_value, known_values) in DISCRETE_FEATURES.items():
+            for value in sorted(all_values):
+                condition = f"({name}: {value})"
+                with self.subTest(condition=condition):
+                    self.assertEqual(self.chrome_knows(condition), value in known_values)
+                    self.assertEqual(media_query_applies(condition), self.matches(condition))
+                    self.assertEqual(media_query_applies(f"not {condition}"), self.matches(f"not {condition}"))
+
+
+@unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
 class BrowserCheckTests(unittest.TestCase):
     verifier = None
 
@@ -103,6 +171,25 @@ class BrowserCheckTests(unittest.TestCase):
         self.assertIn("layoffs", article.body)
         self.assertNotIn("layoffs", verified.body)
         self.assertNotIn("most_of_article_hidden", [flag.kind for flag in verified.flags])
+
+    def test_long_hidden_ending_is_set_aside_not_kept_in_the_body(self):
+        # Review finding 2: hidden text running to the end that is most of the article was kept in
+        # the body. It now goes to hidden_ending, which a pipeline uses only by choice.
+        hidden_lines = ""
+        for number in range(6):
+            hidden_lines += (f'<p class="x">Insiders say restructuring wave {number} will bring mass layoffs, '
+                             "a profit warning and a regulatory probe that analysts expect to hit the shares.</p>")
+        html = (f"<!doctype html><html><head><title>{HEADLINE}</title></head><body><article>"
+                f"<h1>{HEADLINE}</h1>{BODY}{hidden_lines}</article>"
+                "<script>for (const p of document.querySelectorAll('.x')) p.style.display='none';</script>"
+                "</body></html>")
+        article, verified = self.check(html)
+        self.assertIn("layoffs", article.body)  # hidden by a script: the static reading can't see it
+        self.assertNotIn("layoffs", verified.body)
+        self.assertIn("Shares of Alphabet rose sharply", verified.body)
+        self.assertIn("restructuring wave 5", verified.hidden_ending)
+        self.assertIn("most_of_article_hidden", [flag.kind for flag in verified.flags])
+        self.assertEqual(verified.verdict, "review")
 
     def test_visible_extra_words_are_cleared(self):
         # The heading has words the title lacks, but readers do see them.

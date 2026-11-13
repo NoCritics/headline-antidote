@@ -258,6 +258,13 @@ class MediaQueryTests(unittest.TestCase):
             ("not (orientation: sideways)", False),
             ("not (scripting: initial-only)", True),
             ("not (-ms-high-contrast: active)", False),
+            # A value Chrome doesn't know makes its condition unknown, not the query invalid.
+            ("(min-width: 1px) or (prefers-color-scheme: blue)", True),
+            ("not (display-mode: tabbed)", True),
+            ("not (inverted-colors: none)", False),
+            ("not (scan: progressive)", True),
+            ("(horizontal-viewport-segments >= 1)", True),
+            ("(min-horizontal-viewport-segments: 1)", False),
         ):
             with self.subTest(query=query):
                 self.assertEqual(media_query_applies(query), chrome_answer)
