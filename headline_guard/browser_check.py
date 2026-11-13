@@ -19,9 +19,9 @@ same HTML in Chrome (browser_visibility.BrowserVerifier) and compares:
   publisher's own text: kept, with a low flag.
 
 A render that shows almost none of the article (a consent wall, the page navigating
-away, a script error) is inconclusive: the static result is returned unchanged, with a
-flag (medium when the static reading had asked for the check), and the page still counts
-as needing a check.
+away, a script error, or a script hiding nearly all of the body) is inconclusive: the
+static result is returned with a medium flag, so the page goes to review, and it still
+counts as needing a check.
 """
 
 import re
@@ -259,11 +259,12 @@ def compare_with_rendered_page(guard, article, rendered):
                 first_hidden = position
     shown_words = body_words - hidden_words
     if body_words >= INCONCLUSIVE_MINIMUM_WORDS and shown_words < INCONCLUSIVE_VISIBLE_SHARE * body_words:
-        # On a page the static reading sent to the browser, the reason for checking still stands.
+        # Always medium: a consent wall looks like this, but so does a script that hides almost all
+        # of the body, whose payload would otherwise pass in the static body that stands.
         flags.append(Flag(
-            "browser_check_inconclusive", MEDIUM if article.needs_browser_check else LOW, None, None, rendered.note,
-            f"the browser showed {shown_words} of the body's {body_words} words (a consent wall, a redirect "
-            "or a script error); nothing was concluded, the static result stands"
+            "browser_check_inconclusive", MEDIUM, None, None, rendered.note,
+            f"the browser showed {shown_words} of the body's {body_words} words (a consent wall, a redirect, "
+            "a script error, or a script hiding the body); nothing was concluded, the static result stands"
             + (", and the reason for the check is unresolved" if article.needs_browser_check else ""),
             "page",
         ))

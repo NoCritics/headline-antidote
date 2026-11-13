@@ -250,7 +250,7 @@ Building it on real pages turned up five cases that were fixed:
 - **Guardian's consent dialog** is a full-screen iframe drawn over the headline, so page-sized layers are now ignored.
 - **Scripts rebuild headings**, so a path from the static HTML pointed at the wrong element. Headings are now found by text, and the visible text is read in the same browser call.
 - **BBC's script redirects** bbc.co.uk to bbc.com. The redirect now gets the same saved page (at most 3 times), and a read cut off by the navigation is retried once.
-- **A render that shows almost none of the article** (under 5% of its words: a consent wall, an error) proves nothing. The page is read once more after 3.5 s. If it still shows nothing, the static result stands, and the page gets `review` when the static reading had sent it to the browser, since the reason for checking is unresolved.
+- **A render that shows almost none of the article** (under 5% of its words: a consent wall, an error) proves nothing. The page is read once more after 3.5 s. If it still shows nothing, the static result stands and the page gets `review`: a script hiding nearly all of the body looks the same, and its text would otherwise pass in the static body.
 
 Tests: [tests/test_remaining_gaps.py](tests/test_remaining_gaps.py) (64) and [tests/test_browser_check.py](tests/test_browser_check.py) (14, real Chrome). Each attack has a matching clean case.
 
@@ -374,7 +374,7 @@ Bugs and false alarms found this way, each fixed with a test:
 | `css_generated_text` | medium | words `::before`/`::after` add to the headline, which the model never receives |
 | `embedded_font` | medium | the headline is drawn with a font embedded in the CSS (`data:` URI) |
 | `most_of_article_hidden` | medium | most of the body is hidden as one block running to its end, statically or in a browser (a "Read more" collapse, a paywall, or a hidden ending): the body is incomplete, and the hidden text is in `hidden_ending`, not the body |
-| `browser_check_inconclusive` | medium / low | the browser showed almost none of the article; medium when the static reading had asked for the check |
+| `browser_check_inconclusive` | medium | the browser showed almost none of the article (a consent wall, a redirect, or a script hiding nearly all of the body); the static result stands, for review |
 | `headline_not_found_in_browser` | high | in a browser no heading matches the static headline (a script removed or rewrote it): readers see another headline, or none, so the page stays unverified and keeps its reasons for the check |
 | `body_text_not_in_page_copy` | low | body passages missing from the page's JSON-LD copy (asks for a browser check) |
 | `text_behind_preview_window` | low | in a browser, paragraphs cut off by a paywall preview or collapsed section (kept) |
