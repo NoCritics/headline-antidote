@@ -202,6 +202,28 @@ class BrowserCheckTests(unittest.TestCase):
         self.assertNotIn("layoffs", verified.body)
         self.assertNotIn("most_of_article_hidden", [flag.kind for flag in verified.flags])
 
+    def test_headline_hidden_entirely_by_javascript_is_not_verified(self):
+        # Review finding 3: when the browser finds no visible heading matching the static one, the
+        # check returned the static headline as verified, with the reasons for the check cleared.
+        hidden_headline = f"{HEADLINE} as insiders dump {PAYLOAD}"
+        article, verified = self.check(page(
+            f'<span id="lead">{hidden_headline}</span>', title=hidden_headline,
+            body_extra="<script>document.getElementById('lead').style.display='none';</script>",
+        ))
+        self.assertTrue(article.needs_browser_check, article.browser_check_reasons)
+        self.assertNotEqual(verified.verdict, "pass", verified.flags)
+        self.assertFalse(verified.browser_verified)
+        self.assertTrue(verified.needs_browser_check)
+
+    def test_headline_replaced_by_javascript_is_not_verified(self):
+        hidden_headline = f"{HEADLINE} as insiders dump {PAYLOAD}"
+        article, verified = self.check(page(
+            f'<span id="lead">{hidden_headline}</span>', title=hidden_headline,
+            body_extra="<script>document.getElementById('lead').textContent='Markets wrap: stocks mixed';</script>",
+        ))
+        self.assertNotEqual(verified.verdict, "pass", verified.flags)
+        self.assertFalse(verified.browser_verified)
+
     def test_visible_extra_words_are_cleared(self):
         # The heading has words the title lacks, but readers do see them.
         article, verified = self.check(page(f"{HEADLINE} with {PAYLOAD}"))
