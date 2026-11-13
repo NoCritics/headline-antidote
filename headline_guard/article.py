@@ -15,7 +15,7 @@ Turns a news page into (headline, article body, flags), where:
   text hidden by JavaScript or by an overlay without running either;
 * `browser_check_reasons` lists what this static reading could not rule out (scripts
   touching the headline, body text missing from the page's own copy of the article),
-  so the caller can send only those pages to a browser (browser_visibility).
+  so the caller can send only those pages to a browser (HeadlineGuard.verify_article_in_browser).
 
 Use it where the page is turned into text, in front of whatever LLM scores it:
 
@@ -55,7 +55,7 @@ NEGATION_WORDS = {
     "doesn", "didn", "hasn", "haven", "hadn", "shouldn", "wouldn", "couldn", "nicht", "kein", "keine",
     "keinen", "nie", "niemals", "ohne", "pas", "jamais", "sans", "aucun", "aucune", "non", "nunca",
     "nada", "sin", "não", "nao", "sem", "nessun", "nessuna", "senza", "niet", "geen", "nooit", "inte",
-    "ingen", "aldrig", "ikke", "nie", "bez", "не", "нет", "без", "ни", "ні", "немає", "değil", "yok",
+    "ingen", "aldrig", "ikke", "bez", "не", "нет", "без", "ни", "ні", "немає", "değil", "yok",
 }
 # Body text missing from the page's own copy of the article is reported from this many words on.
 MINIMUM_MISSING_RUN_WORDS = 12
@@ -142,44 +142,47 @@ def _title_similarity(candidate, reference):
     if not candidate_text or not reference_text:
         return 0.0
     best_ratio = 0.0
-    reference_variants = [reference_text]
-    shortened = _without_site_name(reference_text)
-    while shortened != reference_variants[-1]:
-        reference_variants.append(shortened)
-        shortened = _without_site_name(shortened)
-    for variant in reference_variants:
+    for variant in _title_variants(reference_text):
         ratio = difflib.SequenceMatcher(a=candidate_text, b=variant, autojunk=False).ratio()
         best_ratio = max(best_ratio, ratio)
     return best_ratio
 
 
-def _find_json_ld_headline(value):
+def _find_json_ld_string(value, key):
+    """The first non-blank string under key anywhere in a parsed JSON-LD value, or None."""
     if isinstance(value, dict):
-        headline = value.get("headline")
-        if isinstance(headline, str) and headline.strip():
-            return headline.strip()
+        found = value.get(key)
+        if isinstance(found, str) and found.strip():
+            return found
         for nested_value in value.values():
-            found = _find_json_ld_headline(nested_value)
+            found = _find_json_ld_string(nested_value, key)
             if found:
                 return found
     elif isinstance(value, list):
         for item in value:
-            found = _find_json_ld_headline(item)
+            found = _find_json_ld_string(item, key)
             if found:
                 return found
     return None
 
 
-def _metadata_titles(root):
-    titles = {}
+def _first_json_ld_string(root, key):
+    """_find_json_ld_string over the page's JSON-LD scripts in order; broken JSON is skipped."""
     for script in root.xpath("//script[@type='application/ld+json']"):
         try:
-            headline = _find_json_ld_headline(json.loads(script.text or ""))
+            found = _find_json_ld_string(json.loads(script.text or ""), key)
         except (ValueError, RecursionError):
             continue
-        if headline:
-            titles["json-ld headline"] = headline
-            break
+        if found:
+            return found
+    return None
+
+
+def _metadata_titles(root):
+    titles = {}
+    headline = _first_json_ld_string(root, "headline")
+    if headline:
+        titles["json-ld headline"] = headline.strip()
     for label, xpath in (("og:title", "//meta[@property='og:title']/@content"),
                          ("twitter:title", "//meta[@name='twitter:title']/@content")):
         values = root.xpath(xpath)
@@ -207,7 +210,7 @@ def _word_trigrams(text):
 def _leading_label_words(headline_element):
     """The words of the heading's first child element when the heading starts with it (no
     text before it): the shape of a kicker. [] otherwise."""
-    if headline_element is None or (headline_element.text or "").strip():
+    if (headline_element.text or "").strip():
         return []
     for child in headline_element:
         if not isinstance(child.tag, str):
@@ -267,34 +270,6 @@ def _inserted_words(title_words, headline_words):
         for word in headline_words[headline_start:headline_end]:
             inserted.append(word)
     return inserted
-
-
-def _find_json_ld_article_body(value):
-    if isinstance(value, dict):
-        body = value.get("articleBody")
-        if isinstance(body, str) and body.strip():
-            return body
-        for nested_value in value.values():
-            found = _find_json_ld_article_body(nested_value)
-            if found:
-                return found
-    elif isinstance(value, list):
-        for item in value:
-            found = _find_json_ld_article_body(item)
-            if found:
-                return found
-    return None
-
-
-def _json_ld_article_body(root):
-    for script in root.xpath("//script[@type='application/ld+json']"):
-        try:
-            body = _find_json_ld_article_body(json.loads(script.text or ""))
-        except (ValueError, RecursionError):
-            continue
-        if body:
-            return body
-    return None
 
 
 def _page_descriptions(root):
@@ -373,6 +348,18 @@ def _with_field(flags, field_name, detail_prefix=""):
     return flags
 
 
+def _inline_scripts_that_change_elements(root):
+    """The code of each inline script (not JSON data) that changes the page somewhere."""
+    scripts = []
+    for script in root.iter("script"):
+        if script.get("src") or (script.get("type") or "").lower() in ("application/ld+json", "application/json"):
+            continue
+        code = script.text or ""
+        if code and DOM_MUTATION_PATTERN.search(code) is not None:
+            scripts.append(code)
+    return scripts
+
+
 class _ArticleExtraction:
     def __init__(self, guard, html, feed_title, stylesheets=None, feed_body=None):
         self.guard = guard
@@ -428,13 +415,7 @@ class _ArticleExtraction:
     # ---- headline ---------------------------------------------------------
 
     def _locate_headline(self, metadata_titles):
-        references = []
-        if self.feed_title:
-            references.append(("feed title", self.feed_title))
-        for label in ("json-ld headline", "og:title", "twitter:title", "<title>"):
-            if label in metadata_titles:
-                references.append((label, metadata_titles[label]))
-
+        references = self._titles_to_compare(metadata_titles)
         for heading_tag in ("h1", "h2"):
             best = None
             for heading in self.root.iter(heading_tag):
@@ -444,11 +425,11 @@ class _ArticleExtraction:
                 for reference_label, reference_text in references:
                     similarity = _title_similarity(visible_text, reference_text)
                     if similarity >= HEADLINE_MATCH_THRESHOLD and (best is None or similarity > best[0]):
-                        best = (similarity, visible_text, hidden_fragments, heading_tag, reference_label, heading)
+                        best = (similarity, visible_text, hidden_fragments, reference_label, heading)
             if best is not None:
-                similarity, visible_text, hidden_fragments, matched_tag, reference_label, heading_element = best
+                similarity, visible_text, hidden_fragments, reference_label, heading_element = best
                 self._flag_hidden_in_headline(hidden_fragments)
-                return visible_text, f"<{matched_tag}> matching the {reference_label}", heading_element
+                return visible_text, f"<{heading_tag}> matching the {reference_label}", heading_element
 
         if not references:
             for heading in self.root.iter("h1"):
@@ -513,7 +494,7 @@ class _ArticleExtraction:
                 titles.append((label, metadata_titles[label]))
         return titles
 
-    def _check_headline_against_titles(self, metadata_titles, headline_text, headline_element=None):
+    def _check_headline_against_titles(self, metadata_titles, headline_text, headline_element):
         """Words the visible heading adds to the feed and metadata titles.
 
         Those titles are plain text that never goes through CSS or JavaScript. When one of
@@ -670,12 +651,7 @@ class _ArticleExtraction:
         """The first of names that an inline script looks up and changes, or None."""
         if not names:
             return None
-        for script in root.iter("script"):
-            if script.get("src") or (script.get("type") or "").lower() in ("application/ld+json", "application/json"):
-                continue
-            code = script.text or ""
-            if not code or DOM_MUTATION_PATTERN.search(code) is None:
-                continue
+        for code in _inline_scripts_that_change_elements(root):
             for name in names:
                 for match in re.finditer(r"[\"'#. ]" + re.escape(name) + r"[\"' .\[:)]", code):
                     # The name, an element lookup and a change close together: a script that finds
@@ -690,12 +666,7 @@ class _ArticleExtraction:
         """(ids, classes) that inline scripts look up by a literal name and change nearby."""
         ids = set()
         classes = set()
-        for script in root.iter("script"):
-            if script.get("src") or (script.get("type") or "").lower() in ("application/ld+json", "application/json"):
-                continue
-            code = script.text or ""
-            if not code or DOM_MUTATION_PATTERN.search(code) is None:
-                continue
+        for code in _inline_scripts_that_change_elements(root):
             for lookup in LITERAL_LOOKUP_PATTERN.finditer(code):
                 window = code[lookup.end():lookup.end() + SCRIPT_WINDOW_CHARACTERS]
                 if DOM_MUTATION_PATTERN.search(window) is None:
@@ -756,7 +727,7 @@ class _ArticleExtraction:
         reference = self.feed_body
         reference_label = "feed's article text"
         if not reference:
-            reference = _json_ld_article_body(self.root)
+            reference = _first_json_ld_string(self.root, "articleBody")
             reference_label = "page's JSON-LD articleBody"
         if not reference or not body_text:
             return
@@ -867,7 +838,7 @@ class _ArticleExtraction:
         Real pages often hide text inside articles (duplicate captions, promotions,
         paywall notices, related headlines), so hidden body text is always removed but
         only flagged when a standard extractor would actually have passed it to the
-        model, and only as MEDIUM: the model never sees it either way.
+        model, and only as LOW: the model never sees it either way.
         """
         import trafilatura
 
@@ -877,43 +848,7 @@ class _ArticleExtraction:
         if headline_element is not None:
             for ancestor in headline_element.iterancestors():
                 self._page_wrappers.add(ancestor)
-        _, hidden_fragments = visible_text_of_element(self.root, self.rules)
-        candidates = []
-        guessed_fragments = []
-        # Loose text (an element's own text or a tail) first, before removing elements moves tails.
-        for fragment in hidden_fragments:
-            if fragment.text_of is None or fragment.severity != HIGH:
-                continue
-            owner, attribute = fragment.text_of
-            context_element = owner if attribute == "text" else owner.getparent()
-            if (context_element is not None
-                    and not self._is_inside_headline(context_element, headline_element)
-                    and not self._is_interface_text(context_element)):
-                candidates.append((fragment, fragment.text))
-            setattr(owner, attribute, None)
-        for fragment in hidden_fragments:
-            if fragment.element is None:
-                continue
-            if fragment.kind == "reordered_text":
-                if not self._is_inside_headline(fragment.element, headline_element):
-                    self.flags.append(reordered_text_flag(fragment, MEDIUM, "body"))
-                continue
-            if fragment.kind == "html_comment":
-                _remove_keeping_tail(fragment.element)
-                continue
-            if fragment.severity != HIGH:
-                # Hiding only guessed (its color against an undeclared page background): the text
-                # is kept, and the browser, which knows the background, decides.
-                if (not self._is_inside_headline(fragment.element, headline_element)
-                        and not self._is_interface_text(fragment.element)):
-                    guessed_fragments.append(fragment)
-                continue
-            if (not self._is_inside_headline(fragment.element, headline_element)
-                    and not self._is_interface_text(fragment.element)):
-                candidates.append((fragment, " ".join(fragment.element.itertext())))
-            _remove_keeping_tail(fragment.element)
-        if headline_element is not None and headline_element.getparent() is not None:
-            _remove_keeping_tail(headline_element)  # returned separately as the headline
+        candidates, guessed_fragments = self._remove_hidden_fragments(headline_element)
 
         body = trafilatura.extract(self.root, **extraction_options) or ""
         if not body.strip():
@@ -956,15 +891,64 @@ class _ArticleExtraction:
             collapsed_body = self._collapsed_article_body(hidden_passages, unpruned_compact, body)
             if collapsed_body is not None:
                 body = collapsed_body
+        return _without_repeated_headline(body, headline_text)
 
-        body_lines = body.split("\n")
-        if body_lines and headline_text:
-            first_line_similarity = difflib.SequenceMatcher(
-                a=_normalized_title(body_lines[0]), b=_normalized_title(headline_text), autojunk=False
-            ).ratio()
-            if first_line_similarity >= DUPLICATE_HEADLINE_THRESHOLD:
-                body_lines = body_lines[1:]
-        return "\n".join(body_lines).strip()
+    def _is_article_candidate(self, element, headline_element):
+        """Hidden text here is a candidate for a body flag: not in the headline, not interface text."""
+        return not self._is_inside_headline(element, headline_element) and not self._is_interface_text(element)
+
+    def _remove_hidden_fragments(self, headline_element):
+        """Removes hidden text and the headline from self.root before extraction.
+
+        Returns (candidates, guessed_fragments): (fragment, full text) pairs that may get a body
+        flag, and fragments whose hiding is only guessed, which are kept for the browser.
+        """
+        _, hidden_fragments = visible_text_of_element(self.root, self.rules)
+        candidates = []
+        guessed_fragments = []
+        # Loose text (an element's own text or a tail) first, before removing elements moves tails.
+        for fragment in hidden_fragments:
+            if fragment.text_of is None or fragment.severity != HIGH:
+                continue
+            owner, attribute = fragment.text_of
+            context_element = owner if attribute == "text" else owner.getparent()
+            if context_element is not None and self._is_article_candidate(context_element, headline_element):
+                candidates.append((fragment, fragment.text))
+            setattr(owner, attribute, None)
+        for fragment in hidden_fragments:
+            if fragment.element is None:
+                continue
+            if fragment.kind == "reordered_text":
+                if not self._is_inside_headline(fragment.element, headline_element):
+                    self.flags.append(reordered_text_flag(fragment, MEDIUM, "body"))
+                continue
+            if fragment.kind == "html_comment":
+                _remove_keeping_tail(fragment.element)
+                continue
+            if fragment.severity != HIGH:
+                # Hiding only guessed (its color against an undeclared page background): the text
+                # is kept, and the browser, which knows the background, decides.
+                if self._is_article_candidate(fragment.element, headline_element):
+                    guessed_fragments.append(fragment)
+                continue
+            if self._is_article_candidate(fragment.element, headline_element):
+                candidates.append((fragment, " ".join(fragment.element.itertext())))
+            _remove_keeping_tail(fragment.element)
+        if headline_element is not None and headline_element.getparent() is not None:
+            _remove_keeping_tail(headline_element)  # returned separately as the headline
+        return candidates, guessed_fragments
+
+
+def _without_repeated_headline(body, headline_text):
+    """The body without its first line when that line repeats the headline."""
+    body_lines = body.split("\n")
+    if body_lines and headline_text:
+        first_line_similarity = difflib.SequenceMatcher(
+            a=_normalized_title(body_lines[0]), b=_normalized_title(headline_text), autojunk=False
+        ).ratio()
+        if first_line_similarity >= DUPLICATE_HEADLINE_THRESHOLD:
+            body_lines = body_lines[1:]
+    return "\n".join(body_lines).strip()
 
 
 def extract_article(guard, html, feed_title=None, stylesheets=None, feed_body=None):
