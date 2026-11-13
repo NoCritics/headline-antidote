@@ -315,6 +315,13 @@ class HeadlineScriptByTagTests(unittest.TestCase):
             with self.subTest(script=script):
                 self.assert_sent_to_browser(script)
 
+    def test_a_long_script_is_read_quickly(self):
+        import time
+
+        started = time.perf_counter()
+        GUARD.extract_article(article_page(HEADLINE, body_extra="<script>" + ".attr(" * 60000 + "</script>"))
+        self.assertLess(time.perf_counter() - started, 2)
+
     def test_reading_the_headline_or_changing_another_tag_does_not(self):
         for script in (
             "var title = document.querySelector('h1').textContent; console.log(title);",
