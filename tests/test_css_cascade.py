@@ -309,12 +309,11 @@ CHROME_DECIDED_CASES = (
     ("@media screen{@layer a{.x{display:inline}}} .x{display:none}", "", True),
     # A layer named only inside a block that does not apply takes no place in the order.
     ("@media print{@layer a{.y{color:red}}} @layer b{.x{display:none}} @layer a{.x{display:inline}}", "", False),
-    # @scope: the rules apply inside the scope root (the root included).
-    ("@scope (.a){.x{display:none}}", "", True),
-    ("@scope (.a){:scope .x{display:none}}", "", True),
-    ("@scope (h1){:scope > .x{display:none}}", "", True),
+    # revert-layer takes the value the layers below give.
+    ("@layer a{.x{display:none}} .x{display:revert-layer}", "", True),
+    ("@layer a{.x{display:none}} @layer b{.x{display:revert-layer}}", "", True),
+    # A scope root that matches nothing.
     ("@scope (.b){.x{display:none}}", "", False),
-    (".x{display:none} @scope (.a){.x{display:inline}}", "", False),
     # Nested style rules: a nested selector without & is a descendant of its parent.
     (".a{.x{display:none}}", "", True),
     (".a{& .x{display:none}}", "", True),
@@ -328,8 +327,19 @@ CHROME_DECIDED_CASES = (
 )
 
 # Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
-# @scope with a lower limit): their rules may hide text but never show it again.
+# @scope, whose rules Chrome ranks by the scope root's nearness): Chrome may apply any of them, so
+# text that some combination of them hides counts as hidden. Each of these is hidden in Chrome.
 UNDECIDED_BLOCK_CASES = (
+    "@scope (.a){.x{display:none}}",
+    "@scope (.a){:scope .x{display:none}}",
+    "@scope (h1){:scope > .x{display:none}}",
+    "@scope (.a){.x{display:none}} .x{display:inline}",
+    "@scope (h1){.x{display:none}} @scope (.a){.x{display:inline}}",
+    "@scope (.a){:scope .x{display:none}} .a .x{display:inline}",
+    "@supports (display:block){.x{display:none}} @supports (bogus:1){.x{display:inline}}",
+    ".x{height:0} @supports (display:block){.x{overflow:hidden}} @supports (bogus:1){.x{height:auto}}",
+    ":root{--d:none} @supports (bogus:1){:root{--d:inline}} .x{display:var(--d)}",
+    "@supports (bogus:1){@layer b{}} @layer a{.x{display:inline}} @layer b{.x{display:none}}",
     ".x{display:none} @supports (bogus:1){.x{display:inline}}",
     ".x{display:none} @supports not (display:block){.x{display:inline}}",
     ".x{display:none} @supports (display:bogus){.x{display:inline}}",
@@ -367,6 +377,52 @@ class AtRuleTests(unittest.TestCase):
         for css in UNDECIDED_BLOCK_CASES:
             with self.subTest(css=css):
                 self.assert_hidden(at_rule_page(css))
+
+    def test_any_subset_of_undecided_blocks_may_apply(self):
+        """For each way of hiding text: whether each declaration sits bare or inside a block that
+        applies in Chrome, and whatever blocks Chrome skips try to cancel it, the text stays hidden
+        whenever this reader hides the CSS Chrome really applies (true blocks unwrapped, false ones
+        deleted)."""
+        recipes = (
+            (("display", "none", "inline"),),
+            (("visibility", "hidden", "visible"),),
+            (("opacity", "0", "1"),),
+            (("font-size", "0", "16px"),),
+            (("transform", "scale(0)", "none"),),
+            (("height", "0", "auto"), ("overflow", "hidden", "visible")),
+            (("position", "absolute", "static"), ("left", "-9999px", "0")),
+            (("position", "absolute", "static"), ("clip", "rect(0 0 0 0)", "auto")),
+        )
+        true_block = "@supports (display:block)"
+        false_blocks = ("@supports (bogus:1)", "@supports not (display:block)", "@container (min-width:1px)")
+        for recipe in recipes:
+            flattened = ".x{"
+            for name, value, _ in recipe:
+                flattened += f"{name}:{value};"
+            flattened += "}"
+            result = GUARD.analyze_html(at_rule_page(flattened), "//h1")
+            self.assertEqual(result.clean_text, HEADLINE, flattened)
+            for wrapped_mask in range(2 ** len(recipe)):
+                for false_block in false_blocks:
+                    css = ""
+                    for position, (name, value, cancel) in enumerate(recipe):
+                        if wrapped_mask & (1 << position):
+                            css += f"{true_block}{{.x{{{name}:{value}}}}} "
+                        else:
+                            css += f".x{{{name}:{value}}} "
+                        css += f"{false_block}{{.x{{{name}:{cancel}}}}} "
+                    with self.subTest(css=css):
+                        result = GUARD.analyze_html(at_rule_page(css), "//h1")
+                        self.assertEqual(result.clean_text, HEADLINE)
+
+    def test_overlay_cancelled_only_in_a_block_chrome_skips_still_covers(self):
+        html = (
+            "<html><head><style>.cover{position:absolute;inset:0;background:#fff} "
+            "@supports (bogus:1){.cover{position:static}}</style></head><body><article>"
+            f"<h1>{HEADLINE}<span style=\"position:relative\"> losses and layoffs"
+            "<span class=\"cover\"></span></span></h1></article></body></html>"
+        )
+        self.assertEqual(GUARD.analyze_html(html, "//h1").clean_text, HEADLINE)
 
     def test_layers_order_across_external_and_page_stylesheets(self):
         external_css = "@layer b, a; @layer a{.x{display:none}}"
