@@ -543,11 +543,8 @@ def linked_stylesheet_urls(html, base_url):
     """Absolute URLs of the page's <link rel="stylesheet"> files that apply to a screen, in order."""
     from urllib.parse import urljoin
 
-    try:
-        from .css_cascade import media_query_applies
-    except ImportError:
-        def media_query_applies(media_text):
-            return "print" not in (media_text or "").lower()
+    from .media_queries import media_query_applies
+
     root = _parse(html)
     urls = []
     for link in root.iter("link"):

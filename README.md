@@ -146,7 +146,7 @@ With `tinycss2` and `cssselect2` installed (pinned: 1.5.1 and 0.10.1; 0.10.1 fix
 
 - any selector: child and descendant combinators, attributes, `:not()`, `:nth-child()`;
 - specificity, source order, `!important` and inline styles, so a later rule can show text again;
-- `@media` rules, evaluated for a desktop screen in light mode (mobile-only, print-only, dark-mode and `:hover` rules don't apply);
+- `@media` rules and `media` attributes, answered as the browser check's Chrome answers them: a 1366×900 desktop screen in light mode, pixel ratio 1, scripting on (`media_queries.py`, Media Queries level 4 with `not`, `or`, range syntax and every feature Chrome supports; a feature Chrome doesn't know matches nothing, as in Chrome). Mobile-only, print-only, dark-mode and `:hover` rules don't apply. The 36 test queries were checked against Chrome's `matchMedia`;
 - CSS variables, including fallbacks (`display: var(--gone, none)`);
 - contrast against the real background, including backgrounds set by stylesheets;
 - **external stylesheets**, if you pass their CSS text. The guard never fetches anything itself:

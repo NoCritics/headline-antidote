@@ -2,8 +2,8 @@
 
 Compared with the simple rule reader in html_visibility, this understands any
 selector (descendant and child combinators, attributes, :not(), :nth-child()...),
-specificity, source order, !important, inline styles, @media rules evaluated for a
-desktop screen, and CSS variables (var(--name, fallback)). It reads <style> blocks
+specificity, source order, !important, inline styles, @media rules answered as the
+browser check's Chrome answers them (media_queries), and CSS variables (var(--name, fallback)). It reads <style> blocks
 and any external stylesheets the caller supplies (it never fetches anything).
 
 Speed, since real pages ship hundreds of kilobytes of CSS:
@@ -37,9 +37,8 @@ from .css_hiding import (
     leading_number, letters_collapsed, line_height_collapsed, opacity_is_invisible, relative_luminance,
     scale_is_zero, translation_is_off_screen,
 )
-from .css_values import (
-    PIXELS_PER_EM, VIEWPORT_HEIGHT_PIXELS, VIEWPORT_WIDTH_PIXELS, length_in_pixels, parse_color, quoted_strings,
-)
+from .css_values import length_in_pixels, parse_color, quoted_strings
+from .media_queries import media_query_applies
 
 MAXIMUM_VARIABLE_DEPTH = 10
 # Cache budgets, in characters of CSS source. Compiled CSS takes about 13 times its source
@@ -77,8 +76,6 @@ SITE_WIDE_SELECTORS = {":root", "html", "body", ":root,html", "html,:root", "htm
 UNRESOLVED_VARIABLE_PROPERTIES = {"display", "visibility", "opacity", "font-size"}
 _VARIABLE_REFERENCE = re.compile(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))?\)")
 
-_MEDIA_FEATURE = re.compile(r"\(\s*([a-z-]+)\s*(?::\s*([^)]+))?\)")
-
 
 class _SizeBoundedCache(OrderedDict):
     """A least-recently-used cache whose entries' sizes add up to at most budget; the newest
@@ -113,55 +110,6 @@ _external_stylesheets = _SizeBoundedCache(EXTERNAL_CSS_CACHE_CHARACTERS)
 _external_rule_sets = _SizeBoundedCache(EXTERNAL_CSS_CACHE_CHARACTERS)
 _page_stylesheets = _SizeBoundedCache(PAGE_CSS_CACHE_CHARACTERS)
 _page_rule_sets = _SizeBoundedCache(PAGE_RULE_SET_CACHE_CHARACTERS)
-
-
-def _length_in_pixels(value):
-    match = re.match(r"^\s*(-?\d*\.?\d+)\s*(px|em|rem)?\s*$", value)
-    if match is None:
-        return None
-    number = float(match.group(1))
-    if match.group(2) in ("em", "rem"):
-        return number * PIXELS_PER_EM
-    return number
-
-
-def media_query_applies(media_text):
-    """True when a media query list matches a desktop screen in light mode, as a reader sees it.
-
-    Features it cannot evaluate make that query not apply, so unknown rules never hide text.
-    """
-    media_text = (media_text or "").strip().lower()
-    if not media_text:
-        return True
-    for query in media_text.split(","):
-        query = query.strip()
-        if query.startswith("not ") or "print" in query or "speech" in query:
-            continue
-        query_applies = True
-        for feature, feature_value in _MEDIA_FEATURE.findall(query):
-            feature_value = (feature_value or "").strip()
-            if feature in ("min-width", "max-width", "min-height", "max-height"):
-                pixels = _length_in_pixels(feature_value)
-                size = VIEWPORT_WIDTH_PIXELS if "width" in feature else VIEWPORT_HEIGHT_PIXELS
-                if pixels is None:
-                    query_applies = False
-                elif feature.startswith("min") and size < pixels:
-                    query_applies = False
-                elif feature.startswith("max") and size > pixels:
-                    query_applies = False
-            elif feature == "orientation":
-                query_applies = query_applies and feature_value == "landscape"
-            elif feature == "prefers-color-scheme":
-                query_applies = query_applies and feature_value == "light"
-            elif feature in ("hover", "any-hover"):
-                query_applies = query_applies and feature_value in ("", "hover")
-            elif feature in ("pointer", "any-pointer"):
-                query_applies = query_applies and feature_value in ("", "fine")
-            else:
-                query_applies = False
-        if query_applies:
-            return True
-    return False
 
 
 def _declarations(tokens):
