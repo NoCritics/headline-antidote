@@ -279,12 +279,16 @@ def quoted_strings(value):
 
 # ---- numbers and lengths -------------------------------------------------
 
+# Chrome drops a declaration whose math functions and the parentheses inside them nest deeper than
+# this (measured in Chrome 157); stopping there also keeps the recursive parser off the call-stack limit.
+MAXIMUM_MATH_DEPTH = 100
 _TOKEN = re.compile(r"\s*(?:(-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?)([a-z%]*)|([a-z-]+)\(|([-+*/(),]))")
 
 
 class _ExpressionParser:
     """Evaluates calc()-style expressions to (number, kind), kind 'length' (in pixels),
-    'number' or 'percent'. Raises ValueError on anything it does not understand."""
+    'number' or 'percent'. Raises ValueError on anything it does not understand, or nested deeper
+    than MAXIMUM_MATH_DEPTH."""
 
     def __init__(self, text):
         self.tokens = []
@@ -299,6 +303,7 @@ class _ExpressionParser:
             while position < len(text) and text[position].isspace():
                 position += 1
         self.position = 0
+        self.depth = 0
 
     def _peek(self):
         if self.position < len(self.tokens):
@@ -374,8 +379,13 @@ class _ExpressionParser:
             if unit in PIXELS_PER_UNIT:
                 return number * PIXELS_PER_UNIT[unit], "length"
             raise ValueError("unknown unit " + unit)
+        if function_name is not None or operator == "(":
+            self.depth += 1
+            if self.depth > MAXIMUM_MATH_DEPTH:
+                raise ValueError("nested too deep")
         if function_name is not None:
             arguments = self._arguments()
+            self.depth -= 1
             kinds = set()
             for _, kind in arguments:
                 kinds.add(kind)
@@ -398,6 +408,7 @@ class _ExpressionParser:
             value = self._sum()
             if self._take_operator((")",)) is None:
                 raise ValueError("missing )")
+            self.depth -= 1
             return value
         raise ValueError("unexpected " + str(operator))
 
