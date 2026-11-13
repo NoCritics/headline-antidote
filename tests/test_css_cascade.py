@@ -327,6 +327,13 @@ CHROME_DECIDED_CASES = (
     (".a{@media print{.x{display:none}}}", "", False),
     (".x{display:none; .q{color:red} display:inline}", "", False),
     (".a{.x{display:none} #x{display:inline}}", "", False),
+    # Math functions and the parentheses inside them nest at most 100 deep: deeper, Chrome drops
+    # the declaration.
+    (".x{opacity:" + "calc(" * 100 + "0" + ")" * 100 + "}", "", True),
+    (".x{opacity:" + "calc(" * 101 + "0" + ")" * 101 + "}", "", False),
+    (".x{opacity:calc(" + "(" * 99 + "0" + ")" * 99 + ")}", "", True),
+    (".x{opacity:calc(" + "(" * 100 + "0" + ")" * 100 + ")}", "", False),
+    (".x{opacity:" + "min(" * 3000 + "0" + ")" * 3000 + "}", "", False),
 )
 
 # Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
@@ -565,6 +572,23 @@ class DeepNestingTests(unittest.TestCase):
 
     def test_an_inline_style_nested_thousands_deep_is_read(self):
         self.assert_hidden(at_rule_page("", "display:none;--a:" + nested("f(", "1", ")", 3000)))
+
+    def test_the_reader_writes_css_back_exactly_as_tinycss2_does(self):
+        import tinycss2
+
+        from headline_guard.css_cascade import _serialized
+
+        for css in (
+            "a/**/b", "a /**/ b", "#x/**/y", "1/**/px", "-/**/a", "@x/**/-", "a/**/-->", "./**/1",
+            "f(", 'f("abc', 'f(g(h("abc', 'f(g("x"), "abc', 'f(g("x") h("abc', 'f(g(), "a', "f()",
+            "calc(1px + (2px * 3))", "[data-a=b] (x) {y: z}", "{[(f(1))]}", "a\\", "a\\\nb", "\\",
+            "url(x.png) url( 'y' )", "U+0-7F", "12px-a", "#id.cls:is(.a, .b)::before", "!important",
+            "var(--a, var(--b, 0))", '"unterminated', "<!-- -->", "a,b;c:d", ")]",
+        ):
+            for skip_comments in (True, False):
+                with self.subTest(css=css, skip_comments=skip_comments):
+                    tokens = tinycss2.parse_component_value_list(css, skip_comments=skip_comments)
+                    self.assertEqual(_serialized(tokens), tinycss2.serialize(tokens))
 
 
 if __name__ == "__main__":
