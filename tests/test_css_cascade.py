@@ -312,6 +312,9 @@ CHROME_DECIDED_CASES = (
     # revert-layer takes the value the layers below give.
     ("@layer a{.x{display:none}} .x{display:revert-layer}", "", True),
     ("@layer a{.x{display:none}} @layer b{.x{display:revert-layer}}", "", True),
+    # Variables defined in a layer lose to unlayered definitions, like any declaration.
+    (":root{--d:none} @layer b{:root{--d:inline}} .x{display:var(--d)}", "", True),
+    (":root{--d:none} @supports (bogus:1){@layer b{}} @layer b{:root{--d:inline}} .x{display:var(--d)}", "", True),
     # A scope root that matches nothing.
     ("@scope (.b){.x{display:none}}", "", False),
     # Nested style rules: a nested selector without & is a descendant of its parent.
@@ -343,6 +346,13 @@ UNDECIDED_BLOCK_CASES = (
     "@supports (bogus:1){@layer b{}} @layer a{.x{display:inline}} @layer b{.x{display:none}}",
     "@supports (display:block){:root{--d:none}} @supports (bogus:1){:root{--d:inline}} .x{display:var(--d)}",
     ":root{--d:inline} @supports (display:block){:root{--d:none}} .x{display:var(--d)}",
+    # Two variables, each set by its own pair of blocks: only the mixed combination hides.
+    ":root{--a:8px;--b:8px} @supports (display:block){:root{--a:0px}} @supports (bogus:1){:root{--a:8px}} "
+    "@supports (display:block){:root{--b:0px}} @supports (bogus:1){:root{--b:8px}} "
+    ".x{font-size:calc(var(--a) + var(--b))}",
+    # A decided variable that refers to one an undecided block sets.
+    ":root{--b:16px} @supports (display:block){:root{--b:0px}} @supports (bogus:1){:root{--b:16px}} "
+    ":root{--a:var(--b)} .x{font-size:var(--a)}",
     ".x{display:none} @supports (bogus:1){.x{display:inline}}",
     ".x{display:none} @supports not (display:block){.x{display:inline}}",
     ".x{display:none} @supports (display:bogus){.x{display:inline}}",
@@ -444,6 +454,19 @@ class AtRuleTests(unittest.TestCase):
         started = time.perf_counter()
         GUARD.analyze_html(at_rule_page(css), "//h1")
         self.assertLess(time.perf_counter() - started, 2)
+
+    def test_many_undecided_variables_are_read_quickly(self):
+        import time
+
+        definitions = ""
+        uses = ""
+        for number in range(40):
+            definitions += f"@supports (display:block){{:root{{--v{number}:1}}}} @supports (bogus:1){{:root{{--v{number}:2}}}} "
+            uses += f"var(--v{number}) "
+        css = definitions + ".x{opacity:calc(" + "+".join(uses.split()) + ")}"
+        started = time.perf_counter()
+        GUARD.analyze_html(at_rule_page(css), "//h1")
+        self.assertLess(time.perf_counter() - started, 5)
 
     def test_layers_order_across_external_and_page_stylesheets(self):
         external_css = "@layer b, a; @layer a{.x{display:none}}"
