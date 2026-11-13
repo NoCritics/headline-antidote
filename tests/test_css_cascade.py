@@ -171,5 +171,68 @@ class StylesheetCacheTests(unittest.TestCase):
         self.assertEqual(prepared.verdict, unprepared.verdict)
 
 
+@unittest.skipUnless(CASCADE_AVAILABLE, "tinycss2 and cssselect2 not installed")
+class MediaQueryTests(unittest.TestCase):
+    """Media queries answered as the verifying Chrome answers them: a 1366x900 desktop screen,
+    light mode, pixel ratio 1, scripting on, no reduced motion or forced colors."""
+    assert_hidden = CascadeHidingTests.assert_hidden
+    assert_visible = CascadeHidingTests.assert_visible
+
+    def media_page(self, query):
+        return page(f"@media {query} {{ .x {{ display: none }} }}")
+
+    def test_queries_that_match_the_desktop_screen_hide_text(self):
+        for query in (
+            "not print",
+            "not all and (max-width: 600px)",
+            "only screen and (min-width: 768px)",
+            "(width >= 1024px)",
+            "(400px <= width <= 1400px)",
+            "(min-resolution: 1dppx)",
+            "(min-resolution: 96dpi)",
+            "(-webkit-min-device-pixel-ratio: 1)",
+            "(prefers-reduced-motion: no-preference)",
+            "(scripting: enabled)",
+            "(forced-colors: none)",
+            "(color)",
+            "(min-device-width: 1024px)",
+            "(min-aspect-ratio: 4/3)",
+            "(max-width: 600px), (min-width: 1200px)",
+            "(max-width: 600px) or (min-width: 1200px)",
+            "not (max-width: 600px)",
+            "screen and ((min-width: 1000px) and (orientation: landscape))",
+        ):
+            with self.subTest(query=query):
+                self.assert_hidden(self.media_page(query))
+
+    def test_queries_that_miss_the_desktop_screen_leave_text_visible(self):
+        for query in (
+            "not all and (min-width: 768px)",
+            "not screen",
+            "(width < 768px)",
+            "(400px <= width <= 700px)",
+            "(-webkit-min-device-pixel-ratio: 2)",
+            "(min-resolution: 192dpi)",
+            "(prefers-reduced-motion: reduce)",
+            "(scripting: none)",
+            "(forced-colors: active)",
+            "(-ms-high-contrast: active)",
+            "(--mobile-only-viewport)",
+            "(max-device-width: 1024px)",
+            "handheld",
+            "tv and (min-width: 100px)",
+            "(max-width: 600px) and (min-width: 1200px)",
+            "not (min-width: 600px)",
+            "(color: 48842621)",
+            "screen and (min-width: calc(100px + 2000px))",
+        ):
+            with self.subTest(query=query):
+                self.assert_visible(self.media_page(query))
+
+    def test_style_element_media_attribute(self):
+        self.assert_hidden(page(".x { display: none }").replace("<style>", '<style media="not print">'))
+        self.assert_visible(page(".x { display: none }").replace("<style>", '<style media="(width < 600px)">'))
+
+
 if __name__ == "__main__":
     unittest.main()
