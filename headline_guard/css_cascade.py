@@ -271,6 +271,9 @@ _TOP_LEVEL = _Context((), False, None, None, 0)
 # as undecided and are matched without their enclosing selectors and layers (so they may apply more
 # widely than in Chrome), since following thousands of levels would take minutes.
 MAXIMUM_NESTING_DEPTH = 32
+# A nested rule repeats its parent's whole selector list, so selector lists nested in selector
+# lists grow exponentially; past this length the same fallback applies.
+MAXIMUM_PARENT_SELECTOR_CHARACTERS = 4000
 
 # One compiled style rule. selector_text is the selector without whitespace, lowercased (to spot
 # rules on :root and html); could_hide is None when only the site's variables can decide it.
@@ -460,7 +463,7 @@ def _compile_rules(rules, compiled):
             if declarations:
                 _add_style_rule(selectors, selector_text, declarations, context, compiled)
             if nested_rules:
-                if context.depth < MAXIMUM_NESTING_DEPTH:
+                if context.depth < MAXIMUM_NESTING_DEPTH and len(selector_text) <= MAXIMUM_PARENT_SELECTOR_CHARACTERS:
                     inner_context = context._replace(parent_selector=selector_text, scope_root=None,
                                                      depth=context.depth + 1)
                 else:
@@ -639,6 +642,18 @@ class _RuleSet:
                             self.site_variables[name] = value
                         else:
                             self.scoped_variable_names.add(name)
+        # Variables some undecided block defines: their value depends on which blocks apply.
+        self.undecided_variable_names = set()
+        for compiled in compiled_stylesheets:
+            for rule in compiled.rules:
+                if rule.undecided:
+                    for name, _, _ in rule.declarations:
+                        if name.startswith("--"):
+                            self.undecided_variable_names.add(name)
+        decidable_variables = {}
+        for name, value in self.site_variables.items():
+            if name not in self.undecided_variable_names:
+                decidable_variables[name] = value
         self.layer_order = _LayerOrder(inherited_layers)
         self.hiding_matcher = cssselect2.Matcher()
         self.full_matcher = cssselect2.Matcher()
@@ -684,7 +699,11 @@ class _RuleSet:
                             variable_declarations.append(declaration)
                 could_hide = rule.could_hide
                 if could_hide is None:
-                    could_hide = _rule_could_hide(declarations, self.site_variables)
+                    could_hide = _rule_could_hide(declarations, decidable_variables)
+                if undecided:
+                    # Its declarations may combine with others into hiding (an overlay split
+                    # between blocks), so the elements it matches always get the full cascade.
+                    could_hide = True
                 for selector in rule.selectors:
                     self.full_matcher.add_selector(selector, payload)
                     self.has_rules = True
@@ -840,6 +859,7 @@ class CascadeRules:
         self._site_variables = page_rules.site_variables
         self._rule_sets = []
         self._scoped_variable_names = set()
+        self._undecided_variable_names = set()
         self.data_uri_font_families = set()
         has_undecided_rules = False
         for rule_set in (external_rules, page_rules):
@@ -849,6 +869,8 @@ class CascadeRules:
                 has_undecided_rules = True
             for name in rule_set.scoped_variable_names:
                 self._scoped_variable_names.add(name)
+            for name in rule_set.undecided_variable_names:
+                self._undecided_variable_names.add(name)
             for family in rule_set.data_font_families:
                 self.data_uri_font_families.add(family)
         self._all_wrappers = {}
@@ -875,6 +897,8 @@ class CascadeRules:
             self.without_undecided_blocks = view
 
     def _reset_resolved_caches(self):
+        self._alternatives = {}
+        self._pseudo_entries_cache = {}
         self._cascaded = {}
         self._resolved = {}
         self._pseudo = {}
@@ -990,11 +1014,8 @@ class CascadeRules:
             node = node.getparent()
         return None
 
-    def _scoped_variables(self, element):
-        """Custom properties set on this element by narrow rules or its inline style."""
-        cached = self._scoped_variables_cache.get(element)
-        if cached is not None:
-            return cached
+    def _variable_entries(self, element):
+        """Cascade entries of the custom properties set on this element by narrow rules or its inline style."""
         entries = []
         element_wrapper = self._all_wrappers.get(element)
         if element_wrapper is not None:
@@ -1004,7 +1025,14 @@ class CascadeRules:
         inline_style = element.get("style")
         if inline_style and "--" in inline_style:
             _inline_entries(inline_style, entries, custom_only=True)
-        variables = _winning_values(self._applicable(entries))
+        return entries
+
+    def _scoped_variables(self, element):
+        """Custom properties set on this element by narrow rules or its inline style."""
+        cached = self._scoped_variables_cache.get(element)
+        if cached is not None:
+            return cached
+        variables = _winning_values(self._applicable(self._variable_entries(element)))
         self._scoped_variables_cache[element] = variables
         return variables
 
@@ -1097,64 +1125,123 @@ class CascadeRules:
         """The element's declarations for the other subsets of its undecided rules that may apply
         in Chrome: [] when none touch it, None when there are too many combinations to check.
 
-        For each property the candidates are the value without undecided rules and every undecided
-        value that outranks it; var() is resolved both with and without the undecided blocks."""
-        full = self._is_examined(element)
-        entries = self._all_entries(element, full)
-        if not _has_undecided_entry(entries):
-            return []
-        undecided_view = self.without_undecided_blocks
-        candidates_by_name = {}
-        for entry in entries:  # sorted, lowest priority first
-            name = entry[5]
-            if name.startswith("--"):
-                continue
-            if not entry[7]:
-                candidates_by_name[name] = [entry[6]]
-            else:
-                candidates_by_name.setdefault(name, [None]).append(entry[6])
-        varying = []
-        for name, values in candidates_by_name.items():
-            resolved_values = []
-            for value in values:
-                if value is None:
-                    forms = [None]
-                else:
-                    forms = [self._resolve_variables(element, value).lower()]
-                    if undecided_view is not None:
-                        forms.append(undecided_view._resolve_variables(element, value).lower())
-                for form in forms:
-                    if form not in resolved_values:
-                        resolved_values.append(form)
-            if len(resolved_values) > 1:
-                varying.append((name, resolved_values))
-        combination_count = 1
-        for _, resolved_values in varying:
-            combination_count *= len(resolved_values)
-            if combination_count > MAXIMUM_UNDECIDED_COMBINATIONS:
-                return None
-        base = self._resolved_declarations(element)
-        alternatives = [dict(base)]
-        for name, resolved_values in varying:
-            extended = []
-            for alternative in alternatives:
-                for value in resolved_values:
-                    choice = dict(alternative)
-                    if value is None:
-                        choice.pop(name, None)
-                    else:
-                        choice[name] = value
-                    extended.append(choice)
-            alternatives = extended
-        return alternatives
-
-    def pseudo_declarations(self, element):
-        """{"before": {...}, "after": {...}} for elements with a positioned or wordy ::before/::after."""
-        if not self._has_pseudo_element_rule(element):
-            return {}
-        cached = self._pseudo.get(element)
+        Each subset of the undecided rules that can outrank a decided value here gives one; var()
+        is resolved with and without the undecided blocks, and with every value an undecided block
+        gives a variable it uses."""
+        cached = self._alternatives.get(element)
         if cached is not None:
             return cached
+        alternatives = self._declaration_alternatives(element)
+        self._alternatives[element] = alternatives
+        return alternatives
+
+    def _undecided_variables_in(self, value):
+        names = []
+        if "var(" in value:
+            for match in _VARIABLE_REFERENCE.finditer(value):
+                if match.group(1) in self._undecided_variable_names and match.group(1) not in names:
+                    names.append(match.group(1))
+        return names
+
+    def _variable_candidates(self, element, name):
+        """Every value the variable could have at element, whichever undecided blocks apply: each
+        definition on the element and its ancestors, and the site-wide one."""
+        values = []
+        node = element
+        while node is not None and isinstance(node.tag, str):
+            for entry in self._variable_entries(node):
+                if entry[5] == name and entry[6] not in values:
+                    values.append(entry[6])
+            for entry in self._all_entries(node, self._is_examined(node)):
+                if entry[5] == name and entry[6] not in values:
+                    values.append(entry[6])
+            node = node.getparent()
+        site_value = self._site_variables.get(name)
+        if site_value is not None and site_value not in values:
+            values.append(site_value)
+        return values
+
+    def _resolved_forms(self, element, value, lowercase=True):
+        """The values a declaration can resolve to, whichever undecided blocks apply."""
+        def normalized(resolved):
+            return resolved.lower() if lowercase else resolved
+        forms = [normalized(self._resolve_variables(element, value))]
+        undecided_view = self.without_undecided_blocks
+        if undecided_view is not None:
+            form = normalized(undecided_view._resolve_variables(element, value))
+            if form not in forms:
+                forms.append(form)
+        for name in self._undecided_variables_in(value):
+            for candidate in self._variable_candidates(element, name):
+                def substitute(match, name=name, candidate=candidate):
+                    return candidate if match.group(1) == name else match.group(0)
+                form = normalized(self._resolve_variables(element, _VARIABLE_REFERENCE.sub(substitute, value)))
+                if form not in forms:
+                    forms.append(form)
+        return forms
+
+    def _declaration_alternatives(self, element):
+        full = self._is_examined(element)
+        entries = self._all_entries(element, full)
+        uses_undecided_variables = False
+        if self._undecided_variable_names:
+            for entry in entries:
+                if self._undecided_variables_in(entry[6]):
+                    uses_undecided_variables = True
+                    break
+        if not uses_undecided_variables and not _has_undecided_entry(entries):
+            return []
+        # A rule applies as a whole, so the combinations are subsets of the undecided rules (by
+        # their order) that can outrank a decided value here.
+        decided_entries = []
+        best_decided = {}
+        for entry in entries:  # sorted, lowest priority first
+            if not entry[7]:
+                decided_entries.append(entry)
+                best_decided[entry[5]] = entry[:5]
+        entries_by_rule = {}
+        for entry in entries:
+            # Custom properties count through the values that use them (see _resolved_forms).
+            if entry[7] and not entry[5].startswith("--") and (
+                    entry[5] not in best_decided or entry[:5] > best_decided[entry[5]]):
+                entries_by_rule.setdefault(entry[4], [])
+        for entry in entries:
+            if entry[7] and entry[4] in entries_by_rule:
+                entries_by_rule[entry[4]].append(entry)
+        rule_entries = list(entries_by_rule.values())
+        if 2 ** len(rule_entries) > MAXIMUM_UNDECIDED_COMBINATIONS:
+            return None
+        alternatives = []
+        for subset in range(2 ** len(rule_entries)):
+            chosen = list(decided_entries)
+            for position, entries_of_rule in enumerate(rule_entries):
+                if subset & (1 << position):
+                    chosen.extend(entries_of_rule)
+            # Each value can also resolve differently, whichever blocks define its variables.
+            subset_alternatives = [{}]
+            for name, value in _winning_values(chosen).items():
+                if name.startswith("--"):
+                    continue
+                forms = self._resolved_forms(element, value)
+                extended = []
+                for alternative in subset_alternatives:
+                    for form in forms:
+                        choice = dict(alternative)
+                        choice[name] = form
+                        extended.append(choice)
+                subset_alternatives = extended
+                if len(alternatives) + len(subset_alternatives) > MAXIMUM_UNDECIDED_COMBINATIONS:
+                    return None
+            for alternative in subset_alternatives:
+                if alternative not in alternatives:
+                    alternatives.append(alternative)
+        return alternatives
+
+    def _pseudo_entries(self, element):
+        """{"before": [cascade entries], "after": [...]}, undecided ones included, sorted."""
+        entries_by_pseudo = self._pseudo_entries_cache.get(element)
+        if entries_by_pseudo is not None:
+            return entries_by_pseudo
         entries_by_pseudo = {"before": [], "after": []}
         element_wrapper = self._all_wrappers.get(element)
         if element_wrapper is not None:
@@ -1168,6 +1255,52 @@ class CascadeRules:
                             important, 0, important_rank if important else rank, specificity, order,
                             name, value, undecided,
                         ))
+        for entries in entries_by_pseudo.values():
+            entries.sort(key=lambda entry: entry[:5])
+        self._pseudo_entries_cache[element] = entries_by_pseudo
+        return entries_by_pseudo
+
+    def generated_text_candidates(self, element):
+        """The content values of the element's ::before/::after that readers may see, whichever
+        undecided blocks apply: every value that can win, unless display:none holds in every case."""
+        if not self._has_pseudo_element_rule(element):
+            return []
+        contents = []
+        for entries in self._pseudo_entries(element).values():
+            candidates_by_name = {}
+            for entry in entries:  # lowest priority first
+                if not entry[7]:
+                    candidates_by_name[entry[5]] = [entry[6]]
+                else:
+                    candidates_by_name.setdefault(entry[5], [None]).append(entry[6])
+            may_show = False
+            for value in candidates_by_name.get("display", [None]):
+                if value is None:
+                    may_show = True
+                else:
+                    for form in self._resolved_forms(element, value):
+                        if form != "none":
+                            may_show = True
+            if not may_show:
+                continue
+            for value in candidates_by_name.get("content", []):
+                if value is None:
+                    continue
+                for form in self._resolved_forms(element, value, lowercase=False):
+                    if form not in contents:
+                        contents.append(form)
+        return contents
+
+    def pseudo_declarations(self, element):
+        """{"before": {...}, "after": {...}} for elements with a positioned or wordy ::before/::after."""
+        if not self._has_pseudo_element_rule(element):
+            return {}
+        cached = self._pseudo.get(element)
+        if cached is not None:
+            return cached
+        entries_by_pseudo = {}
+        for pseudo_type, entries in self._pseudo_entries(element).items():
+            entries_by_pseudo[pseudo_type] = list(entries)
         result = {}
         for pseudo_type, entries in entries_by_pseudo.items():
             if not entries:

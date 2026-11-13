@@ -566,20 +566,20 @@ class _ArticleExtraction:
 
     def _check_headline_drawing(self, headline_element):
         """Words readers see that the text lacks: CSS-generated text, and embedded fonts."""
-        if hasattr(self.rules, "pseudo_declarations"):
+        if hasattr(self.rules, "generated_text_candidates"):
             generated_parts = []
             for element in headline_element.iter():
                 if not isinstance(element.tag, str):
                     continue
-                for pseudo_name, declarations in self.rules.pseudo_declarations(element).items():
-                    if declarations.get("display") == "none":
-                        continue
-                    for string in quoted_strings(declarations.get("content", "")):
+                # Rules under @supports, @container or @scope may or may not apply in Chrome, so
+                # every content value some combination of them shows counts.
+                for content in self.rules.generated_text_candidates(element):
+                    for string in quoted_strings(content):
                         letters = 0
                         for character in string:
                             if character.isalpha():
                                 letters += 1
-                        if letters >= 2:
+                        if letters >= 2 and string.strip() not in generated_parts:
                             generated_parts.append(string.strip())
             if generated_parts:
                 self.flags.append(Flag(

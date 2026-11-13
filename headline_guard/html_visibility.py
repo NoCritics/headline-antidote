@@ -233,6 +233,13 @@ def _covering_child(element, rules):
             continue
         if is_covering_overlay(_declarations_with_hints(rules, child, child_tag)):
             return child
+        if hasattr(rules, "declaration_alternatives"):
+            alternatives = rules.declaration_alternatives(child)
+            if alternatives is None:
+                return child  # too many undecided combinations to rule out an overlay
+            for alternative in alternatives:
+                if is_covering_overlay(alternative):
+                    return child
     return None
 
 
