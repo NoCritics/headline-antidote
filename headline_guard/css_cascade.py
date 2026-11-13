@@ -38,7 +38,7 @@ from collections import OrderedDict, namedtuple
 
 import cssselect2
 import tinycss2
-from tinycss2.serializer import serialize_identifier
+from tinycss2.serializer import BAD_PAIRS, serialize_identifier
 
 from .css_hiding import (
     CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_OPACITY, declared_background_color, filter_hiding_reason,
@@ -121,6 +121,65 @@ _page_stylesheets = _SizeBoundedCache(PAGE_CSS_CACHE_CHARACTERS)
 _page_rule_sets = _SizeBoundedCache(PAGE_RULE_SET_CACHE_CHARACTERS)
 
 
+_BLOCK_BRACKETS = {"() block": ("(", ")"), "[] block": ("[", "]"), "{} block": ("{", "}")}
+
+
+def _function_is_closed(function, closed_by_function):
+    """Whether tinycss2 writes the closing ")" of a function: not when its last argument, or the last
+    argument of the function that ends it, and so on, is a string cut off by the end of the input.
+    The answer is shared along that chain, so it is stored for every function on it."""
+    chain = []
+    current = function
+    closed = True
+    while current.type == "function" and current.arguments:
+        if id(current) in closed_by_function:
+            closed = closed_by_function[id(current)]
+            break
+        chain.append(current)
+        last = current.arguments[-1]
+        if last.type == "error" and last.kind == "eof-in-string":
+            closed = False
+            break
+        current = last
+    for link in chain:
+        closed_by_function[id(link)] = closed
+    return closed
+
+
+def _serialized(nodes):
+    """tinycss2.serialize(nodes), written with an explicit stack: tinycss2 recurses once per nested
+    function or block, so CSS nested a few thousand levels deep would exhaust Python's call stack."""
+    chunks = []
+    closed_by_function = {}
+    # Each frame: [the rest of a node list, the previous node's serialization type, closing text].
+    pending = [[iter(nodes), None, ""]]
+    while pending:
+        frame = pending[-1]
+        node = next(frame[0], None)
+        if node is None:
+            chunks.append(frame[2])
+            pending.pop()
+            continue
+        serialization_type = node.type if node.type != "literal" else node.value
+        previous_type = frame[1]
+        if (previous_type, serialization_type) in BAD_PAIRS:
+            chunks.append("/**/")
+        elif previous_type == "\\" and not (serialization_type == "whitespace" and node.value.startswith("\n")):
+            chunks.append("\n")
+        frame[1] = serialization_type
+        if node.type == "function":
+            chunks.append(serialize_identifier(node.name) + "(")
+            closing = ")" if _function_is_closed(node, closed_by_function) else ""
+            pending.append([iter(node.arguments), None, closing])
+        elif node.type in _BLOCK_BRACKETS:
+            opening, closing = _BLOCK_BRACKETS[node.type]
+            chunks.append(opening)
+            pending.append([iter(node.content), None, closing])
+        else:
+            node._serialize_to(chunks.append)
+    return "".join(chunks)
+
+
 def _declarations(tokens):
     """[(name, value, important)] for hiding properties and custom properties (--name)."""
     return _hiding_declarations(tinycss2.parse_blocks_contents(tokens, skip_comments=True, skip_whitespace=True))
@@ -135,7 +194,7 @@ def _hiding_declarations(items):
             continue
         name = declaration.name if declaration.name.startswith("--") else declaration.lower_name
         if name in HIDING_PROPERTIES or name.startswith("--"):
-            value = tinycss2.serialize(declaration.value).strip()
+            value = _serialized(declaration.value).strip()
             if not name.startswith("--"):
                 value = value.lower()
             found.append((name, value, declaration.important))
@@ -248,7 +307,7 @@ def _font_face_with_data_uri(rule):
     for declaration in tinycss2.parse_declaration_list(rule.content, skip_comments=True, skip_whitespace=True):
         if declaration.type != "declaration":
             continue
-        value = tinycss2.serialize(declaration.value).strip()
+        value = _serialized(declaration.value).strip()
         if declaration.lower_name == "font-family":
             family = value.strip("'\" ").lower()
         elif declaration.lower_name == "src" and "data:" in value.lower():
@@ -264,9 +323,10 @@ def _font_face_with_data_uri(rule):
 #   (@supports, @container, @scope), so the rule may or may not apply;
 # * parent_selector: in a nested style rule, the selector that & stands for;
 # * scope_root: inside @scope, the selector of the scope root;
-# * depth: how many style rules and layers enclose it.
-_Context = namedtuple("_Context", "layer undecided parent_selector scope_root depth")
-_TOP_LEVEL = _Context((), False, None, None, 0)
+# * depth: how many style rules and layers enclose it;
+# * parent_depth: how deeply functions nest in parent_selector, or in scope_root.
+_Context = namedtuple("_Context", "layer undecided parent_selector scope_root depth parent_depth")
+_TOP_LEVEL = _Context((), False, None, None, 0, 0)
 # Real stylesheets nest style rules and layers a few levels deep. Past this depth the rules count
 # as undecided and are matched without their enclosing selectors and layers (so they may apply more
 # widely than in Chrome), since following thousands of levels would take minutes.
@@ -274,6 +334,40 @@ MAXIMUM_NESTING_DEPTH = 32
 # A nested rule repeats its parent's whole selector list, so selector lists nested in selector
 # lists grow exponentially; past this length the same fallback applies.
 MAXIMUM_PARENT_SELECTOR_CHARACTERS = 4000
+# The selector library recurses once per nested function, as in :is(:is(.x)), and a few hundred
+# levels exhaust Python's call stack. Real selectors nest at most 6 deep (in 3,102 stylesheets), so a
+# rule whose selector, counted with the selectors it is nested in, nests deeper than this is read as
+# * in an undecided block: it may hide any element.
+MAXIMUM_SELECTOR_DEPTH = 32
+_UNIVERSAL_SELECTOR = tinycss2.parse_component_value_list("*")
+
+
+def _token_depth(tokens, limit):
+    """How deeply functions and blocks nest in tokens, counting up to limit + 1 at most."""
+    deepest = 0
+    pending = [(tokens, 1)]
+    while pending and deepest <= limit:
+        items, level = pending.pop()
+        for token in items:
+            if token.type == "function":
+                children = token.arguments
+            elif token.type in _BLOCK_BRACKETS:
+                children = token.content
+            else:
+                continue
+            if level > deepest:
+                deepest = level
+            pending.append((children, level + 1))
+    return min(deepest, limit + 1)
+
+
+def _stand_in_depth(context):
+    """How deeply the text standing in for & (or for :scope) nests: :is(parent) or :where(root):is(...)."""
+    if context.parent_selector is not None:
+        return 1 + context.parent_depth
+    if context.scope_root is not None:
+        return max(1 + context.parent_depth, 2)
+    return 0
 
 # One compiled style rule. selector_text is the selector without whitespace, lowercased (to spot
 # rules on :root and html); could_hide is None when only the site's variables can decide it.
@@ -318,7 +412,7 @@ def _selector_text_with_stand_in(tokens, stand_in, scope):
             if inner_replaced:
                 replaced = True
         else:
-            pieces.append(tinycss2.serialize([token]))
+            pieces.append(_serialized([token]))
         index += 1
     return "".join(pieces), replaced
 
@@ -349,7 +443,14 @@ def _relative_selector_texts(prelude, stand_in, scope):
 
 
 def _rule_selectors(prelude, context):
-    """(compiled selectors, selector text) of a style rule, or ([], None) when Chrome would drop it."""
+    """(compiled selectors, selector text, how deeply it nests, the context the rule is read in) of a
+    style rule; the text is None when Chrome would drop the rule. A selector nesting deeper than
+    MAXIMUM_SELECTOR_DEPTH is read as * in an undecided context."""
+    depth = _token_depth(prelude, MAXIMUM_SELECTOR_DEPTH) + _stand_in_depth(context)
+    if depth > MAXIMUM_SELECTOR_DEPTH:
+        prelude = _UNIVERSAL_SELECTOR
+        depth = 0
+        context = context._replace(undecided=True, parent_selector=None, scope_root=None, parent_depth=0)
     root_texts = []
     if context.parent_selector is not None:
         relative_texts, _ = _relative_selector_texts(prelude, f":is({context.parent_selector})", False)
@@ -358,19 +459,19 @@ def _rule_selectors(prelude, context):
         relative_texts, root_texts = _relative_selector_texts(prelude, f":where({context.scope_root})", True)
         selector_text = ", ".join(relative_texts)
     else:
-        selector_text = tinycss2.serialize(prelude)
+        selector_text = _serialized(prelude)
     try:
         selectors = cssselect2.compile_selector_list(
             prelude if context.parent_selector is None and context.scope_root is None else selector_text
         )
     except cssselect2.SelectorError:
-        return [], None
+        return [], None, depth, context
     for root_text in root_texts:
         try:
             selectors += cssselect2.compile_selector_list(root_text)
         except cssselect2.SelectorError:
             pass  # reason=a scoped selector ending in a pseudo-element has no form matching the root itself
-    return selectors, selector_text
+    return selectors, selector_text, depth, context
 
 
 def _add_style_rule(selectors, selector_text, declarations, context, compiled):
@@ -416,7 +517,7 @@ def _add_style_rule(selectors, selector_text, declarations, context, compiled):
 def _layer_name_paths(prelude):
     """The layer names of an @layer prelude, each split at its dots: "a.b, c" -> [("a", "b"), ("c",)]."""
     paths = []
-    for name in tinycss2.serialize(prelude).split(","):
+    for name in _serialized(prelude).split(","):
         name = name.strip()
         if name:
             parts = []
@@ -427,15 +528,12 @@ def _layer_name_paths(prelude):
 
 
 def _scope_root(prelude):
-    """(root selector, has a lower limit) of an @scope prelude: "(.a) to (.b)" -> (".a", True).
-    A rule without a root (scoped to the <style> element's parent) gets None."""
-    blocks = []
+    """(root selector, how deeply it nests) of an @scope prelude: "(.a) to (.b)" -> (".a", 0).
+    A block without a root (scoped to the <style> element's parent) gets "*"."""
     for token in prelude:
         if token.type == "() block":
-            blocks.append(tinycss2.serialize(token.content).strip())
-    if not blocks:
-        return None, False
-    return blocks[0], len(blocks) > 1
+            return _serialized(token.content).strip(), _token_depth(token.content, MAXIMUM_SELECTOR_DEPTH)
+    return "*", 0
 
 
 def _compile_rules(rules, compiled):
@@ -457,17 +555,18 @@ def _compile_rules(rules, compiled):
                     nested_rules.append(item)
             if not declarations and not nested_rules:
                 continue
-            selectors, selector_text = _rule_selectors(rule.prelude, context)
+            selectors, selector_text, selector_depth, rule_context = _rule_selectors(rule.prelude, context)
             if selector_text is None:
                 continue
             if declarations:
-                _add_style_rule(selectors, selector_text, declarations, context, compiled)
+                _add_style_rule(selectors, selector_text, declarations, rule_context, compiled)
             if nested_rules:
                 if context.depth < MAXIMUM_NESTING_DEPTH and len(selector_text) <= MAXIMUM_PARENT_SELECTOR_CHARACTERS:
-                    inner_context = context._replace(parent_selector=selector_text, scope_root=None,
-                                                     depth=context.depth + 1)
+                    inner_context = rule_context._replace(parent_selector=selector_text, scope_root=None,
+                                                          depth=context.depth + 1, parent_depth=selector_depth)
                 else:
-                    inner_context = context._replace(parent_selector="*", scope_root=None, undecided=True)
+                    inner_context = rule_context._replace(parent_selector="*", scope_root=None, undecided=True,
+                                                          parent_depth=0)
                 pending.append((iter(nested_rules), inner_context))
             continue
         if rule.type != "at-rule":
@@ -486,7 +585,7 @@ def _compile_rules(rules, compiled):
                 compiled.data_font_families.add(family)
             continue
         if keyword == "media":
-            if not media_query_applies(tinycss2.serialize(rule.prelude)):
+            if not media_query_applies(_serialized(rule.prelude)):
                 continue
             inner_context = context
         elif keyword in ("supports", "container"):
@@ -505,9 +604,9 @@ def _compile_rules(rules, compiled):
         elif keyword == "scope":
             # Chrome ranks scoped rules by how close the scope root is, which this reader does
             # not model, so every @scope block is undecided.
-            root, _ = _scope_root(rule.prelude)
+            root, root_depth = _scope_root(rule.prelude)
             inner_context = context._replace(
-                undecided=True, parent_selector=None, scope_root=root if root is not None else "*",
+                undecided=True, parent_selector=None, scope_root=root, parent_depth=root_depth,
             )
         else:
             continue  # @document (Chrome never applies it), @keyframes, @page, @starting-style...
@@ -516,11 +615,11 @@ def _compile_rules(rules, compiled):
             contents = tinycss2.parse_blocks_contents(rule.content, skip_comments=True, skip_whitespace=True)
             declarations = _hiding_declarations(contents)
             if declarations and context.parent_selector is not None:
-                selectors, selector_text = _rule_selectors(
+                selectors, selector_text, _, rule_context = _rule_selectors(
                     tinycss2.parse_component_value_list("&"), inner_context,
                 )
                 if selector_text is not None:
-                    _add_style_rule(selectors, selector_text, declarations, inner_context, compiled)
+                    _add_style_rule(selectors, selector_text, declarations, rule_context, compiled)
             nested_rules = []
             for item in contents:
                 if item.type in ("qualified-rule", "at-rule"):
