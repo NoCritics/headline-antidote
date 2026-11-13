@@ -468,6 +468,18 @@ class AtRuleTests(unittest.TestCase):
         GUARD.analyze_html(at_rule_page(css), "//h1")
         self.assertLess(time.perf_counter() - started, 5)
 
+    def test_converging_variable_chains_are_read_quickly(self):
+        import time
+
+        css = ""
+        for level in range(10):
+            for variant in range(4):
+                css += f"@supports (display:block){{:root{{--v{level}:var(--v{level + 1},{variant})}}}} "
+        css += ":root{--v10:1} .x{opacity:var(--v0)}"
+        started = time.perf_counter()
+        GUARD.analyze_html(at_rule_page(css), "//h1")
+        self.assertLess(time.perf_counter() - started, 1)
+
     def test_layers_order_across_external_and_page_stylesheets(self):
         external_css = "@layer b, a; @layer a{.x{display:none}}"
         self.assert_hidden(at_rule_page("@layer b{.x{display:inline}}"), stylesheets=[external_css])

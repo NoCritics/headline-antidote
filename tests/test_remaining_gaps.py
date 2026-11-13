@@ -488,6 +488,18 @@ class HeadlineDrawingTests(unittest.TestCase):
                                                      head_extra=f"<style>{css}</style>"))
         self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
 
+    def test_css_generated_words_with_too_many_undecided_combinations_are_flagged(self):
+        css = ""
+        uses = ""
+        for number in range(7):
+            css += (f'@supports (display: block) {{ :root {{ --c{number}: "Exclusive " }} }} '
+                    f'@supports (bogus: 1) {{ :root {{ --c{number}: "losses " }} }} ')
+            uses += f" var(--c{number})"
+        css += f".k::before {{ position: absolute; content:{uses} }}"
+        article = GUARD.extract_article(article_page(f'<span class="k"></span>{HEADLINE}',
+                                                     head_extra=f"<style>{css}</style>"))
+        self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
+
     def test_icon_glyph_from_css_is_not_text(self):
         html = article_page(f'<span class="k"></span>{HEADLINE}',
                             head_extra='<style>.k::before { content: "\\2022" }</style>')
