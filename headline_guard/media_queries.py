@@ -48,6 +48,10 @@ DISCRETE_FEATURES = {
 }
 SCREEN_MEDIA_TYPES = ("all", "screen")
 _COMPARISON = re.compile(r"\s*(<=|>=|<|>|=)\s*")
+# A keyword must be followed by white space: 'and(' is a function in CSS, and makes the query invalid.
+_KEYWORD = re.compile(r"(and|or|not)\s+")
+_NOT_GROUP = re.compile(r"not\s+\(")
+_WHITE_SPACE = re.compile(r"\s*")
 _RESOLUTION = re.compile(r"(\d*\.?\d+)(dppx|x|dpi|dpcm)")
 
 
@@ -77,7 +81,7 @@ def _split_top_level(text, separator):
         if character == "(":
             depth += 1
         elif character == ")":
-            depth -= 1
+            depth = max(0, depth - 1)  # a stray ')' spoils only its own query, as in Chrome
         elif character == separator and depth == 0:
             parts.append(text[start:position])
             start = position + 1
@@ -110,7 +114,7 @@ def _negated(value):
 
 
 def _query_matches(query):
-    if query.startswith("(") or re.match(r"not\s*\(", query):
+    if query.startswith("(") or _NOT_GROUP.match(query):
         return _condition_matches(query)
     match = re.fullmatch(r"(?:(not|only)\s+)?([a-z-]+)(?:\s+and\s+(.+))?", query, flags=re.S)
     if match is None:
@@ -124,70 +128,99 @@ def _query_matches(query):
     return matches
 
 
-def _parenthesized_groups(text):
-    """[(word before the group, group content)] for 'a (x) and (y)'-shaped text."""
-    groups = []
-    position = 0
-    while position < len(text):
-        while position < len(text) and text[position].isspace():
-            position += 1
-        if position >= len(text):
-            break
-        word_match = re.match(r"([a-z]+)\s*", text[position:])
-        word = ""
-        if word_match is not None and text[position] != "(":
-            word = word_match.group(1)
-            position += word_match.end()
-        if position >= len(text) or text[position] != "(":
-            raise _Unparsable(text)
-        depth = 0
-        start = position
-        while position < len(text):
-            if text[position] == "(":
-                depth += 1
-            elif text[position] == ")":
-                depth -= 1
-                if depth == 0:
-                    break
-            position += 1
-        if depth != 0:
-            raise _Unparsable(text)
-        groups.append((word, text[start + 1:position]))
-        position += 1
-    return groups
+class _Condition:
+    """One parenthesized level of a condition while it is read: '(a) and (b)', 'not (a)'."""
 
+    def __init__(self):
+        self.value = None
+        self.has_value = False
+        self.operator = None
+        self.operator_pending = False
+        self.negate_next = False
+        self.negated = False
 
-def _condition_matches(condition):
-    groups = _parenthesized_groups(condition.strip())
-    if not groups:
-        raise _Unparsable(condition)
-    first_word, first_content = groups[0]
-    if first_word == "not":
-        if len(groups) != 1:
-            raise _Unparsable(condition)
-        return _negated(_in_parentheses_matches(first_content))
-    if first_word:
-        raise _Unparsable(condition)
-    combined = _in_parentheses_matches(first_content)
-    joining_words = set()
-    for word, content in groups[1:]:
-        joining_words.add(word)
-        if word == "and":
-            combined = _both(combined, _in_parentheses_matches(content))
-        elif word == "or":
-            combined = _either(combined, _in_parentheses_matches(content))
+    def add(self, value):
+        if self.negate_next:
+            value = _negated(value)
+            self.negate_next = False
+            self.negated = True
+        if not self.has_value:
+            self.value = value
+        elif self.operator == "and":
+            self.value = _both(self.value, value)
         else:
-            raise _Unparsable(condition)
-    if len(joining_words) > 1:
-        raise _Unparsable(condition)  # 'and' and 'or' mixed without parentheses
-    return combined
+            self.value = _either(self.value, value)
+        self.has_value = True
+        self.operator_pending = False
+
+    def expects_operand(self):
+        return not self.has_value or self.operator_pending
+
+    def result(self):
+        if self.expects_operand():
+            raise _Unparsable("condition ends without an operand")
+        return self.value
 
 
-def _in_parentheses_matches(content):
-    content = content.strip()
-    if content.startswith("(") or re.match(r"not\s*\(", content):
-        return _condition_matches(content)
-    return _feature_matches(content)
+def _condition_matches(text):
+    """Reads a condition left to right with an explicit stack, so any nesting depth works (Chrome
+    has no limit). An unclosed '(' closes at the end of the text, as in Chrome."""
+    stack = [_Condition()]
+    position = _WHITE_SPACE.match(text, 0).end()
+    length = len(text)
+    while position < length:
+        current = stack[-1]
+        if current.expects_operand():
+            if text[position] == "(":
+                position = _WHITE_SPACE.match(text, position + 1).end()
+                if position < length and (text[position] == "(" or _NOT_GROUP.match(text, position)):
+                    stack.append(_Condition())
+                else:
+                    feature_end = _closing_parenthesis(text, position)
+                    current.add(_feature_matches(text[position:feature_end]))
+                    position = feature_end + 1
+            else:
+                keyword = _KEYWORD.match(text, position)
+                if keyword is None or keyword.group(1) != "not" or current.has_value or current.negate_next:
+                    raise _Unparsable(text)
+                current.negate_next = True
+                position = keyword.end()
+        elif text[position] == ")":
+            if len(stack) == 1:
+                raise _Unparsable(text)
+            finished = stack.pop()
+            stack[-1].add(finished.result())
+            position += 1
+        else:
+            keyword = _KEYWORD.match(text, position)
+            if keyword is None or keyword.group(1) == "not" or current.negated:
+                raise _Unparsable(text)
+            if current.operator not in (None, keyword.group(1)):
+                raise _Unparsable(text)  # 'and' and 'or' mixed without parentheses
+            current.operator = keyword.group(1)
+            current.operator_pending = True
+            position = keyword.end()
+        position = _WHITE_SPACE.match(text, position).end()
+    while len(stack) > 1:
+        finished = stack.pop()
+        stack[-1].add(finished.result())
+    return stack[0].result()
+
+
+def _closing_parenthesis(text, start):
+    """The position of the ')' that closes a feature starting at start (its value may hold
+    calc(...)), or the end of the text when it is never closed."""
+    depth = 1
+    position = start
+    while position < len(text):
+        if text[position] == "(":
+            depth += 1
+        elif text[position] == ")":
+            depth -= 1
+            if depth == 0:
+                return position
+        position += 1
+    return len(text)
 
 
 def _feature_matches(content):
@@ -236,6 +269,10 @@ def _range_matches(content):
         low, first_operator, name, second_operator, high = parts
         if name not in RANGE_FEATURES:
             return None
+        both_rising = first_operator in ("<", "<=") and second_operator in ("<", "<=")
+        both_falling = first_operator in (">", ">=") and second_operator in (">", ">=")
+        if not both_rising and not both_falling:
+            raise _Unparsable(content)
         return _both(_compare_with_screen(name, _flipped(first_operator), low),
                      _compare_with_screen(name, second_operator, high))
     raise _Unparsable(content)
