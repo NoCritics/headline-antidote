@@ -777,6 +777,8 @@ _INLINE_LAYER_RANK = (0,)
 # How many combinations of an element's undecided declarations are checked; past this the
 # element counts as hidden.
 MAXIMUM_UNDECIDED_COMBINATIONS = 64
+# Steps of var() expansion allowed for one value while finding those combinations.
+MAXIMUM_EXPANSION_STEPS = 16 * MAXIMUM_UNDECIDED_COMBINATIONS
 
 
 class _TooManyCombinations(Exception):
@@ -1197,9 +1199,15 @@ class CascadeRules:
         # Expand var() references one at a time; an undecided variable branches into each of
         # its possible values, any other takes its cascaded value (which may hold more var()).
         pending = [(value, 0)]
+        seen = {(value, 0)}
         finished = []
+        steps = 0
         while pending:
             partial, depth = pending.pop()
+            # Every expansion counts, so branches that converge cannot multiply the work.
+            steps += 1
+            if steps > MAXIMUM_EXPANSION_STEPS:
+                raise _TooManyCombinations()
             match = _VARIABLE_REFERENCE.search(partial) if depth <= MAXIMUM_VARIABLE_DEPTH else None
             if match is None:
                 if partial not in finished:
@@ -1219,7 +1227,10 @@ class CascadeRules:
                 defined.append(match.group(2) or "")
                 replacements = defined
             for replacement in replacements:
-                pending.append((partial[:match.start()] + replacement.strip() + partial[match.end():], depth + 1))
+                expanded = (partial[:match.start()] + replacement.strip() + partial[match.end():], depth + 1)
+                if expanded not in seen:
+                    seen.add(expanded)
+                    pending.append(expanded)
             if len(pending) + len(finished) > MAXIMUM_UNDECIDED_COMBINATIONS:
                 raise _TooManyCombinations()
         for partial in finished:
@@ -1310,11 +1321,14 @@ class CascadeRules:
         return entries_by_pseudo
 
     def generated_text_candidates(self, element):
-        """The content values of the element's ::before/::after that readers may see, whichever
-        undecided blocks apply: every value that can win, unless display:none holds in every case."""
+        """(content values, unchecked) for the element's ::before/::after that readers may see,
+        whichever undecided blocks apply: every value that can win, unless display:none holds in
+        every case. unchecked is True when some value has too many combinations to check; its
+        values with all and with none of the undecided blocks applied are still given."""
         if not self._has_pseudo_element_rule(element):
-            return []
+            return [], False
         contents = []
+        unchecked = False
         for entries in self._pseudo_entries(element).values():
             candidates_by_name = {}
             for entry in entries:  # lowest priority first
@@ -1330,7 +1344,9 @@ class CascadeRules:
                 try:
                     forms = self._resolved_forms(element, value)
                 except _TooManyCombinations:
-                    forms = [value]
+                    forms = []
+                    may_show = True
+                    unchecked = True
                 for form in forms:
                     if form != "none":
                         may_show = True
@@ -1342,11 +1358,14 @@ class CascadeRules:
                 try:
                     forms = self._resolved_forms(element, value, lowercase=False)
                 except _TooManyCombinations:
-                    forms = [value]
+                    unchecked = True
+                    forms = [self._resolve_variables(element, value)]
+                    if self.without_undecided_blocks is not None:
+                        forms.append(self.without_undecided_blocks._resolve_variables(element, value))
                 for form in forms:
                     if form not in contents:
                         contents.append(form)
-        return contents
+        return contents, unchecked
 
     def pseudo_declarations(self, element):
         """{"before": {...}, "after": {...}} for elements with a positioned or wordy ::before/::after."""

@@ -568,12 +568,16 @@ class _ArticleExtraction:
         """Words readers see that the text lacks: CSS-generated text, and embedded fonts."""
         if hasattr(self.rules, "generated_text_candidates"):
             generated_parts = []
+            unchecked = False
             for element in headline_element.iter():
                 if not isinstance(element.tag, str):
                     continue
                 # Rules under @supports, @container or @scope may or may not apply in Chrome, so
                 # every content value some combination of them shows counts.
-                for content in self.rules.generated_text_candidates(element):
+                contents, element_unchecked = self.rules.generated_text_candidates(element)
+                if element_unchecked:
+                    unchecked = True
+                for content in contents:
                     for string in quoted_strings(content):
                         letters = 0
                         for character in string:
@@ -581,12 +585,14 @@ class _ArticleExtraction:
                                 letters += 1
                         if letters >= 2 and string.strip() not in generated_parts:
                             generated_parts.append(string.strip())
-            if generated_parts:
+            if generated_parts or unchecked:
+                detail = ("readers see this text in the headline, added by CSS (::before/::after); "
+                          "scrapers and the model never receive it")
+                if unchecked:
+                    detail += ("; CSS may also add other text here, under more @supports, @container "
+                               "or @scope conditions than were checked")
                 self.flags.append(Flag(
-                    "css_generated_text", MEDIUM, None, None, " ".join(generated_parts),
-                    "readers see this text in the headline, added by CSS (::before/::after); "
-                    "scrapers and the model never receive it",
-                    "headline",
+                    "css_generated_text", MEDIUM, None, None, " ".join(generated_parts), detail, "headline",
                 ))
         embedded_families = getattr(self.rules, "data_uri_font_families", None)
         if embedded_families and hasattr(self.rules, "font_family_for"):
