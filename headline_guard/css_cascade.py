@@ -31,17 +31,17 @@ from collections import OrderedDict
 import cssselect2
 import tinycss2
 
-from .css_values import length_in_pixels, plain_number, quoted_strings
+from .css_values import (
+    PIXELS_PER_EM, VIEWPORT_HEIGHT_PIXELS, VIEWPORT_WIDTH_PIXELS, length_in_pixels, parse_color, plain_number,
+    quoted_strings,
+)
 # html_visibility imports this module only inside functions, so importing it here is safe.
 from .html_visibility import (
     CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_OPACITY, _background_color, _filter_hiding_reason,
     _font_shorthand_size, _font_size_is_unreadable, _is_covering_overlay, _is_off_screen_offset, _leading_number,
-    _letters_collapsed, _parse_color, _relative_luminance, _translation_is_off_screen,
+    _letters_collapsed, _relative_luminance, _translation_is_off_screen,
 )
 
-VIEWPORT_WIDTH_PIXELS = 1366
-VIEWPORT_HEIGHT_PIXELS = 900
-PIXELS_PER_EM = 16
 MAXIMUM_VARIABLE_DEPTH = 10
 # Cache budgets, in characters of CSS source. Compiled CSS takes about 13 times its source
 # size in memory (7 to 26 times on the fresh page set), so 24 million characters is about
@@ -225,7 +225,7 @@ def _could_hide(name, value):
         pixels = length_in_pixels(value)
         return (pixels is not None and pixels <= CLIPPED_BOX_MAXIMUM_PIXELS) or plain_number(value) == 0
     if name in ("color", "-webkit-text-fill-color"):
-        color = _parse_color(value)
+        color = parse_color(value)
         return color is not None and (color[3] < MINIMUM_VISIBLE_OPACITY
                                       or _relative_luminance(color) >= LIGHT_TEXT_LUMINANCE)
     if name in ("background", "background-color"):
@@ -256,7 +256,7 @@ def _rule_could_cover(declarations, site_variables):
     for name, value, _ in declarations:
         if not name.startswith("--"):
             values[name] = _substitute_site_variables(value, site_variables).lower()
-    return values.get("position") == "absolute" and _is_covering_overlay(values)
+    return _is_covering_overlay(values)
 
 
 def _rule_could_hide(declarations, site_variables):
@@ -367,8 +367,8 @@ def _stylesheet_key(css_text):
 
 
 def _compiled_stylesheet(css_text, key, cache):
-    """([(selectors, declarations, selector text)], {embedded font families}) for one stylesheet,
-    cached by content."""
+    """([(selectors, declarations, selector text, font family, could_hide, pseudo_candidate)],
+    {embedded font families}) for one stylesheet, cached by content."""
     cached = cache.lookup(key)
     if cached is not None:
         return cached
@@ -505,14 +505,13 @@ class CascadeRules:
         external_rules = external_rule_set(stylesheets)
         page_rules = _rule_set(page_stylesheet_texts, external_rules.site_variables, external_rules.last_order,
                                _page_stylesheets, _page_rule_sets)
-        self._rule_sets = []
-        for rule_set in (external_rules, page_rules):
-            if rule_set.has_rules or rule_set.font_rules:
-                self._rule_sets.append(rule_set)
         self._site_variables = page_rules.site_variables
+        self._rule_sets = []
         self._scoped_variable_names = set()
         self.data_uri_font_families = set()
         for rule_set in (external_rules, page_rules):
+            if rule_set.has_rules or rule_set.font_rules:
+                self._rule_sets.append(rule_set)
             for name in rule_set.scoped_variable_names:
                 self._scoped_variable_names.add(name)
             for family in rule_set.data_font_families:

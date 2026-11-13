@@ -21,7 +21,7 @@ from dataclasses import dataclass
 import lxml.html
 from lxml import etree
 
-from .css_values import NAMED_COLORS, length_in_pixels, numeric_value, parse_color, plain_number
+from .css_values import length_in_pixels, numeric_value, parse_color, plain_number
 
 # Contents are code or metadata, never headline text, so they are skipped without a flag.
 NON_TEXT_TAGS = {"script", "style", "head", "meta", "link"}
@@ -89,11 +89,6 @@ def _leading_number(value):
     if match is None:
         return None
     return float(match.group(1))
-
-
-def _parse_color(value):
-    """Returns (red, green, blue, alpha) or None when the color is unknown or not a plain color."""
-    return parse_color(value)
 
 
 def _relative_luminance(color):
@@ -231,7 +226,7 @@ def _text_painted_another_way(declarations):
         if "gradient(" in background or "url(" in background:
             return True
         background_color = _background_color(declarations)
-        if background_color is not None and background_color[3] >= MINIMUM_VISIBLE_OPACITY:
+        if background_color is not None:  # _background_color drops colors below MINIMUM_VISIBLE_OPACITY
             return True
     for shadow_color in _colors_in(declarations.get("text-shadow", "")):
         if shadow_color[3] >= MINIMUM_VISIBLE_OPACITY:
@@ -591,8 +586,8 @@ def _background_lookup(rules, element):
 
 
 def _element_hiding(element, tag, rules, inherited_background):
-    """(reason, severity, background) for one element: why it is hidden (or None), and the
-    background its children inherit."""
+    """((reason, severity) or None, background, declarations or None) for one element: why it is
+    hidden, the background its children inherit, and its declarations (None when markup alone hides it)."""
     if tag in HIDDEN_CONTENT_TAGS:
         return (f"inside <{tag}>", HIGH), inherited_background, None
     if element.get("hidden") is not None:
