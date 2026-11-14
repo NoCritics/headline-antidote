@@ -169,10 +169,15 @@ class AtRuleChromeTests(unittest.TestCase):
                 with self.subTest(css=css, inline_style=inline_style):
                     tab.set_content(at_rule_page(css, inline_style))
                     chrome_hidden = tab.evaluate(
-                        "(() => { const style = getComputedStyle(document.getElementById('x'));"
-                        " const box = document.getElementById('x').getBoundingClientRect();"
-                        " return style.display === 'none' || style.opacity === '0' || style.fontSize === '0px'"
-                        " || box.right <= 0; })()"
+                        "(() => { const element = document.getElementById('x');"
+                        " const style = getComputedStyle(element);"
+                        " const range = document.createRange(); range.selectNodeContents(element);"
+                        " const text_box = range.getBoundingClientRect();"
+                        " return style.display === 'none' || style.visibility !== 'visible'"
+                        " || style.opacity === '0' || style.fontSize === '0px'"
+                        " || style.color === 'rgba(0, 0, 0, 0)' || style.clipPath === 'inset(50%)'"
+                        " || style.filter === 'opacity(0)' || style.contentVisibility === 'hidden'"
+                        " || text_box.right <= 0; })()"
                     )
                     self.assertEqual(chrome_hidden, hidden)
             browser.close()

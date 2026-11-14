@@ -386,6 +386,56 @@ def variable_chain_cases():
 
 CHROME_DECIDED_CASES += variable_chain_cases()
 
+# (other declarations the hiding needs, a hiding declaration, later values Chrome drops as invalid,
+# a later value Chrome applies).
+INVALID_LATER_VALUES = (
+    ("", "opacity:0", ("banana", "1px", "1 1", "calc(1px)", "\\31", "1.", "50% 50%"), "1"),
+    ("", "display:none", ("blok", "block inline", "grid flow", "box", "run-in"), "inline-block"),
+    ("", "visibility:hidden", ("visibl", "visible hidden"), "visible"),
+    ("", "font-size:0", ("16pxx", "xxxx-large", "calc(1em + 1)", "1px 2px", "1deg"), "16px"),
+    ("", "color:transparent", ("redd", "#12345", "rgb(1,2)", "red blue"), "red"),
+    ("display:inline-block;", "transform:translateX(-9999px)",
+     ("translateX(0) foo", "scale()", "banana(0)", "matrix(1,0,0,1,0)"), "none"),
+    ("position:absolute;", "left:-9999px", ("0 0",), "0"),
+    ("", "clip-path:inset(50%)", ("banana", "inset()", "circle(1)"), "none"),
+    ("display:inline-block;", "text-indent:-9999px", ("0 0", "hanging"), "0"),
+    ("", "filter:opacity(0)", ("blur(1)", "opacity(1) foo", "drop-shadow(red)"), "none"),
+    ("", "content-visibility:hidden", ("banana",), "visible"),
+    ("", "font:0/0 a", ("16px", "banana", "bold bold 16px a", "16px, a"), "16px serif"),
+)
+
+
+def invalid_later_value_cases():
+    """Chrome drops an invalid declaration, so an earlier hiding one still applies: in the same
+    rule, from a rule that outranks it, from an inline style, and with !important. A valid later
+    value applies."""
+    cases = []
+    for setup, hiding, invalid_values, valid_value in INVALID_LATER_VALUES:
+        name = hiding.split(":")[0]
+        for invalid_value in invalid_values:
+            later = f"{name}:{invalid_value}"
+            cases.append((f".x{{{setup}{hiding};{later}}}", "", True))
+            cases.append((f".x{{{setup}{hiding}}} h1 span.x{{{later}}}", "", True))
+            cases.append((f".x{{{setup}{hiding}}}", later, True))
+            cases.append(("", f"{setup}{hiding};{later}", True))
+            cases.append((f".x{{{setup}{hiding}!important}} h1 .x{{{later}!important}}", "", True))
+            cases.append((f".x{{{setup}{hiding}}}", f"{later}!important", True))
+        cases.append((f".x{{{setup}{hiding};{name}:{valid_value}}}", "", False))
+        cases.append((f".x{{{setup}{hiding}}}", f"{name}:{valid_value}", False))
+    return tuple(cases)
+
+
+CHROME_DECIDED_CASES += invalid_later_value_cases()
+CHROME_DECIDED_CASES += (
+    # -webkit-var() is not var(): Chrome drops the declaration.
+    (".x{display:none;display:-webkit-var(--x, block)}", "", True),
+    (":root{--x:none} .x{display:-webkit-var(--x, block)}", "", False),
+    # A value invalid once var() is substituted is unset, not the earlier declaration: visibility
+    # is then inherited, opacity takes its initial value.
+    (":root{--v:banana} h1{visibility:hidden} .x{visibility:var(--v)}", "", True),
+    (":root{--v:banana} .x{opacity:0;opacity:var(--v)}", "", False),
+)
+
 # Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
 # @scope, whose rules Chrome ranks by the scope root's nearness): Chrome may apply any of them, so
 # text that some combination of them hides counts as hidden. Each of these is hidden under at least
