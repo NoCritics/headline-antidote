@@ -434,6 +434,25 @@ CHROME_DECIDED_CASES += (
     # is then inherited (from the visible h1), opacity takes its initial value.
     (":root{--v:banana} .x{visibility:hidden;visibility:var(--v)}", "", False),
     (":root{--v:banana} .x{opacity:0;opacity:var(--v)}", "", False),
+    # Chrome evaluates if(), typed attr() and custom functions (@function); this reader cannot,
+    # so a hiding value using one counts as hidden.
+    (".x{opacity:if(else:0)}", "", True),
+    (".x{opacity:if(style(--a:1):1;else:0)}", "", True),
+    (".x{display:if(else:none)}", "", True),
+    (".x{opacity:attr(data-zero type(<number>))}", "", True),
+    (".x{display:attr(data-hide type(<custom-ident>))}", "", True),
+    ("@function --f(){result:0} .x{opacity:--f()}", "", True),
+    (".x{--o:if(else:0);opacity:var(--o)}", "", True),
+    # env() as Chrome gives it at the browser check's desktop viewport: safe-area and keyboard
+    # insets are 0px; other names (titlebar-area-*, an index, any other case) take the fallback,
+    # and with none the declaration is unset.
+    (".x{position:absolute;left:env(banana, -9999px)}", "", True),
+    (".x{position:absolute;left:env(titlebar-area-x, -9999px)}", "", True),
+    (".x{position:absolute;left:env(safe-area-inset-left 0, -9999px)}", "", True),
+    (".x{position:absolute;left:env(SAFE-AREA-INSET-LEFT, -9999px)}", "", True),
+    (".x{position:absolute;left:calc(env(safe-area-inset-left) - 9999px)}", "", True),
+    (".x{position:absolute;left:env(safe-area-inset-left, -9999px)}", "", False),
+    (".x{position:absolute;left:-9999px;left:env(banana)}", "", False),
     # An invalid custom property is dropped too, so the earlier definition holds.
     (".x{--o:0;--o:1 ];opacity:var(--o)}", "", True),
     (".x{--o:0;--o:1 !;opacity:var(--o)}", "", True),
@@ -487,7 +506,8 @@ def at_rule_page(css, inline_style=""):
     style_attribute = f' style="{inline_style}"' if inline_style else ""
     return (
         f"<html><head><style>{css}</style></head><body><article class=\"a\">"
-        f"<h1>{HEADLINE}<span class=\"x\" id=\"x\"{style_attribute}> losses and layoffs</span></h1>"
+        f"<h1>{HEADLINE}<span class=\"x\" id=\"x\" data-hide=\"none\" data-zero=\"0\"{style_attribute}>"
+        " losses and layoffs</span></h1>"
         "</article></body></html>"
     )
 
