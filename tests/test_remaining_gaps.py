@@ -519,6 +519,19 @@ class HeadlineDrawingTests(unittest.TestCase):
                 article = GUARD.extract_article(html)
                 self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
 
+    def test_css_generated_words_from_a_variable_are_flagged(self):
+        for head_css, heading_style in (
+            ('.k::before { content: var(--t) }', '--t: "Exclusive: losses ahead "'),
+            # A string that mentions the variable is not a reference to it.
+            ('.k { --t: "Exclusive: losses ahead var(--t) " } .k::before { content: var(--t) }', ""),
+        ):
+            with self.subTest(css=head_css):
+                html = article_page(f'<span class="k"></span>{HEADLINE}', head_extra=f"<style>{head_css}</style>")
+                if heading_style:
+                    html = html.replace("<h1>", f"<h1 style='{heading_style}'>")
+                article = GUARD.extract_article(html)
+                self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
+
     def test_css_generated_words_hidden_only_by_an_undecided_block_are_flagged(self):
         css = ('.k::before { content: "Exclusive: losses ahead " } '
                '@supports (bogus: 1) { .k::before { display: none } }')

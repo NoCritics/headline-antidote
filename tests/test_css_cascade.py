@@ -344,6 +344,14 @@ CHROME_DECIDED_CASES = (
     (".x{opacity:0;--a:var(--a);opacity:var(--a)}", "", False),
     (".x{--a:var(--b,0);--b:var(--a,0);opacity:var(--a)}", "", False),
     (".x{opacity:0;opacity:var(--undefined)}", "", False),
+    # A variable defined where the rule using it cannot see it: an inline style.
+    (".x{opacity:var(--o)}", "--o:0", True),
+    (".x{position:absolute;left:var(--l)}", "--l:-9999px", True),
+    # html and body are separate elements, and :root outranks html on the same one.
+    ("html{--b:0;--a:var(--b)} body{--b:1} .x{opacity:var(--a)}", "", True),
+    (":root{--o:0} html{--o:1} .x{opacity:var(--o)}", "", True),
+    # Variable names are case-sensitive.
+    (".x{--Hide:0;opacity:var(--Hide)}", "", True),
 )
 
 
@@ -620,6 +628,35 @@ class DeepNestingTests(unittest.TestCase):
             css += f"--d{index}:calc(var(--d{index - 1}) + var(--d{index - 1}));"
         css += "opacity:var(--d30)}"
         self.assert_payload_not_passed(at_rule_page(css))
+
+    def test_a_variable_defined_by_a_later_stylesheet_or_an_ancestor_inline_style_is_seen(self):
+        self.assert_hidden(at_rule_page(".a{--o:0}"), stylesheets=[".x{opacity:var(--o)}"])
+        self.assert_hidden(at_rule_page(".a{--l:-9999px}"), stylesheets=[".x{position:absolute;left:var(--l)}"])
+        for css, style in ((".x{opacity:var(--o)}", "--o:0"),
+                           (".x{position:absolute;left:var(--l)}", "--l:-9999px")):
+            with self.subTest(css=css):
+                html = at_rule_page(css).replace("<h1>", f'<h1 style="{style}">')
+                self.assert_hidden(html)
+
+    def test_many_large_variables_do_not_pass_and_are_read_quickly(self):
+        import time
+
+        # --d13 resolves to about 80,000 characters; 200 distinct copies of it are used.
+        css = ":root{--d0:0;"
+        for index in range(1, 14):
+            css += f"--d{index}:calc(var(--d{index - 1}) + var(--d{index - 1}));"
+        for index in range(200):
+            css += f"--e{index}:calc(var(--d13) * {index});"
+        css += "}"
+        spans = ""
+        for index in range(200):
+            css += f".s{index}{{opacity:var(--e{index})}}"
+            spans += f'<span class="s{index}"> word</span>'
+        html = at_rule_page(css).replace("</h1>", spans + "</h1>")
+        started = time.perf_counter()
+        result = GUARD.analyze_html(html, "//h1")
+        self.assertLess(time.perf_counter() - started, 3)
+        self.assertNotEqual(result.verdict, "pass")
 
     def test_long_variable_chains_and_fallbacks_are_read_quickly(self):
         import time
