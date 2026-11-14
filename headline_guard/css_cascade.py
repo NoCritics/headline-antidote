@@ -34,7 +34,7 @@ parts of the page, or hiding applied by JavaScript.
 
 import hashlib
 import re
-from collections import OrderedDict, namedtuple
+from collections import ChainMap, OrderedDict, namedtuple
 
 import cssselect2
 import tinycss2
@@ -53,6 +53,9 @@ from .media_queries import media_query_applies
 # than this once resolved (one variable repeating another can double it at every step) counts as
 # one the reader cannot check, which hides the element. Real pages' resolved values are far shorter.
 MAXIMUM_RESOLVED_CHARACTERS = 100_000
+# And all a page's resolved values together (real pages: at most 20,529 in 540 readings), so many
+# values just under the limit cannot take minutes either.
+MAXIMUM_PAGE_RESOLVED_CHARACTERS = 1_000_000
 # Deciding which rules could hide text, each var() takes every value any rule gives the variable;
 # past this many expansions of one value the rule is assumed able to hide.
 MAXIMUM_VARIABLE_FORMS = 64
@@ -200,7 +203,8 @@ def _hiding_declarations(items):
         name = declaration.name if declaration.name.startswith("--") else declaration.lower_name
         if name in HIDING_PROPERTIES or name.startswith("--"):
             value = _serialized(declaration.value).strip()
-            if not name.startswith("--"):
+            # Variable names are case-sensitive, so a value using one is lowercased once resolved.
+            if not name.startswith("--") and "var(" not in value:
                 value = value.lower()
             found.append((name, value, declaration.important))
     return found
@@ -212,15 +216,19 @@ def _hiding_declarations(items):
 _INVALID = object()
 _OVER_BUDGET = object()
 _VARIABLE_NAME = re.compile(r"\s*(--[\w-]+)\s*")
-_VARIABLE_NAME_REFERENCE = re.compile(r"var\(\s*(--[\w-]+)")
 
 
 def _variable_references(value):
-    """The names of the variables value refers to, fallbacks included, each once."""
+    """The names of the variables value refers to, fallbacks included, each once (a var() written
+    inside a quoted string is text, not a reference)."""
     names = []
-    for name in _VARIABLE_NAME_REFERENCE.findall(value):
-        if name not in names:
-            names.append(name)
+    if "var(" not in value:
+        return names
+    _, variable_starts = _parentheses(value)
+    for start in sorted(variable_starts):
+        match = _VARIABLE_NAME.match(value, start + 4)
+        if match is not None and match.group(1) not in names:
+            names.append(match.group(1))
     return names
 
 
@@ -440,6 +448,8 @@ def _is_pseudo_candidate(declarations):
         if name == "position" and value.lower() == "absolute":
             return True
         if name == "content":
+            if "var(" in value:
+                return True
             for string in quoted_strings(value):
                 letters = 0
                 for character in string:
@@ -869,17 +879,20 @@ class _RuleSet:
         compiled_stylesheets = []
         if inherited_rules is None:
             self.site_variables = {}
+            self.site_variable_specificity = {}
             inherited_layers = None
             first_order = 0
         else:
             self.site_variables = dict(inherited_rules.site_variables)
+            self.site_variable_specificity = dict(inherited_rules.site_variable_specificity)
             inherited_layers = inherited_rules.layer_order
             first_order = inherited_rules.last_order
         # Every value some rule gives each custom property, these stylesheets' and the earlier ones'.
-        self.variable_values = {}
-        if inherited_rules is not None:
-            for name, values in inherited_rules.variable_values.items():
-                self.variable_values[name] = list(values)
+        # Only the variables these stylesheets define are stored here (with the earlier values
+        # too); the rest are read from the earlier rule set, which a site's pages all share.
+        self.own_variable_values = {}
+        inherited_values = inherited_rules.variable_values if inherited_rules is not None else {}
+        self.variable_values = ChainMap(self.own_variable_values, inherited_values)
         # Custom properties defined on narrower selectors (or in undecided blocks), looked up
         # through the full cascade.
         self.scoped_variable_names = set()
@@ -901,17 +914,40 @@ class _RuleSet:
                 # A site-wide definition in a layer or an undecided block competes in the
                 # cascade (unlayered definitions win), so it is looked up there instead.
                 site_wide = rule.selector_text in SITE_WIDE_SELECTORS and not undecided and not rule.layer
+                selector_parts = rule.selector_text.split(",")
+                # The root element's own values (:root outranks html); body is another element,
+                # so its definitions are looked up in the cascade like narrower ones.
+                root_level = site_wide and "body" not in selector_parts
+                specificity = 1 if ":root" in selector_parts else 0
                 for name, value, _ in rule.declarations:
                     if name.startswith("--"):
-                        values = self.variable_values.setdefault(name, [])
+                        values = self.own_variable_values.get(name)
+                        if values is None:
+                            values = list(inherited_values.get(name, ()))
+                            self.own_variable_values[name] = values
                         if value not in values:
                             values.append(value)
-                        if site_wide:
-                            self.site_variables[name] = value
+                        if root_level:
+                            if specificity >= self.site_variable_specificity.get(name, 0):
+                                self.site_variables[name] = value
+                                self.site_variable_specificity[name] = specificity
                         else:
                             self.scoped_variable_names.add(name)
                         if undecided:
                             self.undecided_variable_names.add(name)
+        # Which variables refer to each variable, in any value some rule gives them (see variable_users_of).
+        self._inherited_rules = inherited_rules
+        self._own_variable_users = {}
+        for name, values in self.own_variable_values.items():
+            for value in values:
+                for reference in _variable_references(value):
+                    users = self._own_variable_users.setdefault(reference, set())
+                    users.add(name)
+        # Rules judged unable to hide with the variable values these stylesheets give, which a
+        # page may change (its own CSS, inline styles): (selectors, declarations), and their
+        # positions by the variables they use (see _late_hiding_matcher).
+        self.variable_dependent_rules = []
+        self.rules_using_variable = {}
         self.hiding_matcher = cssselect2.Matcher()
         self.full_matcher = cssselect2.Matcher()
         self.pseudo_matcher = cssselect2.Matcher()
@@ -953,6 +989,14 @@ class _RuleSet:
                 could_hide = rule.could_hide
                 if could_hide is None:
                     could_hide = _rule_could_hide(declarations, self.variable_values)
+                    if not could_hide and not undecided:
+                        position = len(self.variable_dependent_rules)
+                        self.variable_dependent_rules.append((rule.selectors, declarations))
+                        for name, value, _ in declarations:
+                            if name.startswith("--"):
+                                continue
+                            for reference in _variable_references(value):
+                                self.rules_using_variable.setdefault(reference, []).append(position)
                 if undecided:
                     # Its declarations may combine with others into hiding (an overlay split
                     # between blocks), so the elements it matches always get the full cascade.
@@ -974,6 +1018,14 @@ class _RuleSet:
                         )
                         self.has_variable_rules = True
         self.last_order = order
+
+    def variable_users_of(self, name):
+        """The variables some value of which refers to name, in these stylesheets or earlier ones."""
+        users = set(self._own_variable_users.get(name, ()))
+        if self._inherited_rules is not None:
+            for user in self._inherited_rules.variable_users_of(name):
+                users.add(user)
+        return users
 
     def font_matcher(self):
         if self._font_matcher is None:
@@ -1000,6 +1052,65 @@ def _rule_set(stylesheet_texts, inherited_rules, stylesheet_cache, rule_set_cach
     rule_set = _RuleSet(stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_rules, cache_key)
     rule_set_cache.store(cache_key, rule_set, source_size)
     return rule_set
+
+
+def _late_hiding_matcher(root, external_rules, page_rules):
+    """A matcher of the rules a cached rule set judged unable to hide only because a variable they
+    use, directly or through other variables, gets more values on this page than that rule set
+    can see: from the page's own CSS (for the external stylesheets) or an inline style. None when
+    there are none."""
+    inline_values = {}
+    for element in root.iter():
+        if not isinstance(element.tag, str):
+            continue
+        style = element.get("style")
+        if style and "--" in style:
+            for name, value, _ in _declarations(style):
+                if name.startswith("--"):
+                    values = inline_values.setdefault(name, [])
+                    if value not in values:
+                        values.append(value)
+    page_only_names = []
+    for name, values in page_rules.own_variable_values.items():
+        if len(values) > len(external_rules.variable_values.get(name, ())):
+            page_only_names.append(name)
+    if not inline_values and not page_only_names:
+        return None
+    all_values = page_rules.variable_values
+    if inline_values:
+        combined_values = {}
+        for name, values in inline_values.items():
+            combined = list(page_rules.variable_values.get(name, ()))
+            for value in values:
+                if value not in combined:
+                    combined.append(value)
+            combined_values[name] = combined
+        all_values = ChainMap(combined_values, page_rules.variable_values)
+    matcher = None
+    for rule_set, unseen_names in ((external_rules, page_only_names + list(inline_values)),
+                                   (page_rules, list(inline_values))):
+        if not rule_set.variable_dependent_rules or not unseen_names:
+            continue
+        affected = set(unseen_names)
+        pending = list(unseen_names)
+        while pending:
+            name = pending.pop()
+            for user in page_rules.variable_users_of(name):
+                if user not in affected:
+                    affected.add(user)
+                    pending.append(user)
+        positions = set()
+        for name in affected:
+            for position in rule_set.rules_using_variable.get(name, ()):
+                positions.add(position)
+        for position in sorted(positions):
+            selectors, declarations = rule_set.variable_dependent_rules[position]
+            if _rule_could_hide(declarations, all_values):
+                if matcher is None:
+                    matcher = cssselect2.Matcher()
+                for selector in selectors:
+                    matcher.add_selector(selector, None)
+    return matcher
 
 
 def external_rule_set(stylesheets):
@@ -1112,6 +1223,8 @@ class CascadeRules:
         external_rules = external_rule_set(stylesheets)
         page_rules = _rule_set(page_stylesheet_texts, external_rules, _page_stylesheets, _page_rule_sets)
         self._site_variables = page_rules.site_variables
+        self._root = root
+        self._late_hiding_matcher = _late_hiding_matcher(root, external_rules, page_rules)
         self._rule_sets = []
         self._scoped_variable_names = set()
         self._undecided_variable_names = set()
@@ -1165,6 +1278,7 @@ class CascadeRules:
         self._variable_sources = {}
         self._variable_values = {}
         self._unresolvable = set()
+        self._resolved_characters = 0
 
     def _is_examined(self, element):
         """Whether a rule whose values could hide text matches the element (step 1)."""
@@ -1177,6 +1291,8 @@ class CascadeRules:
                     if rule_set.has_hiding_rules and rule_set.hiding_matcher.match(element_wrapper):
                         examined = True
                         break
+                if not examined and self._late_hiding_matcher is not None:
+                    examined = bool(self._late_hiding_matcher.match(element_wrapper))
             self._examined[element] = examined
         return examined
 
@@ -1348,6 +1464,9 @@ class CascadeRules:
         inherit: origin, then its ancestors, then the site-wide values (node None); None when
         nothing declares it."""
         if origin is None:
+            if name in self._scoped_variable_names:
+                # The site-wide values are the root element's: look it up there in the cascade.
+                return self._variable_source(self._root, name)
             return (None, name) if name in self._site_variables else None
         walked = []
         node = origin
@@ -1416,7 +1535,12 @@ class CascadeRules:
 
         def value_of(name):
             return self._variable_value(self._variable_source(origin, name))
-        return _substituted(value, value_of)
+        resolved = _substituted(value, value_of)
+        if isinstance(resolved, str):
+            self._resolved_characters += len(resolved)
+            if self._resolved_characters > MAXIMUM_PAGE_RESOLVED_CHARACTERS:
+                return _OVER_BUDGET
+        return resolved
 
     def _resolve_variables(self, element, value):
         """value with its var() resolved; "" when invalid (Chrome then treats it as unset). Raises
