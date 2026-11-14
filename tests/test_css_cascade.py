@@ -334,7 +334,46 @@ CHROME_DECIDED_CASES = (
     (".x{opacity:calc(" + "(" * 99 + "0" + ")" * 99 + ")}", "", True),
     (".x{opacity:calc(" + "(" * 100 + "0" + ")" * 100 + ")}", "", False),
     (".x{opacity:" + "min(" * 3000 + "0" + ")" * 3000 + "}", "", False),
+    # A variable's own var() resolves on the element that declares it; descendants inherit the result.
+    (":root{--b:0;--a:var(--b)} .x{--b:1;opacity:var(--a)}", "", True),
+    (":root{--a:var(--b)} .x{--b:0;opacity:var(--a,1)}", "", False),
+    # Every variable in a cycle is invalid: a var() of it takes its fallback, and a declaration with
+    # no fallback is unset (not the earlier declaration).
+    (".x{--a:var(--a);opacity:var(--a,0)}", "", True),
+    (".x{--a:calc(1 + var(--a));opacity:var(--a,0)}", "", True),
+    (".x{opacity:0;--a:var(--a);opacity:var(--a)}", "", False),
+    (".x{--a:var(--b,0);--b:var(--a,0);opacity:var(--a)}", "", False),
+    (".x{opacity:0;opacity:var(--undefined)}", "", False),
 )
+
+
+def variable_chain(depth, value):
+    """--v0 through --v<depth>, each the var() of the next, the last one value."""
+    declarations = ""
+    for index in range(depth):
+        declarations += f"--v{index}:var(--v{index + 1});"
+    return declarations + f"--v{depth}:{value};"
+
+
+def variable_chain_cases():
+    """Chains of var() defined where a page may define them, for a property the reader examines
+    cheaply (opacity) and one it does not (left). Chrome resolves chains thousands long."""
+    cases = []
+    for property_name, value, hiding in (("opacity", "0", "opacity:var(--v0)"),
+                                         ("left", "-9999px", "position:absolute;left:var(--v0)")):
+        for depth in (10, 11, 1000):
+            chain = variable_chain(depth, value)
+            cases.append((":root{" + chain + "} .x{" + hiding + "}", "", True))
+            cases.append((".x{" + chain + hiding + "}", "", True))
+            cases.append(("h1{" + chain + "} .x{" + hiding + "}", "", True))
+            cases.append(("", chain + hiding, True))
+            # Nested fallbacks of variables that are not defined.
+            nested_fallbacks = "var(--n," * depth + value + ")" * depth
+            cases.append((".x{" + hiding.replace("var(--v0)", nested_fallbacks) + "}", "", True))
+    return tuple(cases)
+
+
+CHROME_DECIDED_CASES += variable_chain_cases()
 
 # Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
 # @scope, whose rules Chrome ranks by the scope root's nearness): Chrome may apply any of them, so
@@ -573,6 +612,26 @@ class DeepNestingTests(unittest.TestCase):
         ):
             with self.subTest(css=css[:40]):
                 self.assert_hidden(at_rule_page(css))
+
+    def test_variables_too_large_to_resolve_do_not_pass(self):
+        # Each variable repeats the previous one twice: 30 levels resolve to 2**30 zeros.
+        css = ".x{--d0:0;"
+        for index in range(1, 31):
+            css += f"--d{index}:calc(var(--d{index - 1}) + var(--d{index - 1}));"
+        css += "opacity:var(--d30)}"
+        self.assert_payload_not_passed(at_rule_page(css))
+
+    def test_long_variable_chains_and_fallbacks_are_read_quickly(self):
+        import time
+
+        for css in (
+            ".x{" + variable_chain(6000, "0") + "opacity:var(--v0)}",
+            ".x{opacity:" + "var(--n," * 5000 + "0" + ")" * 5000 + "}",
+        ):
+            with self.subTest(css=css[:30]):
+                started = time.perf_counter()
+                self.assert_hidden(at_rule_page(css))
+                self.assertLess(time.perf_counter() - started, 2)
 
     def test_an_inline_style_nested_thousands_deep_is_read(self):
         self.assert_hidden(at_rule_page("", "display:none;--a:" + nested("f(", "1", ")", 3000)))
