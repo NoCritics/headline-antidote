@@ -510,6 +510,20 @@ class HeadlineDrawingTests(unittest.TestCase):
         self.assertIn("css_generated_text", [flag.kind for flag in article.flags])
         self.assertEqual(article.verdict, "review")
 
+    def test_css_generated_words_follow_chrome_dropping_invalid_declarations(self):
+        # Chrome drops the invalid declaration, so the earlier one applies (checked in Chrome 157).
+        words = '"Exclusive: losses ahead "'
+        for rule, flagged in (("content:" + words + ';content:"x" banana', True),
+                              ("content:none;content:" + words + " banana", False),
+                              ("display:none;display:blok;content:" + words, False)):
+            with self.subTest(rule=rule):
+                html = article_page(f'<span class="k"></span>{HEADLINE}',
+                                    head_extra=f"<style>.k::before {{ {rule} }}</style>")
+                kinds = []
+                for flag in GUARD.extract_article(html).flags:
+                    kinds.append(flag.kind)
+                self.assertEqual("css_generated_text" in kinds, flagged)
+
     def test_css_generated_words_from_a_selector_nested_too_deep_to_read_are_flagged(self):
         for depth in (1, 33, 300):
             with self.subTest(depth=depth):

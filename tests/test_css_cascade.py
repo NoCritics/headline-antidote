@@ -434,6 +434,15 @@ CHROME_DECIDED_CASES += (
     # is then inherited (from the visible h1), opacity takes its initial value.
     (":root{--v:banana} .x{visibility:hidden;visibility:var(--v)}", "", False),
     (":root{--v:banana} .x{opacity:0;opacity:var(--v)}", "", False),
+    # An invalid custom property is dropped too, so the earlier definition holds.
+    (".x{--o:0;--o:1 ];opacity:var(--o)}", "", True),
+    (".x{--o:0;--o:1 !;opacity:var(--o)}", "", True),
+    (".x{--o:0;--o:1 );opacity:var(--o)}", "", True),
+    (".x{--o:0} h1 .x{--o:1 ]} .x{opacity:var(--o)}", "", True),
+    (".x{--o:0;opacity:var(--o)}", "--o:1 ]", True),
+    # calc() nested 100 deep applies once var() is substituted; 101 deep is unset.
+    (".x{--z:0;opacity:" + "calc(" * 100 + "var(--z)" + ")" * 100 + "}", "", True),
+    (".x{--z:0;opacity:" + "calc(" * 101 + "var(--z)" + ")" * 101 + "}", "", False),
     (":root{--v:translateX(-9999px) foo} .x{display:inline-block;transform:var(--v)}", "", False),
     (":root{--v:-9999px 0} .x{position:absolute;left:var(--v)}", "", False),
     (":root{--v:opacity(0) foo} .x{filter:var(--v)}", "", False),
@@ -495,6 +504,30 @@ class AtRuleTests(unittest.TestCase):
                     self.assert_hidden(at_rule_page(css, inline_style))
                 else:
                     self.assert_visible(at_rule_page(css, inline_style))
+
+    def test_values_that_cannot_be_validated_count_both_ways(self):
+        # Were every value one the validator cannot decide, everything Chrome hides must still
+        # read as hidden: each such value may apply or not, independently of the others.
+        from unittest import mock
+
+        from headline_guard import css_cascade, css_validity
+
+        def clear_caches():
+            css_cascade._substituted_validity.cache_clear()
+            for cache in (css_cascade._external_stylesheets, css_cascade._external_rule_sets,
+                          css_cascade._page_stylesheets, css_cascade._page_rule_sets):
+                cache.clear()
+
+        def unknown(name, value_tokens):
+            return css_validity.UNKNOWN
+
+        clear_caches()
+        self.addCleanup(clear_caches)
+        with mock.patch.object(css_cascade, "declaration_validity", unknown):
+            for css, inline_style, hidden in CHROME_DECIDED_CASES:
+                if hidden:
+                    with self.subTest(css=css, inline_style=inline_style):
+                        self.assert_hidden(at_rule_page(css, inline_style))
 
     def test_undecided_blocks_never_show_hidden_text_again(self):
         for css in UNDECIDED_BLOCK_CASES:
