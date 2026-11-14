@@ -158,7 +158,11 @@ With `tinycss2` and `cssselect2` installed (pinned: 1.5.1 and 0.10.1; 0.10.1 fix
   - each variable resolved on the element that declares it and inherited from there;
   - a variable in a cycle is invalid, so a `var()` of it takes its fallback, and a declaration with nothing usable is unset.
 
-  A value that would resolve to more than 100,000 characters (each variable repeating the one before can double it) counts as hidden. To pick which elements need the full cascade, each `var()` takes every value any stylesheet gives the variable, so `left: var(--x)` with `--x: -9999px` set on any element is caught;
+  - `:root` outranks `html`, `body` is a separate element, and `VAR()` is `var()`, as in Chrome.
+
+  An element counts as hidden when one of its values would resolve to more than 100,000 characters (each variable repeating the one before can double it), or when the page's resolved values pass 1,000,000 characters together. Real pages reach at most 20,529.
+
+  To pick which elements need the full cascade, each `var()` takes every value any stylesheet or inline style on the page gives the variable. So `left: var(--x)` is caught wherever `--x: -9999px` is set. This examines about 16% more elements than the old rule, which examined only `display`, `visibility`, `opacity` and `font-size` values using `var()`;
 - contrast against the real background, including backgrounds set by stylesheets;
 - **external stylesheets**, if you pass their CSS text. The guard never fetches anything itself:
 
