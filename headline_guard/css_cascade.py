@@ -49,7 +49,13 @@ from .css_hiding import (
 from .css_values import length_in_pixels, parse_color, quoted_strings
 from .media_queries import media_query_applies
 
-MAXIMUM_VARIABLE_DEPTH = 10
+# var() resolves to any depth, as in Chrome, which follows chains thousands long. A value longer
+# than this once resolved (one variable repeating another can double it at every step) counts as
+# one the reader cannot check, which hides the element. Real pages' resolved values are far shorter.
+MAXIMUM_RESOLVED_CHARACTERS = 100_000
+# Deciding which rules could hide text, each var() takes every value any rule gives the variable;
+# past this many expansions of one value the rule is assumed able to hide.
+MAXIMUM_VARIABLE_FORMS = 64
 # Cache budgets, in characters of CSS source. Compiled CSS takes about 13 times its source
 # size in memory (7 to 26 times on the fresh page set), so 24 million characters is about
 # 300 MB: room for every site of a pipeline (the 47 sites of the fresh set have 19.5 million).
@@ -82,7 +88,6 @@ HIDING_PROPERTIES = {
 
 # Rules on these selectors define site-wide CSS variables, substituted before deciding which rules matter.
 SITE_WIDE_SELECTORS = {":root", "html", "body", ":root,html", "html,:root", "html,body", ":root,body"}
-UNRESOLVED_VARIABLE_PROPERTIES = {"display", "visibility", "opacity", "font-size"}
 _VARIABLE_REFERENCE = re.compile(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))?\)")
 
 
@@ -201,29 +206,151 @@ def _hiding_declarations(items):
     return found
 
 
-def _substitute_site_variables(value, site_variables, depth=0):
-    if "var(" not in value or depth > MAXIMUM_VARIABLE_DEPTH:
+# What a value resolves to when it cannot be used: invalid (a var() with neither a value nor a
+# fallback, or a variable in a cycle; Chrome then treats the declaration as unset), or too long
+# to check (see MAXIMUM_RESOLVED_CHARACTERS).
+_INVALID = object()
+_OVER_BUDGET = object()
+_VARIABLE_NAME = re.compile(r"\s*(--[\w-]+)\s*")
+_VARIABLE_NAME_REFERENCE = re.compile(r"var\(\s*(--[\w-]+)")
+
+
+def _variable_references(value):
+    """The names of the variables value refers to, fallbacks included, each once."""
+    names = []
+    for name in _VARIABLE_NAME_REFERENCE.findall(value):
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def _parentheses(text):
+    """(where each "(" closes, where var( functions start), outside quoted strings. An unclosed
+    parenthesis closes at the end of the text."""
+    closing = {}
+    variable_starts = set()
+    open_positions = []
+    quote = None
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if quote is not None:
+            if character == "\\":
+                index += 1
+            elif character == quote:
+                quote = None
+        elif character in "\"'":
+            quote = character
+        elif character == "(":
+            open_positions.append(index)
+            if index >= 3 and text.startswith("var", index - 3) and (
+                    index == 3 or not (text[index - 4].isalnum() or text[index - 4] in "-_")):
+                variable_starts.add(index - 3)
+        elif character == ")" and open_positions:
+            closing[open_positions.pop()] = index
+        index += 1
+    for position in open_positions:
+        closing[position] = len(text)
+    return closing, variable_starts
+
+
+def _substituted(value, value_of):
+    """value with every var() replaced by value_of(name) (a resolved text, None when undefined,
+    _INVALID or _OVER_BUDGET), or by its fallback when the variable has no usable value. Returns
+    _INVALID when a var() has neither, _OVER_BUDGET past MAXIMUM_RESOLVED_CHARACTERS. Fallbacks
+    nested any depth are followed with an explicit stack."""
+    if "var(" not in value:
         return value
-    match = _VARIABLE_REFERENCE.search(value)
-    if match is None:
-        return value
-    replacement = site_variables.get(match.group(1))
-    if replacement is None:
-        if match.group(2) is None:
-            return value  # defined somewhere more specific: leave unresolved
-        replacement = match.group(2)
-    substituted = value[:match.start()] + replacement.strip() + value[match.end():]
-    return _substitute_site_variables(substituted, site_variables, depth + 1)
+    closing, variable_starts = _parentheses(value)
+    pieces = []
+    length = 0
+    position = 0
+    end = len(value)
+    resume = []  # where to carry on after each fallback being written
+    while True:
+        if position >= end:
+            if not resume:
+                break
+            position, end = resume.pop()
+            continue
+        start = value.find("var(", position, end)
+        while start != -1 and start not in variable_starts:
+            start = value.find("var(", start + 4, end)
+        piece_end = end if start == -1 else start
+        if piece_end > position:
+            pieces.append(value[position:piece_end])
+            length += piece_end - position
+            if length > MAXIMUM_RESOLVED_CHARACTERS:
+                return _OVER_BUDGET
+        if start == -1:
+            position = end
+            continue
+        close = closing[start + 3]
+        name_match = _VARIABLE_NAME.match(value, start + 4, close)
+        if name_match is None:
+            return _INVALID
+        after_name = name_match.end()
+        has_fallback = after_name < close and value[after_name] == ","
+        if not has_fallback and value[after_name:close].strip():
+            return _INVALID
+        variable_value = value_of(name_match.group(1))
+        if variable_value is _OVER_BUDGET:
+            return _OVER_BUDGET
+        if isinstance(variable_value, str):
+            replacement = variable_value.strip()
+            pieces.append(replacement)
+            length += len(replacement)
+            if length > MAXIMUM_RESOLVED_CHARACTERS:
+                return _OVER_BUDGET
+            position = close + 1
+        elif has_fallback:
+            resume.append((close + 1, end))
+            position = after_name + 1
+            end = close
+            while position < end and value[position].isspace():
+                position += 1
+            while end > position and value[end - 1].isspace():
+                end -= 1
+        else:
+            return _INVALID
+    return "".join(pieces)
+
+
+def _variable_forms(value, variable_values):
+    """Every text value can take when each var() in it becomes any value some rule gives that
+    variable, or its fallback (or nothing, when it is undefined or invalid); None past
+    MAXIMUM_VARIABLE_FORMS expansions, or for a var() this pattern cannot take apart."""
+    if "var(" not in value:
+        return [value]
+    pending = [value]
+    seen = {value}
+    finished = []
+    steps = 0
+    while pending:
+        partial = pending.pop()
+        steps += 1
+        if steps > MAXIMUM_VARIABLE_FORMS:
+            return None
+        match = _VARIABLE_REFERENCE.search(partial)
+        if match is None:
+            if "var(" in partial:
+                return None
+            finished.append(partial)
+            continue
+        replacements = list(variable_values.get(match.group(1), ()))
+        replacements.append(match.group(2) or "")
+        for replacement in replacements:
+            expanded = partial[:match.start()] + replacement.strip() + partial[match.end():]
+            if expanded not in seen:
+                seen.add(expanded)
+                pending.append(expanded)
+    return finished
 
 
 def _could_hide(name, value):
     """Whether one declaration could, alone or with others, hide text. Used to pick elements to examine."""
     if name.startswith("--"):
         return False  # custom properties are looked up on demand when a var() is resolved
-    if "var(" in value:
-        # Still unresolved after substituting the site-wide :root variables: examine only the
-        # strongest hiding properties, since modern CSS writes almost every value as a var().
-        return name in UNRESOLVED_VARIABLE_PROPERTIES
     if name == "display":
         return value == "none"
     if name == "visibility":
@@ -267,21 +394,44 @@ def _could_hide(name, value):
     return False
 
 
-def _rule_could_cover(declarations, site_variables):
-    """A rule that draws an opaque overlay over its box (checked on the whole rule, not one value)."""
-    values = {}
-    for name, value, _ in declarations:
-        if not name.startswith("--"):
-            values[name] = _substitute_site_variables(value, site_variables).lower()
-    return is_covering_overlay(values)
-
-
-def _rule_could_hide(declarations, site_variables):
-    """Whether a rule must be matched in step 1: one of its values could hide text, or it draws an overlay."""
-    for name, value, _ in declarations:
-        if _could_hide(name, _substitute_site_variables(value, site_variables).lower()):
+def _rule_could_cover(forms_by_name):
+    """A rule that draws an opaque overlay over its box, in any combination of its values' forms
+    (checked on the whole rule, not one value)."""
+    combinations = [{}]
+    for name, forms in forms_by_name:
+        extended = []
+        for combination in combinations:
+            for form in forms:
+                choice = dict(combination)
+                choice[name] = form
+                extended.append(choice)
+        combinations = extended
+        if len(combinations) > MAXIMUM_VARIABLE_FORMS:
             return True
-    return _rule_could_cover(declarations, site_variables)
+    for combination in combinations:
+        if is_covering_overlay(combination):
+            return True
+    return False
+
+
+def _rule_could_hide(declarations, variable_values):
+    """Whether a rule must be matched in step 1: one of its values could hide text, or it draws an
+    overlay, whatever value its variables take (variable_values: every value rules give each one)."""
+    forms_by_name = []
+    for name, value, _ in declarations:
+        if name.startswith("--"):
+            continue
+        forms = _variable_forms(value, variable_values)
+        if forms is None:
+            return True
+        lowered = []
+        for form in forms:
+            form = form.lower()
+            if _could_hide(name, form):
+                return True
+            lowered.append(form)
+        forms_by_name.append((name, lowered))
+    return _rule_could_cover(forms_by_name)
 
 
 def _is_pseudo_candidate(declarations):
@@ -700,13 +850,6 @@ class _LayerOrder:
                 return True
         return False
 
-    def cache_key(self):
-        entries = []
-        for path, position in self.positions.items():
-            entries.append((position, path, path in self.tentative, path in self.named_outside_undecided_blocks))
-        entries.sort(key=lambda entry: entry[0])
-        return tuple(entries)
-
 
 def _negated(rank):
     negated = []
@@ -720,10 +863,23 @@ class _RuleSet:
 
     Matcher payloads are (order, layer rank, layer rank for !important, undecided, declarations)."""
 
-    def __init__(self, stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_variables,
-                 inherited_layers, first_order):
+    def __init__(self, stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_rules, cache_key):
+        """inherited_rules: the _RuleSet of the stylesheets before these in the cascade, or None."""
+        self.cache_key = cache_key
         compiled_stylesheets = []
-        self.site_variables = dict(inherited_variables)
+        if inherited_rules is None:
+            self.site_variables = {}
+            inherited_layers = None
+            first_order = 0
+        else:
+            self.site_variables = dict(inherited_rules.site_variables)
+            inherited_layers = inherited_rules.layer_order
+            first_order = inherited_rules.last_order
+        # Every value some rule gives each custom property, these stylesheets' and the earlier ones'.
+        self.variable_values = {}
+        if inherited_rules is not None:
+            for name, values in inherited_rules.variable_values.items():
+                self.variable_values[name] = list(values)
         # Custom properties defined on narrower selectors (or in undecided blocks), looked up
         # through the full cascade.
         self.scoped_variable_names = set()
@@ -747,16 +903,15 @@ class _RuleSet:
                 site_wide = rule.selector_text in SITE_WIDE_SELECTORS and not undecided and not rule.layer
                 for name, value, _ in rule.declarations:
                     if name.startswith("--"):
+                        values = self.variable_values.setdefault(name, [])
+                        if value not in values:
+                            values.append(value)
                         if site_wide:
                             self.site_variables[name] = value
                         else:
                             self.scoped_variable_names.add(name)
                         if undecided:
                             self.undecided_variable_names.add(name)
-        decidable_variables = {}
-        for name, value in self.site_variables.items():
-            if name not in self.undecided_variable_names and name not in self.scoped_variable_names:
-                decidable_variables[name] = value
         self.hiding_matcher = cssselect2.Matcher()
         self.full_matcher = cssselect2.Matcher()
         self.pseudo_matcher = cssselect2.Matcher()
@@ -797,7 +952,7 @@ class _RuleSet:
                         variable_declarations.append(declaration)
                 could_hide = rule.could_hide
                 if could_hide is None:
-                    could_hide = _rule_could_hide(declarations, decidable_variables)
+                    could_hide = _rule_could_hide(declarations, self.variable_values)
                 if undecided:
                     # Its declarations may combine with others into hiding (an overlay split
                     # between blocks), so the elements it matches always get the full cascade.
@@ -830,21 +985,19 @@ class _RuleSet:
         return self._font_matcher
 
 
-def _rule_set(stylesheet_texts, inherited_variables, inherited_layers, first_order, stylesheet_cache,
-              rule_set_cache):
-    """A cached _RuleSet: a site's external stylesheets are shared by all its pages."""
+def _rule_set(stylesheet_texts, inherited_rules, stylesheet_cache, rule_set_cache):
+    """A cached _RuleSet: a site's external stylesheets are shared by all its pages. Its stylesheets
+    and the earlier ones it inherits from (inherited_rules) decide it, so they are its cache key."""
     stylesheet_keys = []
     source_size = 0
     for stylesheet_text in stylesheet_texts:
         stylesheet_keys.append(_stylesheet_key(stylesheet_text))
         source_size += len(stylesheet_text)
-    layers_key = inherited_layers.cache_key() if inherited_layers is not None else ()
-    cache_key = (tuple(stylesheet_keys), first_order, tuple(sorted(inherited_variables.items())), layers_key)
+    cache_key = (tuple(stylesheet_keys), inherited_rules.cache_key if inherited_rules is not None else None)
     cached = rule_set_cache.lookup(cache_key)
     if cached is not None:
         return cached
-    rule_set = _RuleSet(stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_variables,
-                        inherited_layers, first_order)
+    rule_set = _RuleSet(stylesheet_texts, stylesheet_keys, stylesheet_cache, inherited_rules, cache_key)
     rule_set_cache.store(cache_key, rule_set, source_size)
     return rule_set
 
@@ -852,7 +1005,7 @@ def _rule_set(stylesheet_texts, inherited_variables, inherited_layers, first_ord
 def external_rule_set(stylesheets):
     """The _RuleSet of a page's external stylesheets, compiled once and cached for the site's
     other pages (see EXTERNAL_CSS_CACHE_CHARACTERS)."""
-    return _rule_set(list(stylesheets or ()), {}, None, 0, _external_stylesheets, _external_rule_sets)
+    return _rule_set(list(stylesheets or ()), None, _external_stylesheets, _external_rule_sets)
 
 
 class _SharedElementWrapper(cssselect2.ElementWrapper):
@@ -957,8 +1110,7 @@ class CascadeRules:
                 page_stylesheet_texts.append(style_element.text or "")
         # External stylesheets come first in the cascade, then the page's own <style> blocks.
         external_rules = external_rule_set(stylesheets)
-        page_rules = _rule_set(page_stylesheet_texts, external_rules.site_variables, external_rules.layer_order,
-                               external_rules.last_order, _page_stylesheets, _page_rule_sets)
+        page_rules = _rule_set(page_stylesheet_texts, external_rules, _page_stylesheets, _page_rule_sets)
         self._site_variables = page_rules.site_variables
         self._rule_sets = []
         self._scoped_variable_names = set()
@@ -1008,7 +1160,11 @@ class CascadeRules:
         self._resolved = {}
         self._pseudo = {}
         self._scoped_variables_cache = {}
-        self._inherited_variables = {}
+        # var() resolution: where each variable an element sees is declared, its resolved value
+        # there, and the elements with a value too long to resolve (see _OVER_BUDGET).
+        self._variable_sources = {}
+        self._variable_values = {}
+        self._unresolvable = set()
 
     def _is_examined(self, element):
         """Whether a rule whose values could hide text matches the element (step 1)."""
@@ -1115,7 +1271,11 @@ class CascadeRules:
                         if best is None or (rank, specificity, order) > best[0]:
                             best = ((rank, specificity, order), font_family)
                 if best is not None:
-                    return self._resolve_variables(node, best[1])
+                    font_family = self._resolve_text(node, best[1])
+                    if font_family is _OVER_BUDGET:
+                        return ", ".join(sorted(self.data_uri_font_families))
+                    if font_family is not _INVALID:
+                        return font_family
             node = node.getparent()
         return None
 
@@ -1172,39 +1332,101 @@ class CascadeRules:
         self._cascaded[(element, full)] = cascaded
         return cascaded
 
-    def _custom_property(self, element, name):
-        """Custom properties inherit: the element, then its ancestors, then the site-wide :root values.
-
-        A variable some narrower rule defines (.article { --d: none }) is looked up in each
-        ancestor's variable-defining rules; others only in inline styles, which is cheaper.
-        """
-        key = (element, name)
-        if key in self._inherited_variables:
-            return self._inherited_variables[key]
+    def _declared_variable(self, node, name):
+        """The custom property's own (unresolved) value on node, None when node does not set it;
+        node None stands for the site-wide :root values. A variable some narrower rule defines
+        (.article { --d: none }) is looked up in node's variable-defining rules; others only in
+        inline styles, which is cheaper."""
+        if node is None:
+            return self._site_variables.get(name)
         if name in self._scoped_variable_names:
-            value = self._scoped_variables(element).get(name)
-        else:
-            value = self._cascaded_declarations(element).get(name)
-        if value is None:
-            parent = element.getparent()
-            if parent is not None and isinstance(parent.tag, str):
-                value = self._custom_property(parent, name)
-            else:
-                value = self._site_variables.get(name)
-        self._inherited_variables[key] = value
-        return value
+            return self._scoped_variables(node).get(name)
+        return self._cascaded_declarations(node).get(name)
 
-    def _resolve_variables(self, element, value, depth=0):
-        if "var(" not in value or depth > MAXIMUM_VARIABLE_DEPTH:
+    def _variable_source(self, origin, name):
+        """(node, name) for where the variable seen at origin is declared, as custom properties
+        inherit: origin, then its ancestors, then the site-wide values (node None); None when
+        nothing declares it."""
+        if origin is None:
+            return (None, name) if name in self._site_variables else None
+        walked = []
+        node = origin
+        source = None
+        found = False
+        while node is not None and isinstance(node.tag, str):
+            key = (node, name)
+            if key in self._variable_sources:
+                source = self._variable_sources[key]
+                found = True
+                break
+            walked.append(node)
+            if self._declared_variable(node, name) is not None:
+                source = key
+                found = True
+                break
+            node = node.getparent()
+        if not found and name in self._site_variables:
+            source = (None, name)
+        for node in walked:
+            self._variable_sources[(node, name)] = source
+        return source
+
+    def _variable_value(self, source):
+        """The resolved value of the variable declared at source (from _variable_source): a text,
+        None when source is None, _INVALID or _OVER_BUDGET."""
+        if source is None:
+            return None
+        if source not in self._variable_values:
+            self._resolve_variable(source)
+        return self._variable_values[source]
+
+    def _resolve_variable(self, start):
+        """Resolves the variable declared at start, and every one it refers to, as Chrome does: a
+        variable's var() resolves where it is declared, and every variable in a cycle (fallbacks
+        included) is invalid. The references are followed with an explicit stack."""
+        stack = [(start, iter(_variable_references(self._declared_variable(start[0], start[1]))))]
+        position_on_stack = {start: 0}
+        in_cycle = set()
+        while stack:
+            source, names = stack[-1]
+            name = next(names, None)
+            if name is not None:
+                target = self._variable_source(source[0], name)
+                if target is None or target in self._variable_values:
+                    continue
+                if target in position_on_stack:
+                    for cycle_source, _ in stack[position_on_stack[target]:]:
+                        in_cycle.add(cycle_source)
+                    continue
+                position_on_stack[target] = len(stack)
+                stack.append((target, iter(_variable_references(self._declared_variable(target[0], target[1])))))
+                continue
+            stack.pop()
+            del position_on_stack[source]
+            if source in in_cycle:
+                self._variable_values[source] = _INVALID
+            else:
+                self._variable_values[source] = self._resolve_text(
+                    source[0], self._declared_variable(source[0], source[1]))
+
+    def _resolve_text(self, origin, value):
+        """value with its var() resolved for the element origin: a text, _INVALID or _OVER_BUDGET."""
+        if "var(" not in value:
             return value
-        match = _VARIABLE_REFERENCE.search(value)
-        if match is None:
-            return value
-        replacement = self._custom_property(element, match.group(1))
-        if replacement is None:
-            replacement = match.group(2) or ""
-        resolved = value[:match.start()] + replacement.strip() + value[match.end():]
-        return self._resolve_variables(element, resolved, depth + 1)
+
+        def value_of(name):
+            return self._variable_value(self._variable_source(origin, name))
+        return _substituted(value, value_of)
+
+    def _resolve_variables(self, element, value):
+        """value with its var() resolved; "" when invalid (Chrome then treats it as unset). Raises
+        _TooManyCombinations when it is too long to resolve."""
+        resolved = self._resolve_text(element, value)
+        if resolved is _OVER_BUDGET:
+            raise _TooManyCombinations()
+        if resolved is _INVALID:
+            return ""
+        return resolved
 
     def _resolved_declarations(self, element, full=False):
         full = full or self._is_examined(element)
@@ -1215,7 +1437,11 @@ class CascadeRules:
         for name, value in self._cascaded_declarations(element, full).items():
             if name.startswith("--"):
                 continue
-            resolved[name] = self._resolve_variables(element, value).lower()
+            try:
+                resolved[name] = self._resolve_variables(element, value).lower()
+            except _TooManyCombinations:
+                self._unresolvable.add(element)
+                resolved[name] = ""
         self._resolved[(element, full)] = resolved
         return resolved
 
@@ -1232,7 +1458,12 @@ class CascadeRules:
 
         Each subset of the undecided rules that can outrank a decided value here gives one; var()
         is resolved with and without the undecided blocks, and with every value an undecided block
-        gives a variable it uses."""
+        gives a variable it uses. Also None when one of the element's values is too long to
+        resolve, so that it counts as hidden."""
+        self._resolved_declarations(element)
+        self.pseudo_declarations(element)
+        if element in self._unresolvable:
+            return None
         if element in self._alternatives:
             return self._alternatives[element]
         try:
@@ -1297,17 +1528,17 @@ class CascadeRules:
             return forms
         # Expand var() references one at a time; an undecided variable branches into each of
         # its possible values, any other takes its cascaded value (which may hold more var()).
-        pending = [(value, 0)]
-        seen = {(value, 0)}
+        pending = [value]
+        seen = {value}
         finished = []
         steps = 0
         while pending:
-            partial, depth = pending.pop()
+            partial = pending.pop()
             # Every expansion counts, so branches that converge cannot multiply the work.
             steps += 1
             if steps > MAXIMUM_EXPANSION_STEPS:
                 raise _TooManyCombinations()
-            match = _VARIABLE_REFERENCE.search(partial) if depth <= MAXIMUM_VARIABLE_DEPTH else None
+            match = _VARIABLE_REFERENCE.search(partial)
             if match is None:
                 if partial not in finished:
                     finished.append(partial)
@@ -1316,7 +1547,10 @@ class CascadeRules:
             if name in self._undecided_variable_names:
                 replacements = list(self._variable_candidates(element, name))
             else:
-                replacements = [self._custom_property(element, name)]
+                # Its own text, so that undecided variables it refers to branch too. These forms
+                # only add to the exact resolutions above.
+                source = self._variable_source(element, name)
+                replacements = [self._declared_variable(source[0], name) if source is not None else None]
             if None in replacements or not replacements:
                 # Undefined here: the var() fallback applies.
                 defined = []
@@ -1326,7 +1560,7 @@ class CascadeRules:
                 defined.append(match.group(2) or "")
                 replacements = defined
             for replacement in replacements:
-                expanded = (partial[:match.start()] + replacement.strip() + partial[match.end():], depth + 1)
+                expanded = partial[:match.start()] + replacement.strip() + partial[match.end():]
                 if expanded not in seen:
                     seen.add(expanded)
                     pending.append(expanded)
@@ -1458,9 +1692,14 @@ class CascadeRules:
                     forms = self._resolved_forms(element, value, lowercase=False)
                 except _TooManyCombinations:
                     unchecked = True
-                    forms = [self._resolve_variables(element, value)]
+                    forms = []
+                    views = [self]
                     if self.without_undecided_blocks is not None:
-                        forms.append(self.without_undecided_blocks._resolve_variables(element, value))
+                        views.append(self.without_undecided_blocks)
+                    for view in views:
+                        resolved = view._resolve_text(element, value)
+                        if isinstance(resolved, str):
+                            forms.append(resolved)
                 for form in forms:
                     if form not in contents:
                         contents.append(form)
@@ -1484,10 +1723,12 @@ class CascadeRules:
             for name, value in _winning_values(self._applicable(entries)).items():
                 if name.startswith("--"):
                     continue
-                if name == "content":
-                    resolved[name] = self._resolve_variables(element, value)
-                else:
-                    resolved[name] = self._resolve_variables(element, value).lower()
+                try:
+                    resolved_value = self._resolve_variables(element, value)
+                except _TooManyCombinations:
+                    self._unresolvable.add(element)
+                    resolved_value = ""
+                resolved[name] = resolved_value if name == "content" else resolved_value.lower()
             result[pseudo_type] = resolved
         self._pseudo[element] = result
         return result

@@ -153,7 +153,12 @@ With `tinycss2` and `cssselect2` installed (pinned: 1.5.1 and 0.10.1; 0.10.1 fix
 - cascade layers (`@layer`, including `revert-layer`) in Chrome's order, and nested style rules (`&`). `@document` never applies, as in Chrome;
 - `@supports`, `@container` and `@scope` blocks, whose answer depends on what Chrome supports, on layout, or on how close the scope root is. Chrome may apply any subset of them, so text that any subset hides counts as hidden. This errs towards hiding, so a page can lose visible text this way. On the 284 test pages it changed no reading: 3,128 of 376,402 checked elements fall under such blocks (at most 49 combinations each, against a cap of 64 past which an element counts as hidden), and 9 elements are hidden only by this rule (Business Insider's "Search" button, outside the article). It costs about 5% per page (median of single paired runs; not yet the five-run measurement), so the speed figures below predate it. The expected answers of the test cases were checked against the installed Chrome (`AtRuleChromeTests`);
 - CSS nested any depth reads without crashing. `calc()` and the parentheses in it are evaluated up to 100 levels deep, which is Chrome 157's limit. Deeper, the value counts as one it can't read. A selector nested more than 32 deep, counting the rules it is nested in, is read as `*` (with `::before` and `::after`) in an undecided block, so it may hide anything or add text anywhere. Real selectors nest at most 6 deep;
-- CSS variables, including fallbacks (`display: var(--gone, none)`);
+- CSS variables, including fallbacks (`display: var(--gone, none)`), as Chrome resolves them:
+  - chains and nested fallbacks of any length;
+  - each variable resolved on the element that declares it and inherited from there;
+  - a variable in a cycle is invalid, so a `var()` of it takes its fallback, and a declaration with nothing usable is unset.
+
+  A value that would resolve to more than 100,000 characters (each variable repeating the one before can double it) counts as hidden. To pick which elements need the full cascade, each `var()` takes every value any stylesheet gives the variable, so `left: var(--x)` with `--x: -9999px` set on any element is caught;
 - contrast against the real background, including backgrounds set by stylesheets;
 - **external stylesheets**, if you pass their CSS text. The guard never fetches anything itself:
 
