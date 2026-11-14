@@ -156,7 +156,10 @@ def _function_is_closed(function, closed_by_function):
 
 def _serialized(nodes):
     """tinycss2.serialize(nodes), written with an explicit stack: tinycss2 recurses once per nested
-    function or block, so CSS nested a few thousand levels deep would exhaust Python's call stack."""
+    function or block, so CSS nested a few thousand levels deep would exhaust Python's call stack.
+    One difference: var() is always written in lowercase (function names are case-insensitive,
+    VAR(--x) is var(--x)), so the variable reader only looks for "var(", while variable names and
+    strings keep their case."""
     chunks = []
     closed_by_function = {}
     # Each frame: [the rest of a node list, the previous node's serialization type, closing text].
@@ -176,7 +179,7 @@ def _serialized(nodes):
             chunks.append("\n")
         frame[1] = serialization_type
         if node.type == "function":
-            chunks.append(serialize_identifier(node.name) + "(")
+            chunks.append(("var" if node.lower_name == "var" else serialize_identifier(node.name)) + "(")
             closing = ")" if _function_is_closed(node, closed_by_function) else ""
             pending.append([iter(node.arguments), None, closing])
         elif node.type in _BLOCK_BRACKETS:

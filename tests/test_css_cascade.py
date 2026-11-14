@@ -692,6 +692,9 @@ class DeepNestingTests(unittest.TestCase):
                 with self.subTest(css=css, skip_comments=skip_comments):
                     tokens = tinycss2.parse_component_value_list(css, skip_comments=skip_comments)
                     self.assertEqual(_serialized(tokens), tinycss2.serialize(tokens))
+        # The one difference: var() is written in lowercase, its name and strings as they were.
+        tokens = tinycss2.parse_component_value_list("VAR(--Name, 'VAR(x)') Calc(1)")
+        self.assertEqual(_serialized(tokens), 'var(--Name, "VAR(x)") Calc(1)')
 
 
 if __name__ == "__main__":
