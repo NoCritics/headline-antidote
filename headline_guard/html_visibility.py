@@ -28,6 +28,7 @@ from .css_hiding import (
     letters_collapsed, line_height_collapsed, opacity_is_invisible, scale_is_zero, translation_is_off_screen,
 )
 from .css_values import length_in_pixels, parse_color, plain_number
+from .document_mode import is_quirks_mode
 
 # Contents are code or metadata, never headline text, so they are skipped without a flag.
 NON_TEXT_TAGS = {"script", "style", "head", "meta", "link"}
@@ -605,7 +606,7 @@ def parse_document(html, stylesheets=None):
         from .css_cascade import CascadeRules
     except ImportError:
         return root, _StylesheetRules(root)
-    return root, CascadeRules(root, stylesheets or ())
+    return root, CascadeRules(root, stylesheets or (), is_quirks_mode(html))
 
 
 def linked_stylesheet_urls(html, base_url):

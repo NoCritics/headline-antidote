@@ -183,6 +183,62 @@ class AtRuleChromeTests(unittest.TestCase):
             browser.close()
 
 
+def doctype_cases():
+    """Page starts covering every doctype rule of document_mode, and the edge cases around them."""
+    from headline_guard import document_mode
+
+    # (A leading BOM is left out: set_content keeps it as a character, which a page loaded from
+    # bytes never has.)
+    starts = ["", "<!doctype html>", "<!DOCTYPE HTML>", "<!-- note --><!doctype html>", " \n<!doctype html>",
+              "<!-- a --> <!-- b --><!doctype html>", "x<!doctype html>", "<p>x</p><!doctype html>",
+              '<!doctype html system "about:legacy-compat">', "<!doctype htm>", "<!doctype>",
+              "<!doctype html5>", "<!doctypehtml>", "<!doctype html public>", '<!doctype html public "x>',
+              "<!doctype html system>", '<!doctype html public "" "">', "<!doctype html junk>",
+              '<!doctype html public "a" junk>', '<!doctype html system "a" junk>', "<!doctype html public'a'>",
+              '<!doctype html publicx "a">', '<!doctype html foobar"x">',"<!doctype html\t>", "<!--x-><!doctype html>",
+              '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" junk>',
+              '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">',
+              '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" '
+              '"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">',
+              '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" '
+              '"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">',
+              '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Frameset//EN" '
+              '"http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd">',
+              '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" '
+              '"http://www.w3.org/TR/REC-html40/loose.dtd">',
+              '<!DOCTYPE html SYSTEM "http://www.ibm.com/data/dtd/v11/ibmxhtml1-transitional.dtd">']
+    for public_identifier in sorted(document_mode._QUIRKS_PUBLIC_IDENTIFIERS):
+        starts.append(f'<!DOCTYPE html PUBLIC "{public_identifier}">')
+    for prefix in document_mode._QUIRKS_PUBLIC_PREFIXES + document_mode._HTML_401_LOOSE_PREFIXES:
+        starts.append(f'<!DOCTYPE html PUBLIC "{prefix.upper()}EN">')
+        starts.append(f'<!DOCTYPE html PUBLIC "{prefix}EN" "http://example.invalid/x.dtd">')
+    return starts
+
+
+@unittest.skipUnless(importlib.util.find_spec("playwright") is not None, "playwright not installed")
+class DocumentModeChromeTests(unittest.TestCase):
+    """document_mode.is_quirks_mode against Chrome's document.compatMode."""
+
+    def test_modes_match_chrome(self):
+        from playwright.sync_api import sync_playwright
+
+        from headline_guard.document_mode import is_quirks_mode
+
+        with sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch(channel="chrome")
+            except Exception as error:  # Chrome missing or not launchable here
+                self.skipTest(f"Chrome not available: {error}")
+            tab = browser.new_page()
+            for start in doctype_cases():
+                html = start + "<html><body><p>x</p></body></html>"
+                with self.subTest(start=start):
+                    tab.set_content(html)
+                    chrome_quirks = tab.evaluate("document.compatMode") == "BackCompat"
+                    self.assertEqual(is_quirks_mode(html), chrome_quirks)
+            browser.close()
+
+
 @unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
 class BrowserCheckTests(unittest.TestCase):
     verifier = None

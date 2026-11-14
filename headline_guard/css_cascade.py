@@ -32,6 +32,7 @@ page could remap. It does not do layout, so it cannot see overlap between unrela
 parts of the page, or hiding applied by JavaScript.
 """
 
+import functools
 import hashlib
 import re
 from collections import ChainMap, OrderedDict, namedtuple
@@ -46,6 +47,7 @@ from .css_hiding import (
     leading_number, letters_collapsed, line_height_collapsed, opacity_is_invisible, relative_luminance,
     scale_is_zero, translation_is_off_screen,
 )
+from .css_validity import INVALID, QUIRKS_ONLY, UNKNOWN, VALID, declaration_validity
 from .css_values import length_in_pixels, parse_color, quoted_strings
 from .media_queries import media_query_applies
 
@@ -192,25 +194,48 @@ def _serialized(nodes):
 
 
 def _declarations(tokens):
-    """[(name, value, important)] for hiding properties and custom properties (--name)."""
+    """[(name, value, important, validity)] for hiding properties and custom properties (--name)."""
     return _hiding_declarations(tinycss2.parse_blocks_contents(tokens, skip_comments=True, skip_whitespace=True))
 
 
 def _hiding_declarations(items):
-    """The (name, value, important) of the hiding and custom properties among parsed block contents
-    (nested rules among them are left out)."""
+    """The (name, value, important, validity) of the hiding and custom properties among parsed
+    block contents (nested rules among them are left out). Chrome drops an invalid declaration,
+    so an earlier one still applies: those are left out too. validity is VALID, QUIRKS_ONLY
+    (applies on quirks-mode pages only) or UNKNOWN (may apply: see _entry_is_undecided)."""
     found = []
     for declaration in items:
         if declaration.type != "declaration":
             continue
         name = declaration.name if declaration.name.startswith("--") else declaration.lower_name
-        if name in HIDING_PROPERTIES or name.startswith("--"):
+        if name.startswith("--"):
+            found.append((name, _serialized(declaration.value).strip(), declaration.important, VALID))
+        elif name in HIDING_PROPERTIES:
+            validity = declaration_validity(name, declaration.value)
+            if validity == INVALID:
+                continue
             value = _serialized(declaration.value).strip()
             # Variable names are case-sensitive, so a value using one is lowercased once resolved.
-            if not name.startswith("--") and "var(" not in value:
+            if "var(" not in value:
                 value = value.lower()
-            found.append((name, value, declaration.important))
+            found.append((name, value, declaration.important, validity))
     return found
+
+
+@functools.lru_cache(maxsize=4096)
+def _substituted_validity(name, text):
+    """The validity of a name declaration whose var() were substituted into text."""
+    return declaration_validity(name, tinycss2.parse_component_value_list(text))
+
+
+def _entry_is_undecided(rule_undecided, validity, quirks_mode):
+    """Whether a declaration's cascade entry is undecided (Chrome may or may not apply it), or None
+    when it does not apply on this page. One this reader cannot validate may apply."""
+    if validity == QUIRKS_ONLY:
+        if not quirks_mode:
+            return None
+        return rule_undecided
+    return rule_undecided or validity == UNKNOWN
 
 
 # What a value resolves to when it cannot be used: invalid (a var() with neither a value nor a
@@ -429,7 +454,7 @@ def _rule_could_hide(declarations, variable_values):
     """Whether a rule must be matched in step 1: one of its values could hide text, or it draws an
     overlay, whatever value its variables take (variable_values: every value rules give each one)."""
     forms_by_name = []
-    for name, value, _ in declarations:
+    for name, value, _, _ in declarations:
         if name.startswith("--"):
             continue
         forms = _variable_forms(value, variable_values)
@@ -447,7 +472,7 @@ def _rule_could_hide(declarations, variable_values):
 
 def _is_pseudo_candidate(declarations):
     """::before/::after rules worth evaluating: positioned (a possible overlay) or adding words."""
-    for name, value, _ in declarations:
+    for name, value, _, _ in declarations:
         if name == "position" and value.lower() == "absolute":
             return True
         if name == "content":
@@ -646,7 +671,7 @@ def _add_style_rule(selectors, selector_text, declarations, context, compiled):
         if selector.pseudo_element in ("before", "after"):
             has_pseudo_element = True
     has_bidi_override = False
-    for name, _, _ in declarations:
+    for name, _, _, _ in declarations:
         if name == "unicode-bidi":
             has_bidi_override = True
     font_family = None
@@ -666,7 +691,7 @@ def _add_style_rule(selectors, selector_text, declarations, context, compiled):
     # Without var() the site's variables cannot change the answer, so it is decided once
     # here instead of in every _RuleSet built from this stylesheet (None: decide there).
     uses_variables = False
-    for _, value, _ in kept_declarations:
+    for _, value, _, _ in kept_declarations:
         if "var(" in value:
             uses_variables = True
             break
@@ -922,7 +947,7 @@ class _RuleSet:
                 # so its definitions are looked up in the cascade like narrower ones.
                 root_level = site_wide and "body" not in selector_parts
                 specificity = 1 if ":root" in selector_parts else 0
-                for name, value, _ in rule.declarations:
+                for name, value, _, _ in rule.declarations:
                     if name.startswith("--"):
                         values = self.own_variable_values.get(name)
                         if values is None:
@@ -980,7 +1005,12 @@ class _RuleSet:
                 declarations = rule.declarations
                 if not declarations:
                     continue
-                if undecided:
+                # A value this reader cannot validate may or may not apply, like an undecided block.
+                has_uncertain_value = False
+                for declaration in declarations:
+                    if declaration[3] == UNKNOWN:
+                        has_uncertain_value = True
+                if undecided or has_uncertain_value:
                     self.has_undecided_rules = True
                 payload = (rule_order, rank, _negated(rank), undecided, declarations)
                 variable_declarations = []
@@ -995,7 +1025,7 @@ class _RuleSet:
                     if not could_hide and not undecided:
                         position = len(self.variable_dependent_rules)
                         self.variable_dependent_rules.append((rule.selectors, declarations))
-                        for name, value, _ in declarations:
+                        for name, value, _, _ in declarations:
                             if name.startswith("--"):
                                 continue
                             for reference in _variable_references(value):
@@ -1007,7 +1037,7 @@ class _RuleSet:
                 for selector in rule.selectors:
                     self.full_matcher.add_selector(selector, payload)
                     self.has_rules = True
-                    if undecided:
+                    if undecided or has_uncertain_value:
                         self.undecided_matcher.add_selector(selector, None)
                     if could_hide:
                         self.hiding_matcher.add_selector(selector, payload)
@@ -1068,7 +1098,7 @@ def _late_hiding_matcher(root, external_rules, page_rules):
             continue
         style = element.get("style")
         if style and "--" in style:
-            for name, value, _ in _declarations(style):
+            for name, value, _, _ in _declarations(style):
                 if name.startswith("--"):
                     values = inline_values.setdefault(name, [])
                     if value not in values:
@@ -1154,22 +1184,26 @@ class _TooManyCombinations(Exception):
 _TOO_MANY = object()
 
 
-def _matched_entries(matcher, element_wrapper, entries):
+def _matched_entries(matcher, element_wrapper, entries, quirks_mode):
     """Adds the entries of the rules in matcher that match the element (not its pseudo-elements)."""
     for specificity, _, pseudo_type, payload in matcher.match(element_wrapper):
         if pseudo_type is not None:
             continue
-        order, rank, important_rank, undecided, declarations = payload
-        for name, value, important in declarations:
-            entries.append((important, 0, important_rank if important else rank, specificity, order,
-                            name, value, undecided))
+        order, rank, important_rank, rule_undecided, declarations = payload
+        for name, value, important, validity in declarations:
+            undecided = _entry_is_undecided(rule_undecided, validity, quirks_mode)
+            if undecided is not None:
+                entries.append((important, 0, important_rank if important else rank, specificity, order,
+                                name, value, undecided))
 
 
-def _inline_entries(inline_style, entries, custom_only=False):
-    for name, value, important in _declarations(inline_style):
+def _inline_entries(inline_style, entries, quirks_mode, custom_only=False):
+    for name, value, important, validity in _declarations(inline_style):
         if custom_only and not name.startswith("--"):
             continue
-        entries.append((important, 1, _INLINE_LAYER_RANK, (0, 0, 0), 0, name, value, False))
+        undecided = _entry_is_undecided(False, validity, quirks_mode)
+        if undecided is not None:
+            entries.append((important, 1, _INLINE_LAYER_RANK, (0, 0, 0), 0, name, value, undecided))
 
 
 def _winning_values(entries):
@@ -1217,7 +1251,9 @@ class CascadeRules:
     same page with none of them applied (None when the page has none), and
     declaration_alternatives() gives an element's declarations for each other subset of them."""
 
-    def __init__(self, root, stylesheets=()):
+    def __init__(self, root, stylesheets=(), quirks_mode=False):
+        """quirks_mode: whether the page renders in quirks mode (see document_mode)."""
+        self._quirks_mode = quirks_mode
         page_stylesheet_texts = []
         for style_element in root.iter("style"):
             if media_query_applies(style_element.get("media")):
@@ -1374,7 +1410,7 @@ class CascadeRules:
         while node is not None and isinstance(node.tag, str):
             inline_style = node.get("style")
             if inline_style and "font" in inline_style:
-                for name, value, _ in _declarations(inline_style):
+                for name, value, _, _ in _declarations(inline_style):
                     if name == "font-family":
                         return value
             element_wrapper = self._all_wrappers.get(node)
@@ -1405,10 +1441,10 @@ class CascadeRules:
         if element_wrapper is not None:
             for rule_set in self._rule_sets:
                 if rule_set.has_variable_rules:
-                    _matched_entries(rule_set.variable_matcher, element_wrapper, entries)
+                    _matched_entries(rule_set.variable_matcher, element_wrapper, entries, self._quirks_mode)
         inline_style = element.get("style")
         if inline_style and "--" in inline_style:
-            _inline_entries(inline_style, entries, custom_only=True)
+            _inline_entries(inline_style, entries, self._quirks_mode, custom_only=True)
         return entries
 
     def _scoped_variables(self, element):
@@ -1433,10 +1469,10 @@ class CascadeRules:
             if element_wrapper is not None:
                 # Step 2: the full cascade, so a later or more specific rule can show the text again.
                 for rule_set in self._rule_sets:
-                    _matched_entries(rule_set.full_matcher, element_wrapper, entries)
+                    _matched_entries(rule_set.full_matcher, element_wrapper, entries, self._quirks_mode)
             inline_style = element.get("style")
             if inline_style:
-                _inline_entries(inline_style, entries)
+                _inline_entries(inline_style, entries, self._quirks_mode)
             entries.sort(key=lambda entry: entry[:5])
             self._matched[key] = entries
         return entries
@@ -1545,13 +1581,23 @@ class CascadeRules:
                 return _OVER_BUDGET
         return resolved
 
-    def _resolve_variables(self, element, value):
-        """value with its var() resolved; "" when invalid (Chrome then treats it as unset). Raises
-        _TooManyCombinations when it is too long to resolve."""
+    def _resolve_variables(self, element, name, value):
+        """The value of a name declaration with its var() resolved; "" when invalid (Chrome then
+        treats it as unset). Raises _TooManyCombinations when it is too long to resolve."""
         resolved = self._resolve_text(element, value)
         if resolved is _OVER_BUDGET:
             raise _TooManyCombinations()
         if resolved is _INVALID:
+            return ""
+        if "var(" not in value:
+            return value
+        return self._substituted_value(name, resolved)
+
+    def _substituted_value(self, name, resolved):
+        """resolved, a name declaration's value once its var() are substituted; "" when Chrome
+        rejects it: the declaration is then unset, not replaced by an earlier one."""
+        validity = _substituted_validity(name, resolved)
+        if validity == INVALID or (validity == QUIRKS_ONLY and not self._quirks_mode):
             return ""
         return resolved
 
@@ -1565,7 +1611,7 @@ class CascadeRules:
             if name.startswith("--"):
                 continue
             try:
-                resolved[name] = self._resolve_variables(element, value).lower()
+                resolved[name] = self._resolve_variables(element, name, value).lower()
             except _TooManyCombinations:
                 self._unresolvable.add(element)
                 resolved[name] = ""
@@ -1623,32 +1669,32 @@ class CascadeRules:
         self._variable_candidates_cache[key] = values
         return values
 
-    def _resolved_forms(self, element, value, lowercase=True):
+    def _resolved_forms(self, element, name, value, lowercase=True):
         """The values a declaration can resolve to, whichever undecided blocks apply: var() is
         resolved with and without those blocks, and every undecided variable it uses, directly or
         through other variables, takes each value it can have (all combinations of them).
         Raises _TooManyCombinations past MAXIMUM_UNDECIDED_COMBINATIONS forms."""
-        key = (element, value, lowercase)
+        key = (element, name, value, lowercase)
         cached = self._resolved_forms_cache.get(key)
         if cached is not None:
             if cached is _TOO_MANY:
                 raise _TooManyCombinations()
             return cached
         try:
-            forms = self._compute_resolved_forms(element, value, lowercase)
+            forms = self._compute_resolved_forms(element, name, value, lowercase)
         except _TooManyCombinations:
             self._resolved_forms_cache[key] = _TOO_MANY
             raise
         self._resolved_forms_cache[key] = forms
         return forms
 
-    def _compute_resolved_forms(self, element, value, lowercase):
+    def _compute_resolved_forms(self, element, name, value, lowercase):
         def normalized(resolved):
             return resolved.lower() if lowercase else resolved
-        forms = [normalized(self._resolve_variables(element, value))]
+        forms = [normalized(self._resolve_variables(element, name, value))]
         undecided_view = self.without_undecided_blocks
         if undecided_view is not None:
-            form = normalized(undecided_view._resolve_variables(element, value))
+            form = normalized(undecided_view._resolve_variables(element, name, value))
             if form not in forms:
                 forms.append(form)
         if not self._undecided_variable_names or "var(" not in value:
@@ -1670,14 +1716,14 @@ class CascadeRules:
                 if partial not in finished:
                     finished.append(partial)
                 continue
-            name = match.group(1)
-            if name in self._undecided_variable_names:
-                replacements = list(self._variable_candidates(element, name))
+            variable_name = match.group(1)
+            if variable_name in self._undecided_variable_names:
+                replacements = list(self._variable_candidates(element, variable_name))
             else:
                 # Its own text, so that undecided variables it refers to branch too. These forms
                 # only add to the exact resolutions above.
-                source = self._variable_source(element, name)
-                replacements = [self._declared_variable(source[0], name) if source is not None else None]
+                source = self._variable_source(element, variable_name)
+                replacements = [self._declared_variable(source[0], variable_name) if source is not None else None]
             if None in replacements or not replacements:
                 # Undefined here: the var() fallback applies.
                 defined = []
@@ -1694,7 +1740,7 @@ class CascadeRules:
             if len(pending) + len(finished) > MAXIMUM_UNDECIDED_COMBINATIONS:
                 raise _TooManyCombinations()
         for partial in finished:
-            form = normalized(partial)
+            form = normalized(self._substituted_value(name, partial))
             if form not in forms:
                 forms.append(form)
         return forms
@@ -1742,7 +1788,7 @@ class CascadeRules:
             for name, value in _winning_values(chosen).items():
                 if name.startswith("--"):
                     continue
-                forms = self._resolved_forms(element, value)
+                forms = self._resolved_forms(element, name, value)
                 extended = []
                 for alternative in subset_alternatives:
                     for form in forms:
@@ -1769,12 +1815,14 @@ class CascadeRules:
                 for specificity, _, pseudo_type, payload in rule_set.full_matcher.match(element_wrapper):
                     if pseudo_type not in entries_by_pseudo:
                         continue
-                    order, rank, important_rank, undecided, declarations = payload
-                    for name, value, important in declarations:
-                        entries_by_pseudo[pseudo_type].append((
-                            important, 0, important_rank if important else rank, specificity, order,
-                            name, value, undecided,
-                        ))
+                    order, rank, important_rank, rule_undecided, declarations = payload
+                    for name, value, important, validity in declarations:
+                        undecided = _entry_is_undecided(rule_undecided, validity, self._quirks_mode)
+                        if undecided is not None:
+                            entries_by_pseudo[pseudo_type].append((
+                                important, 0, important_rank if important else rank, specificity, order,
+                                name, value, undecided,
+                            ))
         for entries in entries_by_pseudo.values():
             entries.sort(key=lambda entry: entry[:5])
         self._pseudo_entries_cache[element] = entries_by_pseudo
@@ -1802,7 +1850,7 @@ class CascadeRules:
                     may_show = True
                     continue
                 try:
-                    forms = self._resolved_forms(element, value)
+                    forms = self._resolved_forms(element, "display", value)
                 except _TooManyCombinations:
                     forms = []
                     may_show = True
@@ -1816,7 +1864,7 @@ class CascadeRules:
                 if value is None:
                     continue
                 try:
-                    forms = self._resolved_forms(element, value, lowercase=False)
+                    forms = self._resolved_forms(element, "content", value, lowercase=False)
                 except _TooManyCombinations:
                     unchecked = True
                     forms = []
@@ -1851,7 +1899,7 @@ class CascadeRules:
                 if name.startswith("--"):
                     continue
                 try:
-                    resolved_value = self._resolve_variables(element, value)
+                    resolved_value = self._resolve_variables(element, name, value)
                 except _TooManyCombinations:
                     self._unresolvable.add(element)
                     resolved_value = ""

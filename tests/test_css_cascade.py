@@ -431,9 +431,12 @@ CHROME_DECIDED_CASES += (
     (".x{display:none;display:-webkit-var(--x, block)}", "", True),
     (":root{--x:none} .x{display:-webkit-var(--x, block)}", "", False),
     # A value invalid once var() is substituted is unset, not the earlier declaration: visibility
-    # is then inherited, opacity takes its initial value.
-    (":root{--v:banana} h1{visibility:hidden} .x{visibility:var(--v)}", "", True),
+    # is then inherited (from the visible h1), opacity takes its initial value.
+    (":root{--v:banana} .x{visibility:hidden;visibility:var(--v)}", "", False),
     (":root{--v:banana} .x{opacity:0;opacity:var(--v)}", "", False),
+    (":root{--v:translateX(-9999px) foo} .x{display:inline-block;transform:var(--v)}", "", False),
+    (":root{--v:-9999px 0} .x{position:absolute;left:var(--v)}", "", False),
+    (":root{--v:opacity(0) foo} .x{filter:var(--v)}", "", False),
 )
 
 # Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
