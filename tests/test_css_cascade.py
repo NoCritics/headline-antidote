@@ -350,8 +350,11 @@ CHROME_DECIDED_CASES = (
     # html and body are separate elements, and :root outranks html on the same one.
     ("html{--b:0;--a:var(--b)} body{--b:1} .x{opacity:var(--a)}", "", True),
     (":root{--o:0} html{--o:1} .x{opacity:var(--o)}", "", True),
-    # Variable names are case-sensitive.
+    # Variable names are case-sensitive; function names are not.
     (".x{--Hide:0;opacity:var(--Hide)}", "", True),
+    (".x{--Hide:0;opacity:VAR(--Hide)}", "", True),
+    (".x{--b:0;--a:VAR(--b);opacity:var(--a)}", "", True),
+    (".x{--b:0;opacity:v\\61r(--b)}", "", True),
 )
 
 
