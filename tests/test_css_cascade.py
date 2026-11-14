@@ -450,7 +450,7 @@ CHROME_DECIDED_CASES += (
     (".x{position:absolute;left:env(titlebar-area-x, -9999px)}", "", True),
     (".x{position:absolute;left:env(safe-area-inset-left 0, -9999px)}", "", True),
     (".x{position:absolute;left:env(SAFE-AREA-INSET-LEFT, -9999px)}", "", True),
-    (".x{position:absolute;left:calc(env(safe-area-inset-left) - 9999px)}", "", True),
+    (".x{position:absolute;left:min(env(safe-area-inset-left),-9999px)}", "", True),
     (".x{position:absolute;left:env(safe-area-inset-left, -9999px)}", "", False),
     (".x{position:absolute;left:-9999px;left:env(banana)}", "", False),
     # An invalid custom property is dropped too, so the earlier definition holds.

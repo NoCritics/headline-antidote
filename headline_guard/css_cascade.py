@@ -181,7 +181,10 @@ def _serialized(nodes):
             chunks.append("\n")
         frame[1] = serialization_type
         if node.type == "function":
-            chunks.append(("var" if node.lower_name == "var" else serialize_identifier(node.name)) + "(")
+            if node.lower_name in ("var", "env"):
+                chunks.append(node.lower_name + "(")
+            else:
+                chunks.append(serialize_identifier(node.name) + "(")
             closing = ")" if _function_is_closed(node, closed_by_function) else ""
             pending.append([iter(node.arguments), None, closing])
         elif node.type in _BLOCK_BRACKETS:
@@ -218,8 +221,8 @@ def _hiding_declarations(items):
             if validity == INVALID:
                 continue
             value = _serialized(declaration.value).strip()
-            # Variable names are case-sensitive, so a value using one is lowercased once resolved.
-            if "var(" not in value:
+            # Variable and env() names are case-sensitive, so a value using one is lowercased once resolved.
+            if "var(" not in value and "env(" not in value:
                 value = value.lower()
             found.append((name, value, declaration.important, validity))
     return found
@@ -270,13 +273,14 @@ def _variable_references(value):
     return names
 
 
-def _parentheses(text):
-    """(where each "(" closes, where var( functions start), outside quoted strings. An unclosed
-    parenthesis closes at the end of the text."""
+def _parentheses(text, function_name="var"):
+    """(where each "(" closes, where function_name( functions start), outside quoted strings. An
+    unclosed parenthesis closes at the end of the text."""
     closing = {}
     variable_starts = set()
     open_positions = []
     quote = None
+    name_length = len(function_name)
     index = 0
     while index < len(text):
         character = text[index]
@@ -289,9 +293,10 @@ def _parentheses(text):
             quote = character
         elif character == "(":
             open_positions.append(index)
-            if index >= 3 and text.startswith("var", index - 3) and (
-                    index == 3 or not (text[index - 4].isalnum() or text[index - 4] in "-_")):
-                variable_starts.add(index - 3)
+            start = index - name_length
+            if start >= 0 and text.startswith(function_name, start) and (
+                    start == 0 or not (text[start - 1].isalnum() or text[start - 1] in "-_")):
+                variable_starts.add(start)
         elif character == ")" and open_positions:
             closing[open_positions.pop()] = index
         index += 1
@@ -362,6 +367,81 @@ def _substituted(value, value_of):
     return "".join(pieces)
 
 
+# env() at the browser check's desktop viewport, measured in Chrome 157: the safe-area and
+# keyboard insets are 0px and preferred-text-scale is 1. Every other name (titlebar-area-*,
+# viewport-segment-*, a name with an index, one in another case) has no value there, so the
+# fallback applies, and without one the declaration is unset.
+_ENVIRONMENT_VALUES = {
+    "safe-area-inset-top": "0px", "safe-area-inset-right": "0px",
+    "safe-area-inset-bottom": "0px", "safe-area-inset-left": "0px",
+    "safe-area-max-inset-top": "0px", "safe-area-max-inset-right": "0px",
+    "safe-area-max-inset-bottom": "0px", "safe-area-max-inset-left": "0px",
+    "keyboard-inset-top": "0px", "keyboard-inset-right": "0px", "keyboard-inset-bottom": "0px",
+    "keyboard-inset-left": "0px", "keyboard-inset-width": "0px", "keyboard-inset-height": "0px",
+    "preferred-text-scale": "1",
+}
+# A value with more env() than this counts as one too long to check (real values have one or two).
+MAXIMUM_ENVIRONMENT_REFERENCES = 100
+# Functions Chrome evaluates and this reader cannot: a hiding value still using one once var()
+# and env() are substituted counts as unreadable, which hides the element (attr() in content
+# only gives text).
+_UNEVALUATED_FUNCTION = re.compile(r"(?<![\w-])(?:if|attr|--[\w-]+)\(", re.IGNORECASE)
+
+
+def _uses_unevaluated_function(name, value):
+    return name != "content" and "(" in value and _UNEVALUATED_FUNCTION.search(value) is not None
+
+
+def _first_top_level_comma(text):
+    """Where the first comma outside brackets and quoted strings is in text, -1 when none."""
+    depth = 0
+    quote = None
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if quote is not None:
+            if character == "\\":
+                index += 1
+            elif character == quote:
+                quote = None
+        elif character in "\"'":
+            quote = character
+        elif character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+        elif character == "," and depth == 0:
+            return index
+        index += 1
+    return -1
+
+
+def _environment_substituted(text):
+    """text with each env() replaced as Chrome gives it (see _ENVIRONMENT_VALUES); _INVALID when
+    one has neither a value nor a fallback, _OVER_BUDGET past MAXIMUM_ENVIRONMENT_REFERENCES."""
+    replaced = 0
+    while True:
+        closing, starts = _parentheses(text, "env")
+        if not starts:
+            return text
+        replaced += 1
+        if replaced > MAXIMUM_ENVIRONMENT_REFERENCES:
+            return _OVER_BUDGET
+        # The last one holds no other in its fallback.
+        start = max(starts)
+        close = closing[start + 3]
+        body = text[start + 4:close]
+        comma = _first_top_level_comma(body)
+        name = (body if comma == -1 else body[:comma]).strip()
+        if name in _ENVIRONMENT_VALUES:
+            replacement = _ENVIRONMENT_VALUES[name]
+        elif comma != -1:
+            replacement = body[comma + 1:].strip()
+        else:
+            return _INVALID
+        text = text[:start] + replacement + text[close + 1:]
+
+
 def _variable_forms(value, variable_values):
     """Every text value can take when each var() in it becomes any value some rule gives that
     variable, or its fallback (or nothing, when it is undefined or invalid); None past
@@ -397,6 +477,9 @@ def _could_hide(name, value):
     """Whether one declaration could, alone or with others, hide text. Used to pick elements to examine."""
     if name.startswith("--"):
         return False  # custom properties are looked up on demand when a var() is resolved
+    # Read once env() is substituted, or unreadable (see _UNEVALUATED_FUNCTION).
+    if "env(" in value or _uses_unevaluated_function(name, value):
+        return True
     if name == "display":
         return value == "none"
     if name == "visibility":
@@ -1602,20 +1685,32 @@ class CascadeRules:
         return resolved
 
     def _resolve_variables(self, element, name, value):
-        """The value of a name declaration with its var() resolved; "" when invalid (Chrome then
-        treats it as unset). Raises _TooManyCombinations when it is too long to resolve."""
+        """The value of a name declaration with its var() and env() resolved; "" when invalid
+        (Chrome then treats it as unset). Raises _TooManyCombinations when it is too long to
+        resolve or uses a function this reader cannot evaluate."""
         resolved = self._resolve_text(element, value)
         if resolved is _OVER_BUDGET:
             raise _TooManyCombinations()
         if resolved is _INVALID:
             return ""
-        if "var(" not in value:
-            return value
-        return self._substituted_value(name, resolved)
+        return self._substituted_value(name, resolved, "var(" in value)
 
-    def _substituted_value(self, name, resolved):
-        """resolved, a name declaration's value once its var() are substituted; "" when Chrome
-        rejects it: the declaration is then unset, not replaced by an earlier one."""
+    def _substituted_value(self, name, resolved, substituted=True):
+        """resolved, a name declaration's value once its var() are substituted (substituted: whether
+        it had any), with env() replaced as Chrome does; "" when Chrome rejects it then: the
+        declaration is unset, not replaced by an earlier one. Raises _TooManyCombinations when it
+        uses a function this reader cannot evaluate (see _UNEVALUATED_FUNCTION)."""
+        if "env(" in resolved:
+            resolved = _environment_substituted(resolved)
+            if resolved is _OVER_BUDGET:
+                raise _TooManyCombinations()
+            if resolved is _INVALID:
+                return ""
+            substituted = True
+        if _uses_unevaluated_function(name, resolved):
+            raise _TooManyCombinations()
+        if not substituted:
+            return resolved
         validity = _substituted_validity(name, resolved)
         if validity == INVALID or (validity == QUIRKS_ONLY and not self._quirks_mode):
             return ""

@@ -449,7 +449,9 @@ def _hiding_under_undecided_rules(element, tag, rules):
         return None
     alternatives = rules.declaration_alternatives(element)
     if alternatives is None:
-        return ("too many CSS rules under conditions this reader cannot answer (@supports, @container, @scope)",
+        return ("CSS this reader cannot evaluate: too many rules under conditions it cannot answer "
+                "(@supports, @container, @scope), a value too long to resolve, or if(), attr() or a "
+                "custom function",
                 HIGH)
     hints = _presentational_hints(element, tag)
     parent = element.getparent()
