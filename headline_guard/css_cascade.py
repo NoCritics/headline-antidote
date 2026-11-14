@@ -47,7 +47,7 @@ from .css_hiding import (
     leading_number, letters_collapsed, line_height_collapsed, opacity_is_invisible, relative_luminance,
     scale_is_zero, translation_is_off_screen,
 )
-from .css_validity import INVALID, QUIRKS_ONLY, UNKNOWN, VALID, declaration_validity
+from .css_validity import INVALID, QUIRKS_ONLY, UNKNOWN, VALID, custom_property_validity, declaration_validity
 from .css_values import length_in_pixels, parse_color, quoted_strings
 from .media_queries import media_query_applies
 
@@ -209,6 +209,9 @@ def _hiding_declarations(items):
             continue
         name = declaration.name if declaration.name.startswith("--") else declaration.lower_name
         if name.startswith("--"):
+            # UNKNOWN only past 1,000 nested substitution functions; such a value is kept.
+            if custom_property_validity(declaration.value) == INVALID:
+                continue
             found.append((name, _serialized(declaration.value).strip(), declaration.important, VALID))
         elif name in HIDING_PROPERTIES:
             validity = declaration_validity(name, declaration.value)
@@ -222,9 +225,16 @@ def _hiding_declarations(items):
     return found
 
 
-@functools.lru_cache(maxsize=4096)
 def _substituted_validity(name, text):
-    """The validity of a name declaration whose var() were substituted into text."""
+    """The validity of a name declaration whose var() were substituted into text. Short texts
+    (nearly all) are cached, so the cache stays within a few megabytes."""
+    if len(text) > 1000:
+        return declaration_validity(name, tinycss2.parse_component_value_list(text))
+    return _cached_substituted_validity(name, text)
+
+
+@functools.lru_cache(maxsize=4096)
+def _cached_substituted_validity(name, text):
     return declaration_validity(name, tinycss2.parse_component_value_list(text))
 
 
@@ -1190,20 +1200,30 @@ def _matched_entries(matcher, element_wrapper, entries, quirks_mode):
         if pseudo_type is not None:
             continue
         order, rank, important_rank, rule_undecided, declarations = payload
-        for name, value, important, validity in declarations:
+        for position, (name, value, important, validity) in enumerate(declarations):
             undecided = _entry_is_undecided(rule_undecided, validity, quirks_mode)
             if undecided is not None:
                 entries.append((important, 0, important_rank if important else rank, specificity, order,
-                                name, value, undecided))
+                                name, value, undecided, _alternative_group(order, position, validity)))
 
 
 def _inline_entries(inline_style, entries, quirks_mode, custom_only=False):
-    for name, value, important, validity in _declarations(inline_style):
+    for position, (name, value, important, validity) in enumerate(_declarations(inline_style)):
         if custom_only and not name.startswith("--"):
             continue
         undecided = _entry_is_undecided(False, validity, quirks_mode)
         if undecided is not None:
-            entries.append((important, 1, _INLINE_LAYER_RANK, (0, 0, 0), 0, name, value, undecided))
+            entries.append((important, 1, _INLINE_LAYER_RANK, (0, 0, 0), 0, name, value, undecided,
+                            _alternative_group(0, position, validity)))
+
+
+def _alternative_group(order, position, validity):
+    """Which undecided entries apply together in declaration_alternatives: those of one undecided
+    rule, while each value this reader cannot validate applies or not on its own (two in one
+    rule may be one valid and one not)."""
+    if validity == UNKNOWN:
+        return (order, position)
+    return (order, -1)
 
 
 def _winning_values(entries):
@@ -1757,8 +1777,8 @@ class CascadeRules:
                     break
         if not uses_undecided_variables and not _has_undecided_entry(entries):
             return []
-        # A rule applies as a whole, so the combinations are subsets of the undecided rules (by
-        # their order) that can outrank a decided value here.
+        # A rule applies as a whole, so the combinations are subsets of the undecided rules that
+        # can outrank a decided value here (each unvalidated value on its own: _alternative_group).
         decided_entries = []
         best_decided = {}
         for entry in entries:  # sorted, lowest priority first
@@ -1770,10 +1790,10 @@ class CascadeRules:
             # Custom properties count through the values that use them (see _resolved_forms).
             if entry[7] and not entry[5].startswith("--") and (
                     entry[5] not in best_decided or entry[:5] > best_decided[entry[5]]):
-                entries_by_rule.setdefault(entry[4], [])
+                entries_by_rule.setdefault(entry[8], [])
         for entry in entries:
-            if entry[7] and entry[4] in entries_by_rule:
-                entries_by_rule[entry[4]].append(entry)
+            if entry[7] and entry[8] in entries_by_rule:
+                entries_by_rule[entry[8]].append(entry)
         rule_entries = list(entries_by_rule.values())
         if 2 ** len(rule_entries) > MAXIMUM_UNDECIDED_COMBINATIONS:
             return None
@@ -1816,12 +1836,12 @@ class CascadeRules:
                     if pseudo_type not in entries_by_pseudo:
                         continue
                     order, rank, important_rank, rule_undecided, declarations = payload
-                    for name, value, important, validity in declarations:
+                    for position, (name, value, important, validity) in enumerate(declarations):
                         undecided = _entry_is_undecided(rule_undecided, validity, self._quirks_mode)
                         if undecided is not None:
                             entries_by_pseudo[pseudo_type].append((
                                 important, 0, important_rank if important else rank, specificity, order,
-                                name, value, undecided,
+                                name, value, undecided, _alternative_group(order, position, validity),
                             ))
         for entries in entries_by_pseudo.values():
             entries.sort(key=lambda entry: entry[:5])

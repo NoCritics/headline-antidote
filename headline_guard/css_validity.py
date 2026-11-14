@@ -19,12 +19,13 @@ UNKNOWN = "unknown"           # this module cannot tell
 _SEVERITY = {VALID: 0, QUIRKS_ONLY: 1, UNKNOWN: 2, INVALID: 3}
 
 _CSS_WIDE_KEYWORDS = frozenset({"inherit", "initial", "unset", "revert", "revert-layer", "revert-rule"})
-_SUBSTITUTION_FUNCTIONS = frozenset({"var", "env", "attr", "if"})
+# inherit() is listed because Chrome 157 rejects any value holding it, even next to var().
+_SUBSTITUTION_FUNCTIONS = frozenset({"var", "env", "attr", "if", "inherit"})
 _BLOCK_TYPES = frozenset({"() block", "[] block", "{} block"})
 # tinycss2 reports a string or url() cut off by the end of the input as an error; Chrome accepts both.
 _HARMLESS_ERRORS = frozenset({"eof-in-string", "eof-in-url"})
-# Chrome 157 accepted var() fallbacks nested 30,000 deep and crashed at 100,000; past this depth the
-# answer is not worth trusting.
+# Chrome 157 accepted var() fallbacks nested 10,000 deep and crashed the page at 30,000 to 100,000;
+# a value with substitution functions that would be valid past this depth is UNKNOWN.
 _SUBSTITUTION_DEPTH_CAP = 1000
 # light-dark() and color-mix() nest without limit in Chrome; past this depth this module gives up.
 _COLOR_DEPTH_CAP = 32
@@ -145,26 +146,172 @@ def _env_verdict(arguments):
     return _fallback_verdict(fallback)
 
 
+# The data types attr(x type(...)) takes (case-sensitive); <transform-list> takes no multiplier.
+_SYNTAX_TYPES = frozenset({
+    "angle", "color", "custom-ident", "image", "integer", "length", "length-percentage", "number", "percentage",
+    "resolution", "string", "time", "transform-function", "transform-list",
+})
+_RESERVED_SYNTAX_IDENTIFIERS = _CSS_WIDE_KEYWORDS | {"default"}
+
+
+def _syntax_component_verdict(tokens):
+    """One component of a type() syntax: <data-type> or an identifier, with an optional + or #
+    multiplier, written without whitespace."""
+    multiplied = len(tokens) in (2, 4) and (_is_literal(tokens[-1], "+") or _is_literal(tokens[-1], "#"))
+    if multiplied:
+        tokens = tokens[:-1]
+    if len(tokens) == 1 and tokens[0].type == "ident":
+        if tokens[0].lower_value in _RESERVED_SYNTAX_IDENTIFIERS:
+            return INVALID
+        return VALID
+    if len(tokens) == 3 and _is_literal(tokens[0], "<") and tokens[1].type == "ident" and _is_literal(tokens[2], ">"):
+        name = tokens[1].value
+        if name in _SYNTAX_TYPES and not (multiplied and name == "transform-list"):
+            return VALID
+    return INVALID
+
+
+def _syntax_verdict(arguments):
+    """type(): "*", or components separated by "|"."""
+    tokens = _without_comments(arguments)
+    parts = _significant(tokens)
+    if len(parts) == 1 and _is_literal(parts[0], "*"):
+        return VALID
+    component = []
+    components = [component]
+    for token in tokens:
+        if _is_literal(token, "|"):
+            component = []
+            components.append(component)
+        else:
+            component.append(token)
+    for component in components:
+        start = 0
+        end = len(component)
+        while start < end and component[start].type == "whitespace":
+            start += 1
+        while end > start and component[end - 1].type == "whitespace":
+            end -= 1
+        written = component[start:end]
+        for token in written:
+            if token.type == "whitespace":
+                return INVALID
+        if not written or _syntax_component_verdict(written) == INVALID:
+            return INVALID
+    return VALID
+
+
 def _attr_verdict(arguments):
+    """attr(<name> <type>?, <fallback>?): the type an identifier (units, raw-string, number...), "%"
+    or type(<syntax>)."""
     head, fallback = _split_first_comma(arguments)
     parts = _significant(head)
-    if not parts or parts[0].type != "ident":
+    if not parts or parts[0].type != "ident" or len(parts) > 2:
         return INVALID
-    if len(parts) > 1:
-        return UNKNOWN  # a type or unit after the name
+    if len(parts) == 2:
+        kind = parts[1]
+        if kind.type == "function" and kind.lower_name == "type":
+            if _syntax_verdict(kind.arguments) == INVALID:
+                return INVALID
+        elif kind.type != "ident" and not _is_literal(kind, "%"):
+            return INVALID
     if fallback is None:
         return VALID
     return _fallback_verdict(fallback)
 
 
-def _if_verdict(arguments):
-    if not _significant(arguments):
+def _split_at_literal(tokens, character):
+    groups = [[]]
+    for token in tokens:
+        if _is_literal(token, character):
+            groups.append([])
+        else:
+            groups[-1].append(token)
+    return groups
+
+
+def _is_keyword(token, keyword):
+    return token.type == "ident" and token.lower_value == keyword
+
+
+def _is_if_test(token):
+    """A test of an if() condition: style(), media(), supports() or any other function or
+    parenthesized group, whose insides Chrome takes as they are."""
+    return token.type == "function" or token.type == "() block"
+
+
+def _if_condition_verdict(parts):
+    """else | not <test> | <test> [and <test>]* | <test> [or <test>]*"""
+    if len(parts) == 1 and _is_keyword(parts[0], "else"):
+        return VALID
+    if parts and _is_keyword(parts[0], "not"):
+        return VALID if len(parts) == 2 and _is_if_test(parts[1]) else INVALID
+    if not parts or len(parts) % 2 == 0:
         return INVALID
-    return UNKNOWN
+    operator = None
+    for index in range(len(parts)):
+        part = parts[index]
+        if index % 2 == 0:
+            if not _is_if_test(part):
+                return INVALID
+        elif part.type != "ident" or part.lower_value not in ("and", "or"):
+            return INVALID
+        elif operator is None:
+            operator = part.lower_value
+        elif part.lower_value != operator:
+            return INVALID
+    return VALID
+
+
+def _if_verdict(arguments):
+    """if(<condition>: <value>; ...), with one optional ";" at the end."""
+    branches = _split_at_literal(_without_comments(arguments), ";")
+    if len(branches) > 1 and not _significant(branches[-1]):
+        branches = branches[:-1]
+    for branch in branches:
+        colon = None
+        for index in range(len(branch)):
+            if _is_literal(branch[index], ":"):
+                colon = index
+                break
+        if colon is None or _if_condition_verdict(_significant(branch[:colon])) == INVALID:
+            return INVALID
+        for token in branch[colon + 1:]:
+            if _is_literal(token, "!"):
+                return INVALID
+    return VALID
+
+
+def _custom_function_verdict(arguments):
+    """--name(<argument>#?): each argument a <declaration-value> without a top-level {} block, "!"
+    or ";", or else one non-empty {} block with nothing after it, not even whitespace (measured in
+    Chrome 157)."""
+    if not _significant(arguments):
+        return VALID
+    groups = _split_commas(arguments)
+    # Chrome 157 also takes one empty argument before the first comma: --f(,1).
+    if len(groups) > 1 and not _significant(groups[0]):
+        groups = groups[1:]
+    for group in groups:
+        parts = _significant(group)
+        if not parts:
+            return INVALID
+        block = None
+        for part in parts:
+            if part.type == "{} block":
+                block = part
+            elif _is_literal(part, "!") or _is_literal(part, ";"):
+                return INVALID
+        if block is not None:
+            if len(parts) != 1 or group[-1] is not block or not _significant(block.content):
+                return INVALID
+            for token in block.content:
+                if _is_literal(token, "!") or _is_literal(token, ";"):
+                    return INVALID
+    return VALID
 
 
 def _inherit_verdict(arguments):
-    # Chrome 157 rejects a value holding inherit() in any form, even next to var().
     return INVALID
 
 
@@ -173,34 +320,47 @@ _SUBSTITUTION_VERDICTS = {
 }
 
 
-def _substitution_validity(tokens, depth):
-    if depth > _SUBSTITUTION_DEPTH_CAP:
-        return UNKNOWN
-    top_level = _significant(tokens)
-    for token in top_level:
-        if _is_literal(token, "!") or _is_literal(token, ";"):
-            return INVALID
-        # A {} block is allowed only as the whole value.
-        if token.type == "{} block" and len(top_level) > 1:
-            return INVALID
-    verdict = VALID
+def _substitution_functions_verdict(tokens):
+    """INVALID if any substitution function nested anywhere in tokens is malformed, else VALID."""
     pending = [tokens]
     while pending:
         for token in pending.pop():
             kind = token.type
             if kind == "function":
-                name = token.lower_name
-                check = _SUBSTITUTION_VERDICTS.get(name)
-                if check is not None:
-                    verdict = _worst(verdict, check(token.arguments))
-                elif _is_dashed(name):
-                    verdict = _worst(verdict, UNKNOWN)
-                if verdict == INVALID:
+                check = _SUBSTITUTION_VERDICTS.get(token.lower_name)
+                if check is None and _is_dashed(token.lower_name):
+                    check = _custom_function_verdict
+                if check is not None and check(token.arguments) == INVALID:
                     return INVALID
                 pending.append(token.arguments)
             elif kind in _BLOCK_TYPES:
                 pending.append(token.content)
-    return verdict
+    return VALID
+
+
+def _declaration_value_verdict(tokens, substitution, depth):
+    """For a value that is a <declaration-value> with no top-level "!" or ";" (bad tokens were ruled
+    out already): its substitution functions decide."""
+    for token in _significant(tokens):
+        if _is_literal(token, "!") or _is_literal(token, ";"):
+            return INVALID
+    if not substitution:
+        return VALID
+    if _substitution_functions_verdict(tokens) == INVALID:
+        return INVALID
+    if depth > _SUBSTITUTION_DEPTH_CAP:
+        return UNKNOWN
+    return VALID
+
+
+def _substitution_validity(tokens, depth):
+    """A value of a property other than a custom one, with a substitution function in it."""
+    top_level = _significant(tokens)
+    for token in top_level:
+        # A {} block is allowed only as the whole value.
+        if token.type == "{} block" and len(top_level) > 1:
+            return INVALID
+    return _declaration_value_verdict(tokens, True, depth)
 
 
 # ---- math functions -----------------------------------------------------------------------------
@@ -2310,6 +2470,16 @@ _GRAMMARS = {
     "clip-path": _clip_path,
     "mask": _mask,
 }
+
+
+def custom_property_validity(value_tokens):
+    """value_tokens: a tinycss2 Declaration.value for a --name declaration (`!important` already
+    removed). Chrome keeps any <declaration-value> (empty included, {} blocks anywhere) whose
+    substitution functions are well formed. Returns VALID, INVALID or UNKNOWN."""
+    bad, substitution, depth = _contains_substitution_or_bad_token(value_tokens)
+    if bad:
+        return INVALID
+    return _declaration_value_verdict(value_tokens, substitution, depth)
 
 
 def declaration_validity(name, value_tokens):

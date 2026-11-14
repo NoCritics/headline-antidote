@@ -513,7 +513,7 @@ class AtRuleTests(unittest.TestCase):
         from headline_guard import css_cascade, css_validity
 
         def clear_caches():
-            css_cascade._substituted_validity.cache_clear()
+            css_cascade._cached_substituted_validity.cache_clear()
             for cache in (css_cascade._external_stylesheets, css_cascade._external_rule_sets,
                           css_cascade._page_stylesheets, css_cascade._page_rule_sets):
                 cache.clear()

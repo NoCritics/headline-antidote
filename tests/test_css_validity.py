@@ -1,8 +1,11 @@
-"""headline_guard.css_validity: whether Chrome keeps a declaration of a hiding property.
+"""headline_guard.css_validity: whether Chrome keeps a declaration of a hiding property or of a
+custom property.
 
 The expected constants in CHROME_CASES were read from Chrome 157: VALID when a standards-mode
 style sheet applies the value after another one, QUIRKS_ONLY when only a quirks-mode (no doctype)
-style sheet does, INVALID otherwise. ChromeAgreementTests checks them against the installed Chrome.
+style sheet does, INVALID otherwise. CUSTOM_PROPERTY_CASES were read the same way for --o, in a
+style attribute and in standards and quirks style sheets, which agreed on every row. ChromeAgreementTests
+checks both tables against the installed Chrome.
 """
 
 import importlib.util
@@ -10,7 +13,8 @@ import unittest
 
 import tinycss2
 
-from headline_guard.css_validity import INVALID, QUIRKS_ONLY, UNKNOWN, VALID, declaration_validity
+from headline_guard.css_validity import (INVALID, QUIRKS_ONLY, UNKNOWN, VALID, custom_property_validity,
+                                         declaration_validity)
 
 
 def nested(opening, middle, closing, depth):
@@ -64,6 +68,10 @@ CHROME_CASES = [
     ("opacity", "if()", INVALID),
     ("opacity", "var(--y) inherit(--x)", INVALID),
     ("opacity", nested("calc(", "var(--x)", ")", 150), VALID),
+    ("opacity", "if(style(--x: 1): 1; else: 0)", VALID),
+    ("opacity", "attr(x type(<number>))", VALID),
+    ("display", "--choose(block)", VALID),
+    ("display", "--choose({a} )", INVALID),
     # math: nesting depth (functions and parentheses together), whitespace around + and -, types
     ("opacity", nested("calc(", "0", ")", 100), VALID),
     ("opacity", nested("calc(", "0", ")", 101), INVALID),
@@ -349,10 +357,7 @@ CHROME_CASES = [
 UNKNOWN_CASES = [
     # Chrome 157 parses this and then crashes the page.
     ("background", "border-area text"),
-    # if() conditions, typed attr(), custom functions, relative colours, random() and anchor() are not followed.
-    ("opacity", "if(style(--x: 1): 1; else: 0)"),
-    ("opacity", "attr(x type(<number>))"),
-    ("display", "--choose(block)"),
+    # Relative colours, random() and anchor() are not followed.
     ("color", "rgb(from red r g b)"),
     ("width", "random(1px, 2px)"),
     ("left", "anchor(left)"),
@@ -363,6 +368,184 @@ UNKNOWN_CASES = [
     # Deeper than the nesting this module follows.
     ("opacity", nested("var(--x,", "1", ")", 1200)),
     ("color", nested("light-dark(", "red", ", red)", 100)),
+]
+
+CUSTOM_PROPERTY_CASES = [
+    # any <declaration-value>: empty, whitespace, comments, keywords, {} blocks anywhere
+    ('1', VALID),
+    ('', VALID),
+    (' ', VALID),
+    ('/**/', VALID),
+    ('banana banana', VALID),
+    ('inherit 1', VALID),
+    ('default', VALID),
+    ('@a', VALID),
+    ('<!--', VALID),
+    ('u+1', VALID),
+    ('\'a\' "b"', VALID),
+    ('\\', VALID),
+    ('{}', VALID),
+    ('{a}', VALID),
+    ('{1} 2', VALID),
+    ('1 {2}', VALID),
+    ('({})', VALID),
+    ('{!}', VALID),
+    ('{;}', VALID),
+    ('f({;})', VALID),
+    ('(!)', VALID),
+    ('[!]', VALID),
+    ('f(!)', VALID),
+    ('(;)', VALID),
+    ('f(;)', VALID),
+    ('url(a)', VALID),
+    ('url(', VALID),
+    ("'a", VALID),
+    ('calc(1px +)', VALID),
+    ('--(1)', VALID),
+    ('-webkit-var(x)', VALID),
+    # top-level "!", unmatched closing brackets, bad strings and bad url()s
+    ('!', INVALID),
+    ('1 !', INVALID),
+    ('a!b', INVALID),
+    ('#!', INVALID),
+    ('1 ]', INVALID),
+    ('1 )', INVALID),
+    (']', INVALID),
+    (')', INVALID),
+    ('1 }', INVALID),
+    ('}', INVALID),
+    ('(]', INVALID),
+    ('[)', INVALID),
+    ('f(])', INVALID),
+    ('url(a b)', INVALID),
+    ('"a" url(a b)', INVALID),
+    ('f(url(a b))', INVALID),
+    ("'a\nb'", INVALID),
+    ("1 'a\nb'", INVALID),
+    ("{'a\nb'}", INVALID),
+    ('url(a\nb)', INVALID),
+    # var()
+    ('var(--x)', VALID),
+    ('var(---)', VALID),
+    ('var(--a,)', VALID),
+    ('var(--a, (!))', VALID),
+    ('var(--a, {})', VALID),
+    ('var(--a, {!})', VALID),
+    ('var(x)', INVALID),
+    ('var(--)', INVALID),
+    ('var(--a 1)', INVALID),
+    ('var(#0f0)', INVALID),
+    ('var(--a, !)', INVALID),
+    ('var(', INVALID),
+    ('VAR(x)', INVALID),
+    ('f(var(x))', INVALID),
+    ('(var(x))', INVALID),
+    ('{var(x)}', INVALID),
+    ('calc(var(x))', INVALID),
+    ('var(--a, var(x))', INVALID),
+    # env(): a name, then non-negative integers
+    ('env(x)', VALID),
+    ('env(--x 0)', VALID),
+    ('env(x 0 0 0)', VALID),
+    ('env(x +1)', VALID),
+    ('env(x -0)', VALID),
+    ('env(x 1, 2)', VALID),
+    ('env(x, {})', VALID),
+    ('env(1)', INVALID),
+    ('env(x -1)', INVALID),
+    ('env(x 1.5)', INVALID),
+    ('env(x 1e0)', INVALID),
+    ('env(x y)', INVALID),
+    ('env(x, !)', INVALID),
+    ('env()', INVALID),
+    # attr(): a name, then one identifier, "%" or type(<syntax>)
+    ('attr(x)', VALID),
+    ('attr(-x)', VALID),
+    ('attr(x px)', VALID),
+    ('attr(x %)', VALID),
+    ('attr(x banana)', VALID),
+    ('attr(x inherit)', VALID),
+    ('attr(x raw-string, 1)', VALID),
+    ('attr(x type(<length>))', VALID),
+    ('attr(x type(<length>+))', VALID),
+    ('attr(x type(<transform-list>))', VALID),
+    ('attr(x type(*))', VALID),
+    ('attr(x type(auto | <length>))', VALID),
+    ('attr(x type(<custom-ident>#))', VALID),
+    ('attr(x, attr(y))', VALID),
+    ("attr('x')", INVALID),
+    ('attr(x, !)', INVALID),
+    ('attr()', INVALID),
+    ('attr(x|y)', INVALID),
+    ('attr(x 1px)', INVALID),
+    ('attr(x px px)', INVALID),
+    ("attr(x 'a')", INVALID),
+    ('attr(x type())', INVALID),
+    ('attr(x type(<url>))', INVALID),
+    ('attr(x type(<transform-list>+))', INVALID),
+    ('attr(x type(<LENGTH>))', INVALID),
+    ('attr(x type(< length>))', INVALID),
+    ('attr(x type(<length> +))', INVALID),
+    ('attr(x type(inherit))', INVALID),
+    ('attr(x type(* | <length>))', INVALID),
+    ('attr(x type(auto auto))', INVALID),
+    # if(): condition: value branches, with not, and, or and else
+    ('if(style(--x): 1)', VALID),
+    ('IF(style(--x):1)', VALID),
+    ('if(style(--x):)', VALID),
+    ('if(style(--x): 1;)', VALID),
+    ('if(else: 1)', VALID),
+    ('if(style(--x): 1; else: 2)', VALID),
+    ('if(not style(--x): 1)', VALID),
+    ('if(NOT (style(--x)): 1)', VALID),
+    ('if(style(--x) and style(--y): 1)', VALID),
+    ('if(style(--x) or media(print): 1)', VALID),
+    ('if(banana(x): 1)', VALID),
+    ('if((1): 1)', VALID),
+    ('if(style(--x): {} 1)', VALID),
+    ('if(style(--x): a : b)', VALID),
+    ('if()', INVALID),
+    ('if(x)', INVALID),
+    ('if(banana: 1)', INVALID),
+    ('if(style(--x): 1;;)', INVALID),
+    ('if(;style(--x): 1)', INVALID),
+    ('if(not not style(--x): 1)', INVALID),
+    ('if(style(--x) and style(--y) or style(--z): 1)', INVALID),
+    ('if(not style(--x) and style(--y): 1)', INVALID),
+    ('if(style(--x) style(--y): 1)', INVALID),
+    ('if(else and style(--x): 1)', INVALID),
+    ('if(style(--x): !)', INVALID),
+    ('if(style(--x): var(x))', INVALID),
+    ('if([a]: 1)', INVALID),
+    ('if(style(--x))', INVALID),
+    ('if(style(--x): 1; 2)', INVALID),
+    # custom functions: one {} block alone as an argument, with nothing after it
+    ('--foo(1)', VALID),
+    ('--foo( )', VALID),
+    ('--foo(1, 2, 3)', VALID),
+    ('--foo({a})', VALID),
+    ('--foo({a, b})', VALID),
+    ('--foo({a}, {b})', VALID),
+    ('--foo( {a})', VALID),
+    ('--foo(,1)', VALID),
+    ('--foo((!))', VALID),
+    ('--foo(--bar(1))', VALID),
+    ('--foo(!)', INVALID),
+    ('--foo({})', INVALID),
+    ('--foo({ })', INVALID),
+    ('--foo({!})', INVALID),
+    ('--foo({a} )', INVALID),
+    ('--foo({a} b)', INVALID),
+    ('--foo(a {b})', INVALID),
+    ('--foo(,)', INVALID),
+    ('--foo(a,)', INVALID),
+    ('--foo(,,1)', INVALID),
+    ('--foo(var(x))', INVALID),
+    ('--foo(--bar(!))', INVALID),
+    # inherit() is rejected anywhere
+    ('inherit(--x)', INVALID),
+    ('1 inherit(--x)', INVALID),
+    ('var(--a, inherit(--x))', INVALID),
 ]
 
 # Chrome's quirks-mode and standards-mode checks set each value after one of these and compare.
@@ -389,7 +572,11 @@ POSITIONED = ("left", "top", "right", "bottom", "inset")
 
 
 def tokens_of(name, value):
-    return tinycss2.parse_one_declaration(name + ":" + value).value
+    declaration = tinycss2.parse_one_declaration(name + ":" + value)
+    if declaration.type == "error":
+        # tinycss2 takes "--o: 1 {2}" for a nested rule; Chrome for a custom property.
+        return tinycss2.parse_component_value_list(value)
+    return declaration.value
 
 
 def fits_in_rule(value):
@@ -431,6 +618,18 @@ class DeclarationValidityTests(unittest.TestCase):
         for name, value, expected in CHROME_CASES:
             with self.subTest(name=name, value=value[:80]):
                 self.assertEqual(declaration_validity(name, tokens_of(name, value)), expected)
+
+    def test_custom_property_answers_match_chrome(self):
+        for value, expected in CUSTOM_PROPERTY_CASES:
+            with self.subTest(value=value):
+                self.assertEqual(custom_property_validity(tokens_of("--o", value)), expected)
+
+    def test_custom_property_too_deep_to_follow_is_unknown(self):
+        valid_but_deep = nested("var(--a,", "1", ")", 1200)
+        invalid_and_deep = nested("(", "var(x)", ")", 1200)
+        self.assertEqual(custom_property_validity(tokens_of("--o", valid_but_deep)), UNKNOWN)
+        self.assertEqual(custom_property_validity(tokens_of("--o", invalid_and_deep)), INVALID)
+        self.assertEqual(custom_property_validity(tokens_of("--o", nested("(", "1", ")", 100000))), VALID)
 
     def test_undecided_values_are_unknown(self):
         for name, value in UNKNOWN_CASES:
@@ -480,6 +679,26 @@ class ChromeAgreementTests(unittest.TestCase):
       return computed(property + ':' + base) !== computed(property + ':' + base + ';' + property + ':' + value);
     }"""
 
+    CUSTOM_APPLIED = """([value, doctype, inline]) => {
+      const computed = css => {
+        document.open();
+        if (inline) {
+          document.write(doctype + '<html><body><div id="x">t</div></body></html>');
+          document.close();
+          document.getElementById('x').setAttribute('style', css);
+        } else {
+          document.write(doctype + '<html><head><style>.x{' + css + '}</style></head>'
+                         + '<body><div class="x" id="x">t</div></body></html>');
+          document.close();
+        }
+        return getComputedStyle(document.getElementById('x')).getPropertyValue('--o');
+      };
+      for (const base of ['b1', 'b2']) {
+        if (computed('--o:' + base) !== computed('--o:' + base + ';--o:' + value)) return true;
+      }
+      return false;
+    }"""
+
     def applied(self, tab, name, value, doctype):
         prefix = "position:absolute;" if name in POSITIONED else ""
         for base in BASES[name]:
@@ -508,6 +727,28 @@ class ChromeAgreementTests(unittest.TestCase):
                         tab.set_content("<!doctype html><p>x")
                         supported = tab.evaluate("([p, v]) => CSS.supports(p, v)", [name, value])
                         self.assertEqual(supported, expected == VALID)
+            browser.close()
+
+    def test_custom_property_answers_match_chrome(self):
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch(channel="chrome")
+            except Exception as error:  # Chrome missing or not launchable here
+                self.skipTest(f"Chrome not available: {error}")
+            tab = browser.new_page()
+            tab.set_content("<p>x")
+            for value, expected in CUSTOM_PROPERTY_CASES:
+                with self.subTest(value=value):
+                    # In a style attribute the value comes last, so an unclosed bracket ends where
+                    # tinycss2 ends it; a style sheet takes only values a rule can hold.
+                    self.assertEqual(tab.evaluate(self.CUSTOM_APPLIED, [value, "<!doctype html>", True]),
+                                     expected == VALID)
+                    if fits_in_rule(value):
+                        for doctype in ("<!doctype html>", ""):
+                            self.assertEqual(tab.evaluate(self.CUSTOM_APPLIED, [value, doctype, False]),
+                                             expected == VALID)
             browser.close()
 
 
