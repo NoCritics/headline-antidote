@@ -31,6 +31,13 @@ class CascadeHidingTests(unittest.TestCase):
         self.assertEqual(result.clean_text, HEADLINE + " losses and layoffs")
         self.assertEqual(result.verdict, "pass", result.flags)
 
+    def test_z_index_is_rounded_like_an_integer(self):
+        # Measured in Chrome 157 with elementFromPoint: calc(-0.4) and calc(-0.5) compute to 0 and
+        # leave the text on top; calc(-0.6) computes to -1 and draws it under the white heading.
+        self.assert_visible(page("h1{background:#fff} .x{position:relative;z-index:calc(-0.4)}"))
+        self.assert_visible(page("h1{background:#fff} .x{position:relative;z-index:calc(-0.5)}"))
+        self.assert_hidden(page("h1{background:#fff} .x{position:relative;z-index:calc(-0.6)}"))
+
     def test_child_combinator(self):
         self.assert_hidden(page("h1 > span.x { display: none }"))
 
@@ -515,6 +522,51 @@ CHROME_DECIDED_CASES += (
     # Percentages and lengths mixed: Chrome computes -100% - 10px against the containing block.
     (".x{position:absolute;left:calc(-100% - 10px)}", "", True),
     (".x{position:absolute;left:calc(-10% - 10px)}", "", False),
+    (".x{position:absolute;left:calc(1% - 9999px)}", "", True),
+    (".x{position:absolute;left:min(-9999px, 100%)}", "", True),
+    (".x{position:absolute;left:max(-9999px, -100%)}", "", True),
+    (".x{position:absolute;left:max(-9999px, 10px)}", "", False),
+    (".x{font-size:calc(0px + 0%)}", "", True),
+    (".x{display:inline-block;transform:translateX(calc(-100% - 9999px))}", "", True),
+    # Each side of inset counts, written plainly too.
+    (".x{position:absolute;inset:0 auto auto -9999px}", "", True),
+    (".x{position:absolute;inset:0 auto auto 10px}", "", False),
+    # The rest of CSS math: NaN is 0, an infinity the largest length, dividing by zero infinite.
+    (".x{position:absolute;left:calc(-infinity * 1px)}", "", True),
+    (".x{opacity:calc(nan)}", "", True),
+    (".x{opacity:calc(0 * infinity)}", "", True),
+    (".x{font-size:calc(nan * 1px)}", "", True),
+    (".x{opacity:calc(1 / infinity)}", "", True),
+    (".x{opacity:calc(-1 / 0 + 1)}", "", True),
+    (".x{opacity:calc(10 / 0)}", "", False),
+    (".x{opacity:abs(0)}", "", True),
+    (".x{opacity:sign(-5)}", "", True),
+    (".x{opacity:calc(sign(-5) + 2)}", "", False),
+    (".x{position:absolute;left:calc(abs(9999px) * -1)}", "", True),
+    (".x{font-size:round(0.4px, 1px)}", "", True),
+    (".x{font-size:round(down, 0.9px, 1px)}", "", True),
+    (".x{font-size:round(up, 1.1px, 1px)}", "", False),
+    (".x{font-size:mod(10px, 5px)}", "", True),
+    (".x{font-size:rem(-1px, 5px)}", "", True),
+    (".x{font-size:mod(-1px, 5px)}", "", False),
+    (".x{opacity:sin(0)}", "", True),
+    (".x{opacity:cos(90deg)}", "", True),
+    (".x{opacity:calc(sin(pi))}", "", True),
+    (".x{opacity:calc(1 - cos(0))}", "", True),
+    (".x{opacity:cos(0)}", "", False),
+    (".x{color:hsl(calc(120deg) 100% 50% / calc(0))}", "", True),
+    (".x{color:hsl(asin(1) 100% 50% / 0)}", "", True),
+    (".x{opacity:pow(0, 2)}", "", True),
+    (".x{opacity:sqrt(0)}", "", True),
+    (".x{opacity:log(1)}", "", True),
+    (".x{opacity:log(8, 2)}", "", False),
+    (".x{opacity:exp(-infinity)}", "", True),
+    (".x{font-size:hypot(0px, 0px)}", "", True),
+    (".x{font-size:hypot(3px, 4px)}", "", False),
+    (".x{opacity:calc(atan2(0, 1) / 1deg)}", "", True),
+    (".x{opacity:calc(e - e)}", "", True),
+    (".x{opacity:progress(0, 0, 1)}", "", True),
+    (".x{opacity:calc(progress(2, 0, 1) - 1)}", "", True),
 )
 
 # Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
