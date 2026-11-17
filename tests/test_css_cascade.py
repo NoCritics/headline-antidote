@@ -795,6 +795,27 @@ class DeepNestingTests(unittest.TestCase):
         self.assertNotIn("losses and layoffs", result.clean_text)
         self.assertNotEqual(result.verdict, "pass")
 
+    assert_visible = CascadeHidingTests.assert_visible
+
+    def test_math_nested_deep_in_a_variable_is_unset(self):
+        # Measured in Chrome 157: past 100 levels the substituted value is invalid, so left is unset.
+        self.assert_visible(at_rule_page(
+            ":root{--v:" + "min(" * 2000 + "-9999px" + ")" * 2000 + "} .x{position:absolute;left:var(--v)}"))
+
+    def test_math_that_cannot_be_evaluated_is_read_quickly_however_deep(self):
+        import time
+
+        started = time.perf_counter()
+        self.assert_visible(at_rule_page(
+            ":root{--v:" + "calc(" * 2000 + "1foo" + ")" * 2000 + "} .x{position:absolute;left:var(--v)}"))
+        self.assertLess(time.perf_counter() - started, 1)
+
+    def test_a_z_index_too_large_for_a_float_is_clamped(self):
+        # Measured in Chrome 157 with elementFromPoint: 400 nines compute to 2147483647 and the text
+        # stays on top; minus 400 nines to -2147483648, under the white heading.
+        self.assert_visible(at_rule_page("h1{background:#fff} .x{position:relative;z-index:" + "9" * 400 + "}"))
+        self.assert_hidden(at_rule_page("h1{background:#fff} .x{position:relative;z-index:-" + "9" * 400 + "}"))
+
     def test_a_selector_nested_too_deep_to_read_hides_the_payload(self):
         for depth in (300, 3000):
             with self.subTest(depth=depth):
