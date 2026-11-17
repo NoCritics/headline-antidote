@@ -5,6 +5,7 @@ Pure Python, no dependencies. Values the parser cannot evaluate return None, and
 callers treat None as "not hidden", so an unknown value never removes text.
 """
 
+import functools
 import math
 import re
 
@@ -282,13 +283,142 @@ def quoted_strings(value):
 # Chrome drops a declaration whose math functions and the parentheses inside them nest deeper than
 # this (measured in Chrome 157); stopping there also keeps the recursive parser off the call-stack limit.
 MAXIMUM_MATH_DEPTH = 100
-_TOKEN = re.compile(r"\s*(?:(-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?)([a-z%]*)|([a-z-]+)\(|([-+*/(),]))")
+# Chrome clamps an infinite length to this many pixels (measured: calc(-infinity * 1px) is -3.35544e+07px).
+LARGEST_LENGTH_PIXELS = 33554400.0
+MATH_FUNCTIONS = (
+    "calc", "min", "max", "clamp", "abs", "sign", "round", "mod", "rem", "sin", "cos", "tan", "asin", "acos",
+    "atan", "atan2", "pow", "sqrt", "hypot", "log", "exp", "progress",
+)
+_TOKEN = re.compile(
+    r"\s*(?:([-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)([a-z%]*)|([a-z][a-z0-9-]*)\(|(-?[a-z][a-z-]*)|([-+*/(),]))"
+)
+_CONSTANTS = {"e": math.e, "pi": math.pi, "infinity": math.inf, "-infinity": -math.inf, "nan": math.nan}
+DEGREES_PER_UNIT = {"deg": 1.0, "grad": 0.9, "rad": 180 / math.pi, "turn": 360.0}
+_ROUNDING_STRATEGIES = ("nearest", "up", "down", "to-zero")
+# Kinds whose values compare and add with each other. 'mixed' is a percentage plus a length; its
+# number is the pair (pixels, percent).
+_LENGTH_KINDS = ("length", "percent", "mixed")
+
+
+def _divided(dividend, divisor):
+    """dividend / divisor as CSS computes it: dividing by zero gives an infinity (or NaN for 0/0)."""
+    if divisor == 0:
+        if dividend == 0 or math.isnan(dividend):
+            return math.nan
+        return math.copysign(math.inf, dividend) * math.copysign(1.0, divisor)
+    return dividend / divisor
+
+
+def _pixels_and_percent(number, kind):
+    if kind == "length":
+        return number, 0.0
+    if kind == "percent":
+        return 0.0, number
+    return number
+
+
+def _length_value(pixels, percent, kinds):
+    """A sum of lengths and percentages, as (number, kind): plain when one of them is absent."""
+    if "percent" not in kinds and "mixed" not in kinds:
+        return pixels, "length"
+    if "length" not in kinds and "mixed" not in kinds:
+        return percent, "percent"
+    return (pixels, percent), "mixed"
+
+
+def _scaled(number, kind, factor):
+    if kind == "mixed":
+        return (number[0] * factor, number[1] * factor), kind
+    return number * factor, kind
+
+
+def _rounded(strategy, value, step):
+    if step == 0 or math.isinf(value) or math.isnan(value):
+        return math.nan
+    if math.isinf(step):
+        return value if strategy != "nearest" else math.copysign(0.0, value)
+    quotient = value / step
+    if strategy == "up":
+        return math.ceil(quotient) * step
+    if strategy == "down":
+        return math.floor(quotient) * step
+    if strategy == "to-zero":
+        return math.trunc(quotient) * step
+    return math.floor(quotient + 0.5) * step
+
+
+def _remainder(dividend, divisor, sign_of_divisor):
+    """mod() (sign of the divisor) or rem() (sign of the dividend)."""
+    if divisor == 0 or math.isinf(dividend) or math.isnan(dividend) or math.isnan(divisor):
+        return math.nan
+    if math.isinf(divisor):
+        if sign_of_divisor and (dividend < 0) != (divisor < 0) and dividend != 0:
+            return math.nan
+        return dividend
+    if sign_of_divisor:
+        return dividend - divisor * math.floor(dividend / divisor)
+    return math.fmod(dividend, divisor)
+
+
+def _square_root(number):
+    if number < 0 or math.isnan(number):
+        return math.nan
+    return math.sqrt(number)
+
+
+def _logarithm(number, base):
+    if number < 0 or math.isnan(number) or base <= 0 or base == 1:
+        return math.nan
+    if number == 0:
+        return -math.inf
+    if math.isinf(number):
+        return math.inf
+    return math.log(number) / math.log(base)
+
+
+def _power(base, exponent):
+    try:
+        return math.pow(base, exponent)
+    except OverflowError:
+        return math.inf
+    except ValueError:  # a negative base with a fractional exponent
+        return math.nan
+
+
+def _exponential(number):
+    try:
+        return math.exp(number)
+    except OverflowError:
+        return math.inf
+
+
+def _trigonometric(function_name, number, kind):
+    radians = math.radians(number) if kind == "angle" else number
+    if math.isinf(radians) or math.isnan(radians):
+        return math.nan
+    if function_name == "sin":
+        return math.sin(radians)
+    if function_name == "cos":
+        return math.cos(radians)
+    return math.tan(radians)
+
+
+def _inverse_trigonometric(function_name, number):
+    if function_name == "atan":
+        return math.degrees(math.atan(number))
+    if math.isnan(number) or number < -1 or number > 1:
+        return math.nan
+    if function_name == "asin":
+        return math.degrees(math.asin(number))
+    return math.degrees(math.acos(number))
 
 
 class _ExpressionParser:
-    """Evaluates calc()-style expressions to (number, kind), kind 'length' (in pixels),
-    'number' or 'percent'. Raises ValueError on anything it does not understand, or nested deeper
-    than MAXIMUM_MATH_DEPTH."""
+    """Evaluates CSS math (calc(), min(), round(), sin(), ... and the constants) to (number, kind):
+    kind 'length' (in pixels), 'number', 'percent', 'angle' (in degrees) or 'mixed' (a percentage
+    plus a length, number (pixels, percent)). NaN and infinities follow IEEE arithmetic, as in
+    Chrome. Raises ValueError on anything it does not understand, on mixed values a function other
+    than calc() would need to compare, or nesting deeper than MAXIMUM_MATH_DEPTH."""
 
     def __init__(self, text):
         self.tokens = []
@@ -312,9 +442,9 @@ class _ExpressionParser:
 
     def _take_operator(self, operators):
         token = self._peek()
-        if token is not None and token[3] in operators:
+        if token is not None and token[4] in operators:
             self.position += 1
-            return token[3]
+            return token[4]
         return None
 
     def parse(self):
@@ -330,13 +460,16 @@ class _ExpressionParser:
             if operator is None:
                 return number, kind
             other_number, other_kind = self._product()
+            if operator == "-":
+                other_number, other_kind = _scaled(other_number, other_kind, -1)
+            if kind in _LENGTH_KINDS and other_kind in _LENGTH_KINDS:
+                pixels, percent = _pixels_and_percent(number, kind)
+                other_pixels, other_percent = _pixels_and_percent(other_number, other_kind)
+                number, kind = _length_value(pixels + other_pixels, percent + other_percent, (kind, other_kind))
+                continue
             if other_kind != kind:
-                if number == 0 and kind == "number":
-                    kind = other_kind
-                elif other_number != 0 or other_kind != "number":
-                    raise ValueError("mixed units")
-            number = number + other_number if operator == "+" else number - other_number
-        return number, kind
+                raise ValueError("mixed units")
+            number = number + other_number
 
     def _product(self):
         number, kind = self._factor()
@@ -347,28 +480,41 @@ class _ExpressionParser:
             other_number, other_kind = self._factor()
             if operator == "*":
                 if kind == "number":
-                    kind = other_kind
-                elif other_kind != "number":
+                    number, kind = _scaled(other_number, other_kind, number)
+                elif other_kind == "number":
+                    number, kind = _scaled(number, kind, other_number)
+                else:
                     raise ValueError("length times length")
-                number = number * other_number
+            elif other_kind == "number":
+                if kind == "mixed":
+                    number = (_divided(number[0], other_number), _divided(number[1], other_number))
+                else:
+                    number = _divided(number, other_number)
+            elif other_kind == kind and kind != "mixed":
+                number, kind = _divided(number, other_number), "number"  # 10px / 1px is the number 10
             else:
-                if other_kind != "number" or other_number == 0:
-                    raise ValueError("bad division")
-                number = number / other_number
+                raise ValueError("bad division")
 
     def _arguments(self):
-        values = [self._sum()]
+        values = [self._argument()]
         while self._take_operator((",",)):
-            values.append(self._sum())
+            values.append(self._argument())
         if self._take_operator((")",)) is None:
             raise ValueError("missing )")
         return values
+
+    def _argument(self):
+        token = self._peek()
+        if token is not None and token[3] in _ROUNDING_STRATEGIES:
+            self.position += 1
+            return token[3], "strategy"
+        return self._sum()
 
     def _factor(self):
         token = self._peek()
         if token is None:
             raise ValueError("unexpected end")
-        number_text, unit, function_name, operator = token
+        number_text, unit, function_name, identifier, operator = token
         self.position += 1
         if number_text is not None:
             number = float(number_text)
@@ -378,7 +524,13 @@ class _ExpressionParser:
                 return number, "percent"
             if unit in PIXELS_PER_UNIT:
                 return number * PIXELS_PER_UNIT[unit], "length"
+            if unit in DEGREES_PER_UNIT:
+                return number * DEGREES_PER_UNIT[unit], "angle"
             raise ValueError("unknown unit " + unit)
+        if identifier is not None:
+            if identifier in _CONSTANTS:
+                return _CONSTANTS[identifier], "number"
+            raise ValueError("unknown name " + identifier)
         if function_name is not None or operator == "(":
             self.depth += 1
             if self.depth > MAXIMUM_MATH_DEPTH:
@@ -386,24 +538,7 @@ class _ExpressionParser:
         if function_name is not None:
             arguments = self._arguments()
             self.depth -= 1
-            kinds = set()
-            for _, kind in arguments:
-                kinds.add(kind)
-            if len(kinds) != 1:
-                raise ValueError("mixed kinds")
-            kind = arguments[0][1]
-            numbers = []
-            for argument_number, _ in arguments:
-                numbers.append(argument_number)
-            if function_name == "calc" and len(numbers) == 1:
-                return numbers[0], kind
-            if function_name == "min":
-                return min(numbers), kind
-            if function_name == "max":
-                return max(numbers), kind
-            if function_name == "clamp" and len(numbers) == 3:
-                return max(numbers[0], min(numbers[1], numbers[2])), kind
-            raise ValueError("unsupported function " + function_name)
+            return _function_value(function_name, arguments)
         if operator == "(":
             value = self._sum()
             if self._take_operator((")",)) is None:
@@ -413,18 +548,130 @@ class _ExpressionParser:
         raise ValueError("unexpected " + str(operator))
 
 
-def numeric_value(value):
-    """(number, kind) for a CSS number, percentage or length (kind 'length' is in pixels),
-    including calc(), min(), max() and clamp(); None when it cannot be evaluated."""
+def _function_value(function_name, arguments):
+    """The (number, kind) of one math function applied to its evaluated arguments."""
+    strategy = "nearest"
+    if function_name == "round" and arguments and arguments[0][1] == "strategy":
+        strategy = arguments[0][0]
+        arguments = arguments[1:]
+    kinds = set()
+    numbers = []
+    for argument_number, kind in arguments:
+        if kind == "strategy":
+            raise ValueError("misplaced rounding strategy")
+        kinds.add(kind)
+        numbers.append(argument_number)
+    if len(kinds) != 1:
+        raise ValueError("mixed kinds")
+    kind = arguments[0][1]
+    if function_name == "calc" and len(numbers) == 1:
+        return numbers[0], kind
+    if kind == "mixed":
+        raise ValueError("cannot compare a percentage with a length here")
+    for number in numbers:
+        if math.isnan(number) and function_name in ("min", "max", "clamp", "hypot"):
+            return math.nan, kind
+    if function_name == "min":
+        return min(numbers), kind
+    if function_name == "max":
+        return max(numbers), kind
+    if function_name == "clamp" and len(numbers) == 3:
+        return max(numbers[0], min(numbers[1], numbers[2])), kind
+    if function_name == "hypot":
+        return math.hypot(*numbers), kind
+    if function_name == "progress" and len(numbers) == 3:
+        # Clamped to 0..1 (measured: calc(progress(2, 0, 1) - 1) is 0).
+        return max(0.0, min(1.0, _divided(numbers[0] - numbers[1], numbers[2] - numbers[1]))), "number"
+    if len(numbers) == 1:
+        number = numbers[0]
+        if function_name == "abs":
+            return abs(number), kind
+        if function_name == "sign":
+            if number == 0 or math.isnan(number):
+                return number, "number"
+            return math.copysign(1.0, number), "number"
+        if function_name == "round" and kind == "number":
+            return _rounded(strategy, number, 1.0), kind
+        if function_name in ("sin", "cos", "tan") and kind in ("number", "angle"):
+            return _trigonometric(function_name, number, kind), "number"
+        if kind == "number":
+            if function_name in ("asin", "acos", "atan"):
+                return _inverse_trigonometric(function_name, number), "angle"
+            if function_name == "sqrt":
+                return _square_root(number), kind
+            if function_name == "exp":
+                return _exponential(number), kind
+            if function_name == "log":
+                return _logarithm(number, math.e), kind
+    if len(numbers) == 2:
+        if function_name == "round":
+            return _rounded(strategy, numbers[0], numbers[1]), kind
+        if function_name == "mod":
+            return _remainder(numbers[0], numbers[1], True), kind
+        if function_name == "rem":
+            return _remainder(numbers[0], numbers[1], False), kind
+        if function_name == "atan2":
+            return math.degrees(math.atan2(numbers[0], numbers[1])), "angle"
+        if kind == "number":
+            if function_name == "pow":
+                return _power(numbers[0], numbers[1]), kind
+            if function_name == "log":
+                return _logarithm(numbers[0], numbers[1]), kind
+    raise ValueError("unsupported function " + function_name)
+
+
+def _finite(number):
+    """A top-level math result as Chrome uses it: NaN becomes 0, an infinity the largest length."""
+    if math.isnan(number):
+        return 0.0
+    return max(-LARGEST_LENGTH_PIXELS, min(LARGEST_LENGTH_PIXELS, number))
+
+
+def _evaluated(value):
+    """(number, kind) of a whole value, with NaN and infinities made finite; None when unknown."""
     if not value:
         return None
     text = value.strip().lower()
     if not text or "var(" in text:
         return None
     try:
-        return _ExpressionParser(text).parse()
-    except (ValueError, OverflowError, ZeroDivisionError):
+        number, kind = _ExpressionParser(text).parse()
+    except (ValueError, OverflowError):
         return None
+    if kind == "mixed":
+        pixels = _finite(number[0])
+        percent = _finite(number[1])
+        # A zero part is zero whatever the percentage is of: calc(0px + 0%) is the length 0px.
+        if percent == 0:
+            return pixels, "length"
+        if pixels == 0:
+            return percent, "percent"
+        return (pixels, percent), kind
+    return _finite(number), kind
+
+
+def numeric_value(value):
+    """(number, kind) for a CSS number, percentage, angle or length (kind 'length' is in pixels,
+    'angle' in degrees), including math functions; None when it cannot be evaluated or mixes a
+    percentage with a length (see length_and_percent)."""
+    evaluated = _evaluated(value)
+    if evaluated is None or evaluated[1] == "mixed":
+        return None
+    return evaluated
+
+
+def length_and_percent(value):
+    """(pixels, percent) for a length, a percentage or a sum of both such as calc(-100% - 10px);
+    None otherwise."""
+    evaluated = _evaluated(value)
+    if evaluated is None or evaluated[1] not in _LENGTH_KINDS:
+        return None
+    number, kind = evaluated
+    if kind == "length":
+        return number, 0.0
+    if kind == "percent":
+        return 0.0, number
+    return number
 
 
 def length_in_pixels(value):
@@ -451,3 +698,157 @@ def plain_number(value):
     if kind == "percent":
         return number / 100
     return None
+
+
+# ---- splitting and simplifying values -------------------------------------
+
+_MATH_FUNCTION_START = re.compile(r"(?<![\w-])(" + "|".join(MATH_FUNCTIONS) + r")\(", re.IGNORECASE)
+_STRING_OR_URL = re.compile(r'"(?:[^"\\]|\\.)*"|' + r"'(?:[^'\\]|\\.)*'|url\([^)]*\)", re.IGNORECASE)
+_UNITS_BY_KIND = {"length": "px", "percent": "%", "angle": "deg", "number": ""}
+
+
+def _closing_parenthesis(text, opening):
+    """The index of the parenthesis closing the one at opening, or None."""
+    depth = 0
+    for index in range(opening, len(text)):
+        character = text[index]
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def _literal(number, kind):
+    if number == int(number):
+        digits = str(int(number))
+    else:
+        digits = f"{number:.10f}".rstrip("0").rstrip(".")
+    if digits in ("-0", ""):
+        digits = "0"
+    return digits + _UNITS_BY_KIND[kind]
+
+
+def _with_math_evaluated_outside_strings(text):
+    pieces = []
+    position = 0
+    while True:
+        match = _MATH_FUNCTION_START.search(text, position)
+        if match is None:
+            pieces.append(text[position:])
+            return "".join(pieces)
+        closing = _closing_parenthesis(text, match.end() - 1)
+        if closing is None:
+            pieces.append(text[position:])
+            return "".join(pieces)
+        evaluated = _evaluated(text[match.start():closing + 1])
+        if evaluated is None:
+            # Not evaluable as a whole: the math functions inside it may still be.
+            pieces.append(text[position:match.end()])
+            position = match.end()
+            continue
+        number, kind = evaluated
+        if kind == "mixed":
+            pieces.append(text[position:closing + 1])  # kept whole: see length_and_percent
+            position = closing + 1
+            continue
+        literal = _literal(number, kind)
+        before = text[match.start() - 1] if match.start() > 0 else " "
+        after = text[closing + 1] if closing + 1 < len(text) else " "
+        if before not in " ,(/":
+            literal = " " + literal
+        if after not in " ,)/":
+            literal = literal + " "
+        pieces.append(text[position:match.start()])
+        pieces.append(literal)
+        position = closing + 1
+
+
+def with_math_evaluated(text):
+    """text with each math function this parser can evaluate replaced by its value, as Chrome
+    computes it (translateX(calc(0px - 9999px)) -> translateX(-9999px), calc(nan) -> 0). Sums of a
+    percentage and a length stay as written. Quoted strings and url() are left alone.
+
+    Use it only on a value Chrome accepts, after any var() is substituted: the result can be a
+    value Chrome would reject as written (font-size: calc(-5px) is valid, -5px is not)."""
+    if "(" not in text:
+        return text
+    # Short texts (nearly all) are cached, so the cache stays within a few megabytes.
+    if len(text) > 1000:
+        return _math_evaluated(text)
+    return _cached_math_evaluated(text)
+
+
+@functools.lru_cache(maxsize=4096)
+def _cached_math_evaluated(text):
+    return _math_evaluated(text)
+
+
+def _math_evaluated(text):
+    pieces = []
+    position = 0
+    for match in _STRING_OR_URL.finditer(text):
+        pieces.append(_with_math_evaluated_outside_strings(text[position:match.start()]))
+        pieces.append(match.group(0))
+        position = match.end()
+    pieces.append(_with_math_evaluated_outside_strings(text[position:]))
+    return "".join(pieces)
+
+
+def top_level_words(text):
+    """The whitespace-separated words of a value, keeping each function whole:
+    'calc(0px - 9999px) auto' -> ['calc(0px - 9999px)', 'auto']."""
+    words = []
+    current = []
+    depth = 0
+    for character in text or "":
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+        if character.isspace() and depth <= 0:
+            if current:
+                words.append("".join(current))
+                current = []
+            continue
+        current.append(character)
+    if current:
+        words.append("".join(current))
+    return words
+
+
+def top_level_arguments(text):
+    """The comma-separated arguments of a list such as 'calc(1px, 2px), 3px', stripped."""
+    arguments = []
+    current = []
+    depth = 0
+    for character in text:
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+        if character == "," and depth == 0:
+            arguments.append("".join(current).strip())
+            current = []
+            continue
+        current.append(character)
+    arguments.append("".join(current).strip())
+    return arguments
+
+
+def function_arguments(text, function_names):
+    """For each top-level call of one of function_names in text, (name, its arguments)."""
+    calls = []
+    pattern = re.compile(r"(?<![\w-])(" + "|".join(function_names) + r")\(")
+    position = 0
+    while True:
+        match = pattern.search(text or "", position)
+        if match is None:
+            return calls
+        closing = _closing_parenthesis(text, match.end() - 1)
+        if closing is None:
+            return calls
+        calls.append((match.group(1), top_level_arguments(text[match.end():closing])))
+        position = closing + 1

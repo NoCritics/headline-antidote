@@ -4,9 +4,13 @@ html_visibility applies them to an element's declarations, css_cascade uses them
 rules that could hide text, and browser_visibility passes the same thresholds to the browser.
 """
 
+import math
 import re
 
-from .css_values import PIXELS_PER_EM, length_in_pixels, numeric_value, parse_color, plain_number
+from .css_values import (
+    PIXELS_PER_EM, VIEWPORT_WIDTH_PIXELS, function_arguments, length_and_percent, length_in_pixels, numeric_value,
+    parse_color, plain_number, top_level_arguments, top_level_words,
+)
 
 # Font sizes below these are unreadable, per unit.
 MINIMUM_READABLE_FONT_SIZES = {
@@ -92,22 +96,12 @@ def font_size_is_unreadable(value):
             return float(match.group(1)) < minimum_size
         pixels = length_in_pixels(value)
         return pixels is not None and pixels < MINIMUM_READABLE_FONT_SIZES["px"]
-    if value.startswith(("calc(", "min(", "max(", "clamp(")):
-        parsed = numeric_value(value)
-        if parsed is None:
-            return False
-        number, kind = parsed
-        if kind == "length":
-            return number < MINIMUM_READABLE_FONT_SIZES["px"]
-        if kind == "percent":
-            return number < MINIMUM_READABLE_FONT_SIZES["%"]
-        return number == 0
     return False
 
 
 def font_shorthand_size(value):
     """The size in a `font` shorthand ('bold 0/0 a' -> '0'), or None."""
-    for token in (value or "").split():
+    for token in top_level_words(value):
         size_text = token.split("/")[0]
         if "/" in token or size_text == "0" or re.fullmatch(r"-?\d*\.?\d+[a-z%]+", size_text):
             return size_text
@@ -115,24 +109,40 @@ def font_shorthand_size(value):
 
 
 def is_off_screen_offset(value):
-    pixels = length_in_pixels(value or "")
-    if pixels is not None:
-        return pixels <= OFF_SCREEN_THRESHOLD_PIXELS
-    parsed = numeric_value(value or "")
-    return parsed is not None and parsed[1] == "percent" and parsed[0] <= -100
+    """Whether an offset (a length, a percentage of the containing block, or a sum of both) puts
+    the box far off-screen. Percentages count at -100% or less, or else at most at the viewport
+    width, so that the answer holds however wide the containing block is."""
+    text = (value or "").strip()
+    if text.endswith(")") and text.startswith(("min(", "max(")):
+        # min() is off-screen when any argument is, max() when all of them are.
+        arguments = top_level_arguments(text[4:-1])
+        results = []
+        for argument in arguments:
+            results.append(is_off_screen_offset(argument))
+        return any(results) if text.startswith("min(") else all(results)
+    terms = length_and_percent(text)
+    if terms is None:
+        return False
+    pixels, percent = terms
+    if percent <= -100 and pixels <= 0:
+        return True
+    widest = pixels + max(percent, 0) * VIEWPORT_WIDTH_PIXELS / 100
+    return widest <= OFF_SCREEN_THRESHOLD_PIXELS
 
 
 def translation_is_off_screen(transform_value, translate_value):
     lengths = []
-    for function_name, arguments in re.findall(r"(translate3d|translatex|translatey|translate)\(([^()]*)\)",
-                                               transform_value or ""):
-        for argument in arguments.split(","):
-            lengths.append(argument.strip())
-    for part in (translate_value or "").split():
+    for function_name, arguments in function_arguments(transform_value, ("translate3d", "translatex", "translatey",
+                                                                          "translate")):
+        for argument in arguments:
+            lengths.append(argument)
+    for part in top_level_words(translate_value):
         lengths.append(part)
     for length in lengths:
-        pixels = length_in_pixels(length)
-        if pixels is not None and pixels <= OFF_SCREEN_THRESHOLD_PIXELS:
+        # A percentage is of the box itself, whose size is unknown here: only the length counts,
+        # and only when the percentage moves the box the same way.
+        terms = length_and_percent(length)
+        if terms is not None and terms[1] <= 0 and terms[0] <= OFF_SCREEN_THRESHOLD_PIXELS:
             return True
     return False
 
@@ -165,7 +175,7 @@ def letters_collapsed(letter_spacing):
 def _is_stretched_over_its_box(declarations):
     inset = declarations.get("inset")
     if inset is not None:
-        for part in inset.split():
+        for part in top_level_words(inset):
             if length_in_pixels(part) != 0:
                 return False
         return True
@@ -194,10 +204,15 @@ def is_covering_overlay(declarations):
     opacity = plain_number(declarations.get("opacity", "1"))
     if opacity is not None and opacity < OPAQUE_ALPHA:
         return False
-    z_index = leading_number(declarations.get("z-index", ""))
-    if z_index is not None and z_index < 0:
+    if z_index_is_negative(declarations.get("z-index", "")):
         return False
     return _is_stretched_over_its_box(declarations)
+
+
+def z_index_is_negative(value):
+    """z-index is an integer: Chrome rounds calc(-0.4) to 0, halves upwards."""
+    number = leading_number(value or "")
+    return number is not None and math.floor(number + 0.5) < 0
 
 
 def opacity_is_invisible(value):
@@ -219,7 +234,9 @@ def scale_is_zero(value):
     return re.fullmatch(r"0(\.0*)?(\s+0(\.0*)?)?", value.strip()) is not None
 
 
-def first_offset_is_off_screen(value):
-    """Whether the first length of an offset value ('left', 'inset', ...) is far off-screen."""
-    words = value.split()
-    return bool(words) and is_off_screen_offset(words[0])
+def any_offset_is_off_screen(value):
+    """Whether an offset value ('left', or any side of 'inset') puts the box far off-screen."""
+    for word in top_level_words(value):
+        if is_off_screen_offset(word):
+            return True
+    return False

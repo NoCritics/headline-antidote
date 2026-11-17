@@ -43,12 +43,12 @@ from tinycss2.serializer import BAD_PAIRS, serialize_identifier
 
 from .css_hiding import (
     CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_OPACITY, declared_background_color, filter_hiding_reason,
-    first_offset_is_off_screen, font_shorthand_is_unreadable, font_size_is_unreadable, is_covering_overlay,
-    leading_number, letters_collapsed, line_height_collapsed, opacity_is_invisible, relative_luminance,
-    scale_is_zero, translation_is_off_screen,
+    any_offset_is_off_screen, font_shorthand_is_unreadable, font_size_is_unreadable, is_covering_overlay,
+    letters_collapsed, line_height_collapsed, opacity_is_invisible, relative_luminance,
+    scale_is_zero, translation_is_off_screen, z_index_is_negative,
 )
 from .css_validity import INVALID, QUIRKS_ONLY, UNKNOWN, VALID, custom_property_validity, declaration_validity
-from .css_values import length_in_pixels, parse_color, quoted_strings
+from .css_values import length_in_pixels, parse_color, quoted_strings, with_math_evaluated
 from .media_queries import media_query_applies
 
 # var() resolves to any depth, as in Chrome, which follows chains thousands long. A value longer
@@ -221,9 +221,10 @@ def _hiding_declarations(items):
             if validity == INVALID:
                 continue
             value = _serialized(declaration.value).strip()
-            # Variable and env() names are case-sensitive, so a value using one is lowercased once resolved.
+            # Variable and env() names are case-sensitive, so a value using one is lowercased (and
+            # its math evaluated) once resolved.
             if "var(" not in value and "env(" not in value:
-                value = value.lower()
+                value = with_math_evaluated(value.lower())
             found.append((name, value, declaration.important, validity))
     return found
 
@@ -514,10 +515,9 @@ def _could_hide(name, value):
         pixels = length_in_pixels(value)
         return pixels is not None and pixels <= CLIPPED_BOX_MAXIMUM_PIXELS
     if name in ("left", "top", "right", "bottom", "margin-left", "margin-top", "text-indent", "inset"):
-        return first_offset_is_off_screen(value)
+        return any_offset_is_off_screen(value)
     if name == "z-index":
-        number = leading_number(value)
-        return number is not None and number < 0
+        return z_index_is_negative(value)
     if name == "unicode-bidi":
         return value in ("bidi-override", "isolate-override")
     return False
@@ -555,7 +555,7 @@ def _rule_could_hide(declarations, variable_values):
             return True
         lowered = []
         for form in forms:
-            form = form.lower()
+            form = with_math_evaluated(form.lower())
             if _could_hide(name, form):
                 return True
             lowered.append(form)
@@ -1714,7 +1714,8 @@ class CascadeRules:
         validity = _substituted_validity(name, resolved)
         if validity == INVALID or (validity == QUIRKS_ONLY and not self._quirks_mode):
             return ""
-        return resolved
+        # Evaluated only now: Chrome validates the math as written.
+        return with_math_evaluated(resolved)
 
     def _resolved_declarations(self, element, full=False):
         full = full or self._is_examined(element)

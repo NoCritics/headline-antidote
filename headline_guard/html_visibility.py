@@ -23,11 +23,12 @@ from lxml import etree
 
 from .css_hiding import (
     CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_CONTRAST, MINIMUM_VISIBLE_OPACITY, OPAQUE_ALPHA, colors_in,
-    contrast_ratio, declared_background_color, filter_hiding_reason, first_offset_is_off_screen,
-    font_shorthand_is_unreadable, font_size_is_unreadable, is_covering_overlay, is_off_screen_offset, leading_number,
+    contrast_ratio, declared_background_color, filter_hiding_reason, any_offset_is_off_screen,
+    font_shorthand_is_unreadable, font_size_is_unreadable, is_covering_overlay, is_off_screen_offset,
     letters_collapsed, line_height_collapsed, opacity_is_invisible, scale_is_zero, translation_is_off_screen,
+    z_index_is_negative,
 )
-from .css_values import length_in_pixels, parse_color, plain_number
+from .css_values import length_in_pixels, parse_color, plain_number, with_math_evaluated
 from .document_mode import is_quirks_mode
 
 # Contents are code or metadata, never headline text, so they are skipped without a flag.
@@ -68,7 +69,7 @@ def _parse_declarations(style_text):
         if ":" not in declaration:
             continue
         property_name, value = declaration.split(":", 1)
-        value = value.replace("!important", "").strip().lower()
+        value = with_math_evaluated(value.replace("!important", "").strip().lower())
         declarations[property_name.strip().lower()] = value
     return declarations
 
@@ -175,7 +176,7 @@ def _hiding_reason_from_declarations(declarations, background_color, background_
     if declarations.get("position") in ("absolute", "fixed"):
         for offset_property in ("left", "top", "right", "bottom", "margin-left", "margin-top", "inset"):
             offset_value = declarations.get(offset_property, "")
-            if first_offset_is_off_screen(offset_value):
+            if any_offset_is_off_screen(offset_value):
                 return (f"positioned off-screen ({offset_property}:{offset_value})", HIGH)
     if is_off_screen_offset(declarations.get("text-indent", "")):
         return ("text-indent off-screen", HIGH)
@@ -268,8 +269,7 @@ def _drawn_behind_background(element, declarations, rules):
     nearest one that starts a stacking context."""
     if declarations.get("position") not in POSITIONED:
         return None
-    z_index = leading_number(declarations.get("z-index", ""))
-    if z_index is None or z_index >= 0:
+    if not z_index_is_negative(declarations.get("z-index", "")):
         return None
     for ancestor in element.iterancestors():
         if not isinstance(ancestor.tag, str) or ancestor.tag.lower() in ("body", "html"):
