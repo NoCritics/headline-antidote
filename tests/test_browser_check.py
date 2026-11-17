@@ -186,6 +186,29 @@ class AtRuleChromeTests(unittest.TestCase):
             browser.close()
 
 
+@unittest.skipUnless(importlib.util.find_spec("playwright") is not None, "playwright not installed")
+class ParserChromeTests(unittest.TestCase):
+    """The texts in test_html_parsing.CHROME_PARSED_PAGES, checked against the installed Chrome."""
+
+    def test_texts_match_chrome(self):
+        from playwright.sync_api import sync_playwright
+
+        from tests.test_html_parsing import CHROME_PARSED_PAGES
+
+        with sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch(channel="chrome")
+            except Exception as error:  # Chrome missing or not launchable here
+                self.skipTest(f"Chrome not available: {error}")
+            tab = browser.new_page()
+            for page, chrome_text in CHROME_PARSED_PAGES:
+                with self.subTest(page=page):
+                    tab.set_content(page)
+                    shown = tab.evaluate("document.body.innerText")
+                    self.assertEqual(" ".join(shown.split()), chrome_text)
+            browser.close()
+
+
 def doctype_cases():
     """Page starts covering every doctype rule of document_mode, and the edge cases around them."""
     from headline_guard import document_mode
