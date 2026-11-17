@@ -627,27 +627,43 @@ def _finite(number):
     return max(-LARGEST_LENGTH_PIXELS, min(LARGEST_LENGTH_PIXELS, number))
 
 
+def _with_zero_parts_dropped(number, kind):
+    """A zero part is zero whatever the percentage is of: calc(0px + 0%) is the length 0px."""
+    if kind == "mixed":
+        if number[1] == 0:
+            return number[0], "length"
+        if number[0] == 0:
+            return number[1], "percent"
+    return number, kind
+
+
+def _parsed(text):
+    """The exact (number, kind) of an expression (NaN and infinities kept), or None when unknown."""
+    try:
+        number, kind = _ExpressionParser(text.lower()).parse()
+    except (ValueError, OverflowError):
+        return None
+    return _with_zero_parts_dropped(number, kind)
+
+
+def _finished(number, kind):
+    """A top-level result as Chrome uses it, NaN and infinities made finite (see _finite)."""
+    if kind == "mixed":
+        return _with_zero_parts_dropped((_finite(number[0]), _finite(number[1])), kind)
+    return _finite(number), kind
+
+
 def _evaluated(value):
     """(number, kind) of a whole value, with NaN and infinities made finite; None when unknown."""
     if not value:
         return None
-    text = value.strip().lower()
-    if not text or "var(" in text:
+    text = value.strip()
+    if not text or "var(" in text.lower():
         return None
-    try:
-        number, kind = _ExpressionParser(text).parse()
-    except (ValueError, OverflowError):
+    parsed = _parsed(text)
+    if parsed is None:
         return None
-    if kind == "mixed":
-        pixels = _finite(number[0])
-        percent = _finite(number[1])
-        # A zero part is zero whatever the percentage is of: calc(0px + 0%) is the length 0px.
-        if percent == 0:
-            return pixels, "length"
-        if pixels == 0:
-            return percent, "percent"
-        return (pixels, percent), kind
-    return _finite(number), kind
+    return _finished(parsed[0], parsed[1])
 
 
 def numeric_value(value):
@@ -731,39 +747,134 @@ def _literal(number, kind):
     return digits + _UNITS_BY_KIND[kind]
 
 
+def _exact_number(number):
+    if math.isnan(number):
+        return "nan"
+    if math.isinf(number):
+        return "infinity" if number > 0 else "-infinity"
+    return repr(number)
+
+
+def _exact_text(number, kind):
+    """An expression giving exactly (number, kind), NaN and infinities included, for evaluating
+    the math function around it."""
+    if kind == "mixed":
+        return f"({_exact_number(number[1])} * 1% + {_exact_number(number[0])} * 1px)"
+    if kind == "number":
+        return f"({_exact_number(number)})"
+    return f"({_exact_number(number)} * 1{_UNITS_BY_KIND[kind]})"
+
+
+def _top_level_text(number, kind):
+    number, kind = _finished(number, kind)
+    if kind == "mixed":
+        return f"calc({_literal(number[1], 'percent')} + {_literal(number[0], 'length')})"
+    return _literal(number, kind)
+
+
+class _Group:
+    """One pair of parentheses: a math function, another function, or a plain group."""
+
+    def __init__(self, start, opening, sort):
+        self.start = start  # where the function name starts (the parenthesis for a plain group)
+        self.opening = opening
+        self.closing = None
+        self.sort = sort  # "math", "function" or "plain"
+        self.children = []
+        self.height = 1
+        # Set once closed: whether a math function around it can use it, and then the text to
+        # splice into that function (an exact expression of its value, for a math function).
+        self.usable = False
+        self.text = None
+        self.value = None
+
+
+def _close(group, text):
+    """Evaluates a group once its children are done. Each math function is parsed once, with its
+    evaluated children spliced in, so the work stays linear in the text however deep it nests."""
+    for child in group.children:
+        group.height = max(group.height, child.height + 1)
+    if group.sort == "function" or group.height > MAXIMUM_MATH_DEPTH:
+        return
+    for child in group.children:
+        if not child.usable:
+            return  # a math function around it cannot be evaluated either
+    pieces = []
+    position = group.start
+    for child in group.children:
+        pieces.append(text[position:child.start])
+        pieces.append(child.text)
+        position = child.closing + 1
+    pieces.append(text[position:group.closing + 1])
+    spliced = "".join(pieces)
+    if group.sort == "plain":
+        group.usable = True
+        group.text = spliced
+        return
+    parsed = _parsed(spliced)
+    if parsed is None:
+        return
+    group.usable = True
+    group.value = parsed
+    group.text = _exact_text(parsed[0], parsed[1])
+
+
 def _with_math_evaluated_outside_strings(text):
+    math_starts = {}
+    for match in _MATH_FUNCTION_START.finditer(text):
+        math_starts[match.end() - 1] = match.start()
+    open_groups = []
+    top_groups = []
+    for index, character in enumerate(text):
+        if character == "(":
+            if index in math_starts:
+                group = _Group(math_starts[index], index, "math")
+            elif index > 0 and (text[index - 1].isalnum() or text[index - 1] in "-_"):
+                group = _Group(index, index, "function")
+            else:
+                group = _Group(index, index, "plain")
+            open_groups.append(group)
+        elif character == ")" and open_groups:
+            group = open_groups.pop()
+            group.closing = index
+            _close(group, text)
+            if open_groups:
+                open_groups[-1].children.append(group)
+            else:
+                top_groups.append(group)
+    while open_groups:
+        # Never closed: left as written, with what is inside it.
+        group = open_groups.pop()
+        if open_groups:
+            open_groups[-1].children.append(group)
+        else:
+            top_groups.append(group)
+
+    # The outermost math functions that have a value replace their text.
+    evaluated = []
+    pending = list(reversed(top_groups))
+    while pending:
+        group = pending.pop()
+        if group.sort == "math" and group.value is not None:
+            evaluated.append(group)
+        else:
+            for child in reversed(group.children):
+                pending.append(child)
     pieces = []
     position = 0
-    while True:
-        match = _MATH_FUNCTION_START.search(text, position)
-        if match is None:
-            pieces.append(text[position:])
-            return "".join(pieces)
-        closing = _closing_parenthesis(text, match.end() - 1)
-        if closing is None:
-            pieces.append(text[position:])
-            return "".join(pieces)
-        evaluated = _evaluated(text[match.start():closing + 1])
-        if evaluated is None:
-            # Not evaluable as a whole: the math functions inside it may still be.
-            pieces.append(text[position:match.end()])
-            position = match.end()
-            continue
-        number, kind = evaluated
-        if kind == "mixed":
-            pieces.append(text[position:closing + 1])  # kept whole: see length_and_percent
-            position = closing + 1
-            continue
-        literal = _literal(number, kind)
-        before = text[match.start() - 1] if match.start() > 0 else " "
-        after = text[closing + 1] if closing + 1 < len(text) else " "
+    for group in evaluated:
+        literal = _top_level_text(group.value[0], group.value[1])
+        before = text[group.start - 1] if group.start > 0 else " "
+        after = text[group.closing + 1] if group.closing + 1 < len(text) else " "
         if before not in " ,(/":
             literal = " " + literal
         if after not in " ,)/":
             literal = literal + " "
-        pieces.append(text[position:match.start()])
+        pieces.append(text[position:group.start])
         pieces.append(literal)
-        position = closing + 1
+        position = group.closing + 1
+    pieces.append(text[position:])
+    return "".join(pieces)
 
 
 def with_math_evaluated(text):

@@ -8,7 +8,7 @@ import math
 import re
 
 from .css_values import (
-    PIXELS_PER_EM, VIEWPORT_WIDTH_PIXELS, function_arguments, length_and_percent, length_in_pixels, numeric_value,
+    MAXIMUM_MATH_DEPTH, PIXELS_PER_EM, VIEWPORT_WIDTH_PIXELS, function_arguments, length_and_percent, length_in_pixels, numeric_value,
     parse_color, plain_number, top_level_arguments, top_level_words,
 )
 
@@ -108,17 +108,19 @@ def font_shorthand_size(value):
     return None
 
 
-def is_off_screen_offset(value):
+def is_off_screen_offset(value, depth=1):
     """Whether an offset (a length, a percentage of the containing block, or a sum of both) puts
     the box far off-screen. Percentages count at -100% or less, or else at most at the viewport
     width, so that the answer holds however wide the containing block is."""
     text = (value or "").strip()
     if text.endswith(")") and text.startswith(("min(", "max(")):
+        if depth > MAXIMUM_MATH_DEPTH:
+            return False  # Chrome rejects math nested this deep, so the offset does not apply
         # min() is off-screen when any argument is, max() when all of them are.
         arguments = top_level_arguments(text[4:-1])
         results = []
         for argument in arguments:
-            results.append(is_off_screen_offset(argument))
+            results.append(is_off_screen_offset(argument, depth + 1))
         return any(results) if text.startswith("min(") else all(results)
     terms = length_and_percent(text)
     if terms is None:
@@ -212,7 +214,11 @@ def is_covering_overlay(declarations):
 def z_index_is_negative(value):
     """z-index is an integer: Chrome rounds calc(-0.4) to 0, halves upwards."""
     number = leading_number(value or "")
-    return number is not None and math.floor(number + 0.5) < 0
+    if number is None:
+        return False
+    if math.isinf(number):  # more digits than a float holds; Chrome clamps it to the integer range
+        return number < 0
+    return math.floor(number + 0.5) < 0
 
 
 def opacity_is_invisible(value):
