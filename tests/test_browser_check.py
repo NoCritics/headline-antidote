@@ -175,9 +175,12 @@ class AtRuleChromeTests(unittest.TestCase):
                         " const text_box = range.getBoundingClientRect();"
                         " return style.display === 'none' || style.visibility !== 'visible'"
                         " || style.opacity === '0' || style.fontSize === '0px'"
-                        " || style.color === 'rgba(0, 0, 0, 0)' || style.clipPath === 'inset(50%)'"
+                        " || /^rgba\\(.*, 0\\)$/.test(style.color) || style.clipPath === 'inset(50%)'"
                         " || style.filter === 'opacity(0)' || style.contentVisibility === 'hidden'"
-                        " || text_box.right <= 0; })()"
+                        " || style.filter === 'blur(20px)' || style.scale === '0'"
+                        " || style.transform.startsWith('matrix(0, 0, 0, 0,')"
+                        " || style.clip === 'rect(0px, 0px, 0px, 0px)'"
+                        " || text_box.right <= 0 || text_box.bottom <= 0; })()"
                     )
                     self.assertEqual(chrome_hidden, hidden)
             browser.close()

@@ -467,6 +467,56 @@ CHROME_DECIDED_CASES += (
     (":root{--v:opacity(0) foo} .x{filter:var(--v)}", "", False),
 )
 
+# Math functions inside other functions, or with spaces inside them, as Chrome computes them.
+# (Transforms do not apply to an inline box, so those cases make the span an inline-block.)
+CHROME_DECIDED_CASES += (
+    (".x{display:inline-block;transform:translateX(calc(-9999px))}", "", True),
+    (".x{display:inline-block;transform:translateX(calc(0px - 9999px))}", "", True),
+    (".x{display:inline-block;transform:translate(calc(-9999px), 0)}", "", True),
+    (".x{display:inline-block;transform:translate3d(min(-9999px, 0px),0,0)}", "", True),
+    (".x{display:inline-block;transform:translateX(calc(-1 * 9999px))}", "", True),
+    (".x{display:inline-block;transform:translateX(calc(10px - 20px))}", "", False),
+    (".x{display:inline-block;translate:calc(0px - 9999px)}", "", True),
+    (".x{display:inline-block;translate:min(-9999px, 0px) 0}", "", True),
+    (".x{display:inline-block;translate:calc(10px - 20px) 0}", "", False),
+    (".x{display:inline-block;transform:scale(calc(0))}", "", True),
+    (".x{display:inline-block;transform:scale(calc(1 - 1))}", "", True),
+    (".x{display:inline-block;transform:scale(calc(1))}", "", False),
+    (".x{display:inline-block;scale:calc(0)}", "", True),
+    (".x{display:inline-block;scale:calc(0 + 0) calc(0)}", "", True),
+    (".x{display:inline-block;scale:calc(1 + 0)}", "", False),
+    (".x{filter:opacity(calc(0))}", "", True),
+    (".x{filter:opacity(calc(0% * 2))}", "", True),
+    (".x{filter:opacity(min(0, 1))}", "", True),
+    (".x{filter:opacity(calc(1))}", "", False),
+    (".x{filter:blur(calc(10px + 10px))}", "", True),
+    (".x{filter:blur(calc(1px + 1px))}", "", False),
+    (".x{color:rgb(255 255 255 / calc(0))}", "", True),
+    (".x{color:rgba(0,0,0,calc(0))}", "", True),
+    (".x{color:hsl(0 0% 0% / min(0, 1))}", "", True),
+    (".x{color:rgb(0 0 0 / calc(1))}", "", False),
+    (".x{color:rgb(calc(0) 0 0 / calc(0.5 + 0.5))}", "", False),
+    (".x{position:absolute;left:calc(0px - 9999px)}", "", True),
+    (".x{position:absolute;left:calc( -9999px )}", "", True),
+    (".x{position:absolute;left:min(-9999px, 0px)}", "", True),
+    (".x{position:absolute;left:calc(10px - 20px)}", "", False),
+    (".x{position:absolute;inset:0 auto auto calc(0px - 9999px)}", "", True),
+    (".x{position:absolute;inset:calc(0px - 9999px) auto auto calc(0px - 9999px)}", "", True),
+    (".x{position:absolute;inset:calc(0px + 10px) auto auto calc(0px + 10px)}", "", False),
+    (":root{--d:9999px} .x{position:absolute;left:calc(0px - var(--d))}", "", True),
+    (".x{font:calc(0px + 0px) a}", "", True),
+    (".x{font:bold calc(0px + 0px)/1 a}", "", True),
+    (".x{font:bold calc(10px + 10px)/1 a}", "", False),
+    (".x{clip-path:inset(calc(50%))}", "", True),
+    (".x{clip-path:inset(calc(10%))}", "", False),
+    (".x{position:absolute;clip:rect(calc(0px), calc(0px), calc(0px), calc(0px))}", "", True),
+    (".x{position:absolute;clip:rect(calc(0px) calc(0px) calc(0px) calc(0px))}", "", True),
+    (".x{position:absolute;clip:rect(calc(0px) calc(500px) calc(500px) calc(0px))}", "", False),
+    # Percentages and lengths mixed: Chrome computes -100% - 10px against the containing block.
+    (".x{position:absolute;left:calc(-100% - 10px)}", "", True),
+    (".x{position:absolute;left:calc(-10% - 10px)}", "", False),
+)
+
 # Blocks whose condition this reader cannot answer the way Chrome does (@supports, @container,
 # @scope, whose rules Chrome ranks by the scope root's nearness): Chrome may apply any of them, so
 # text that some combination of them hides counts as hidden. Each of these is hidden under at least
