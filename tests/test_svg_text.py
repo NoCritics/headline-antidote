@@ -3,7 +3,11 @@
 shown, so it must not reach the model as visible text. The expected texts are Chrome 157's
 innerText (whitespace collapsed); tests/test_browser_check.ParserChromeTests checks them against
 Chrome. Where innerText counts text that is not painted (definitions such as <defs>, checked with
-screenshots), the cases are in NotDrawnTests instead."""
+screenshots), the cases are in NotDrawnTests instead.
+
+innerText also counts text Chrome places outside the canvas (a <text> with no y), gives no paint
+(fill="none") or clips away (a <foreignObject> without a size). Those are not read yet; the
+<foreignObject> cases here are given a size so that they are painted."""
 
 import unittest
 
@@ -20,7 +24,7 @@ def page(svg_markup):
 # (page, the text Chrome shows)
 SVG_CHROME_PAGES = (
     (page("<svg>PAYLOAD<g>PAYLOAD</g><text>drawn<tspan>span</tspan></text>"
-          "<foreignObject><p>fo</p></foreignObject></svg>"), "drawnspan fo x"),
+          '<foreignObject width="99" height="99"><p>fo</p></foreignObject></svg>'), "drawnspan fo x"),
     (page("<svg><![CDATA[PAYLOAD]]></svg>"), "x"),
     # Inside <text>: <tspan>, <a> (not inside another <a>), and <textPath> directly under <text>
     # or its <a>. Nothing else draws, and the text after such a child still does.
@@ -38,14 +42,18 @@ SVG_CHROME_PAGES = (
           "<a><a><text>PAYLOAD</text></a></a></svg>"), "A B x"),
     (page("<svg><textPath>PAYLOAD</textPath><tspan>PAYLOAD</tspan><rect><text>PAYLOAD</text></rect>"
           "<unknown><text>PAYLOAD</text></unknown><svg><text>N</text></svg></svg>"), "N x"),
-    (page(f"<svg><foreignObject>F<svg>PAYLOAD<text>T</text></svg></foreignObject></svg>"), "F T x"),
+    (page('<svg><foreignObject width="99" height="99">F<svg>PAYLOAD<text>T</text></svg>'
+          "</foreignObject></svg>"), "F T x"),
     (page("<svg><g><text>G1</text><text>G2</text></g></svg>"), "G1 G2 x"),
+    # Inside <foreignObject> the content is HTML, where <desc> is an ordinary element.
+    (page('<svg><foreignObject width="99" height="99"><desc>D</desc><title>PAYLOAD</title><p>p</p>'
+          "</foreignObject></svg>"), "D p x"),
     # A <switch> draws its first element child whose conditions hold, and nothing else.
     (page("<svg><switch>PAYLOAD<!--c--><g><text>G</text></g><text>PAYLOAD</text></switch></svg>"), "G x"),
     (page("<svg><switch><desc>d</desc><text>PAYLOAD</text></switch></svg>"), "x"),
     (page('<svg><switch><text requiredExtensions="x">PAYLOAD</text><text>S</text></switch></svg>'), "S x"),
-    (page(f'<svg><switch><foreignObject requiredExtensions="{XHTML}"><p>FO</p></foreignObject>'
-          "<text>PAYLOAD</text></switch></svg>"), "FO x"),
+    (page(f'<svg><switch><foreignObject requiredExtensions="{XHTML}" width="99" height="99">'
+          "<p>FO</p></foreignObject><text>PAYLOAD</text></switch></svg>"), "FO x"),
     # requiredExtensions holds only when it lists XHTML or MathML and nothing else.
     (page(f'<svg><text requiredExtensions="x">PAYLOAD</text><text requiredExtensions="">PAYLOAD</text>'
           f'<text requiredExtensions="{XHTML} http://x">PAYLOAD</text>'
@@ -78,6 +86,14 @@ class SvgTextTests(unittest.TestCase):
                        "<svg><rect>PAYLOAD</rect></svg>", "<svg><text><g>PAYLOAD</g></text></svg>"):
             with self.subTest(markup=markup):
                 self.assertIn("PAYLOAD", hidden_text(extract_visible_text(page(markup))[1]))
+
+    def test_code_in_svg_that_is_not_drawn_is_not_reported(self):
+        # <style> and <script> are code, never text, wherever they are; icon sprites keep their CSS
+        # in <defs>.
+        markup = "<svg><defs><style>.a{fill:red}</style><script>go()</script></defs><text>a</text></svg>"
+        visible_text, fragments = extract_visible_text(page(markup))
+        self.assertEqual(visible_text, "a x")
+        self.assertEqual(hidden_text(fragments), "")
 
     def test_an_element_read_alone_keeps_its_place_in_the_svg(self):
         drawn = page("<svg><text><tspan>T</tspan></text><g><tspan>PAYLOAD</tspan></g></svg>")
