@@ -110,6 +110,9 @@ SVG_PAINT_CASES = (
      True),
     (f'{SVG}<foreignObject width="300" height="100" overflow="hidden">{FO_PARAGRAPH}</foreignObject></svg>',
      True),
+    # A size from CSS this reader cannot decide (@supports) counts both ways.
+    ("<style>@supports (not (display:grid)) {foreignObject{width:300px;height:100px}}</style>"
+     f"{SVG}<foreignObject>{FO_PARAGRAPH}</foreignObject></svg>", False),
     # An <svg> of zero width or height paints nothing, whatever its overflow.
     (f'<svg width="0" height="100"><text {AT}>PAYLOAD</text></svg>', False),
     (f'<svg width="300" height="0"><text {AT}>PAYLOAD</text></svg>', False),
