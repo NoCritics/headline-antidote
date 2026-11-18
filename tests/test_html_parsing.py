@@ -117,6 +117,13 @@ class ParsedLikeChromeTests(unittest.TestCase):
             hidden_texts.append(fragment.text)
         self.assertEqual(hidden_texts, ["PAYLOAD"])
 
+    def test_a_page_whose_own_title_lands_in_the_body_is_flagged(self):
+        # The user's decision (2026-11-18): report it, not skip it like <head>, so that a payload
+        # put in a body <title> is never passed on unflagged.
+        page = ('<!doctype html public "x>><html><head><title>Plain title</title></head>'
+                "<body><p>Body</p></body></html>")
+        self.assertEqual(flag_kinds(page), ["hidden_html_text"])
+
     def test_one_leading_byte_order_mark_is_not_text(self):
         # Chrome drops one leading BOM when it decodes a page's bytes; a second is text, and opens
         # <body> before the <title> (measured with pages served as bytes, since set_content keeps it).
