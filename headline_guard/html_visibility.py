@@ -62,6 +62,10 @@ _SVG_LENGTH = re.compile(
     r"(px|em|ex|ch|rem|vw|vh|vmin|vmax|in|cm|mm|q|pt|pc|%)?"
 )
 _OVERFLOW_KEYWORDS = {"visible", "hidden", "clip", "scroll", "auto"}
+# SVG presentation attributes read when their value hides text. Lengths are in the drawing's user
+# units, which its viewBox may scale up, so only a zero font-size counts.
+SVG_HIDING_ATTRIBUTES = ("display", "visibility", "opacity", "font-size", "transform", "clip-path", "filter")
+_ZERO_SCALE = re.compile(r"scale[xy]?\(0(\.0*)?[,)]")
 
 
 @dataclass
@@ -333,10 +337,56 @@ def _svg_size(value):
     return "zero" if number == 0 else "negative"
 
 
+def _svg_attribute_hides(name, value):
+    if name == "display":
+        return value == "none"
+    if name == "visibility":
+        return value in ("hidden", "collapse")
+    if name == "opacity":
+        return opacity_is_invisible(value)
+    if name == "font-size":
+        return _svg_size(value) == "zero"
+    if name == "transform":
+        return _ZERO_SCALE.search(value) is not None
+    if name == "clip-path":
+        return value.replace(" ", "").startswith(("inset(50%", "circle(0"))
+    return filter_hiding_reason(value) is not None
+
+
+def _is_valid_css_value(name, value):
+    """False when CSS rejects value for the property (then Chrome ignores the attribute)."""
+    try:
+        import tinycss2
+
+        from .css_validity import INVALID, QUIRKS_ONLY, declaration_validity
+    except ImportError:
+        return True
+    validity = declaration_validity(name, tinycss2.parse_component_value_list(value))
+    return validity not in (INVALID, QUIRKS_ONLY)
+
+
+def _has_svg_hiding_attribute(element):
+    for name in SVG_HIDING_ATTRIBUTES:
+        if element.get(name) is not None:
+            return True
+    return False
+
+
 def _svg_presentation_hints(element, tag):
     """Styles set by SVG presentation attributes that can hide text, as Chrome reads them: CSS
     wins over them, and a value they cannot take is ignored."""
     hints = {}
+    for name in SVG_HIDING_ATTRIBUTES:
+        value = _svg_attribute_value(element, name)
+        if value is None:
+            continue
+        if name == "transform":
+            # The attribute separates numbers with spaces or commas, CSS with commas.
+            value = re.sub(r"\s+", ",", re.sub(r"\s*([(),])\s*", r"\1", value))
+        elif not _is_valid_css_value(name, value):
+            continue
+        if _svg_attribute_hides(name, value):
+            hints[name] = value
     if tag == "foreignobject":
         for name in ("width", "height"):
             value = _svg_attribute_value(element, name)
@@ -374,7 +424,7 @@ def _svg_size_reason(tag, declarations):
 def _presentational_hints(element, tag):
     """Styles set by old HTML attributes (<font color>, bgcolor) and by SVG presentation attributes."""
     hints = None
-    if tag in ("svg", "foreignobject") and _is_svg_element(element, tag):
+    if (tag in ("svg", "foreignobject") or _has_svg_hiding_attribute(element)) and _is_svg_element(element, tag):
         hints = _svg_presentation_hints(element, tag) or None
     if tag == "font" and element.get("color"):
         hints = {"color": element.get("color").strip().lower()}
