@@ -18,6 +18,10 @@ ARTICLE = (f"<html><head><title>{HEADLINE}</title></head><body><article><h1>{HEA
 HIDDEN_AFTER_COMMENT = '<div style="display:none"><!-- -->payload</div><p>Body text.</p></body></html>'
 
 
+SVG_NOSCRIPT_PAGE = ("<html><body><p>Body</p><svg><noscript><g>a</g><text>PAYLOAD</text></noscript></svg>"
+                     "</body></html>")
+
+
 def nested_page(depth):
     return ("<html><body>" + "<div>" * depth + '<span>deep</span><b style="display:none">hidden</b>'
             + "</div>" * depth + "<p>after</p></body></html>")
@@ -60,6 +64,8 @@ CHROME_PARSED_PAGES = (
     ("<html><body><template>PAYLOAD</template><p>Body</p></body></html>", "Body"),
     # With scripting on, a <noscript> in <head> is text, so its markup opens no <body>.
     ("<html><head><noscript><p>PAYLOAD</p></noscript></head><body><p>Body</p></body></html>", "Body"),
+    # In SVG a <noscript> is an unknown SVG element: its content is elements, and none is drawn.
+    (SVG_NOSCRIPT_PAGE, "Body"),
 )
 
 
@@ -113,13 +119,11 @@ class ParsedLikeChromeTests(unittest.TestCase):
             hidden_text += fragment.text + " "
         self.assertIn("PAYLOAD", hidden_text)
 
-    def test_noscript_nested_hundreds_deep_is_read_quickly(self):
-        # Each <noscript>'s markup is parsed once, not again inside the one around it (that
-        # took 2.3 s here, and 38 s at 1,000 levels).
-        page = "<html><body>" + ("<noscript>" + "a" * 2000) * 700 + "</body></html>"
-        start = time.perf_counter()
-        extract_visible_text(page)
-        self.assertLess(time.perf_counter() - start, 1)
+    def test_an_svg_noscript_keeps_all_its_content(self):
+        hidden_text = ""
+        for fragment in extract_visible_text(SVG_NOSCRIPT_PAGE)[1]:
+            hidden_text += fragment.text + " "
+        self.assertIn("PAYLOAD", hidden_text)
 
     def test_a_page_nested_200_deep_is_read(self):
         self.assertEqual(extract_visible_text(nested_page(200))[0], "deep after")
@@ -168,6 +172,16 @@ class TooComplexToReadTests(unittest.TestCase):
         self.assertEqual(result.verdict, "review")
         self.assertEqual(article.verdict, "review")
         self.assertTrue(article.needs_browser_check)
+
+    def test_noscript_markup_nested_past_the_limit_is_flagged_quickly(self):
+        # The reader walks that markup too. Each <noscript>'s markup is parsed once, not again
+        # inside the one around it (that took 2.3 s at 700 levels, and 38 s at 1,000).
+        for page in ("<html><body><noscript>" + "<div>" * 600 + "PAYLOAD</noscript></body></html>",
+                     "<html><body>" + ("<noscript>" + "a" * 2000) * 700 + "</body></html>"):
+            with self.subTest(page=page[:40]):
+                start = time.perf_counter()
+                self.assertEqual(flag_kinds(page), ["page_too_complex_to_read"])
+                self.assertLess(time.perf_counter() - start, 1)
 
     def test_markup_without_html_or_body_counts_their_depth(self):
         # Chrome parses any page as a document, so this <span> is 514 deep (html, body, 511
