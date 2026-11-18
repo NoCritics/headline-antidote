@@ -5,9 +5,10 @@ innerText (whitespace collapsed); tests/test_browser_check.ParserChromeTests che
 Chrome. Where innerText counts text that is not painted (definitions such as <defs>, checked with
 screenshots), the cases are in NotDrawnTests instead.
 
-innerText also counts text Chrome places outside the canvas (a <text> with no y), gives no paint
-(fill="none") or clips away (a <foreignObject> without a size). Those are not read yet; the
-<foreignObject> cases here are given a size so that they are painted."""
+innerText also counts text Chrome does not paint because of the drawing's sizes and paint: a
+<foreignObject> without a size, an <svg> of zero size. SVG_PAINT_CASES holds those, each checked
+against Chrome with screenshots (tests/test_browser_check.SvgPaintChromeTests). innerText also
+counts text placed outside the canvas (a <text> with no y), which is not read yet."""
 
 import unittest
 
@@ -67,6 +68,61 @@ SVG_CHROME_PAGES = (
 )
 
 
+# A drawing of 300x100 with PAYLOAD where it is painted unless something below stops it.
+SVG = '<svg width="300" height="100">'
+AT = 'x="10" y="50" font-size="40"'
+FO_PARAGRAPH = '<p style="margin:0;font-size:40px">PAYLOAD</p>'
+
+# (markup, whether Chrome paints PAYLOAD): a screenshot of the page with PAYLOAD differs from one
+# without it. Each unpainted case has a painted one beside it that differs only in what stops it.
+SVG_PAINT_CASES = (
+    # A <foreignObject> is painted only when its width and height are both positive (CSS wins over
+    # the attributes; missing, auto, zero, negative and invalid sizes are none), or when its
+    # overflow is visible.
+    (f"{SVG}<foreignObject>{FO_PARAGRAPH}</foreignObject></svg>", False),
+    (f'{SVG}<foreignObject width="300" height="100">{FO_PARAGRAPH}</foreignObject></svg>', True),
+    (f'{SVG}<foreignObject width="300">{FO_PARAGRAPH}</foreignObject></svg>', False),
+    (f'{SVG}<foreignObject height="100">{FO_PARAGRAPH}</foreignObject></svg>', False),
+    (f'{SVG}<foreignObject width="0" height="100">{FO_PARAGRAPH}</foreignObject></svg>', False),
+    (f'{SVG}<foreignObject width="300" height="0">{FO_PARAGRAPH}</foreignObject></svg>', False),
+    (f'{SVG}<foreignObject width="-5" height="100">{FO_PARAGRAPH}</foreignObject></svg>', False),
+    (f'{SVG}<foreignObject width="auto" height="auto">{FO_PARAGRAPH}</foreignObject></svg>', False),
+    (f'{SVG}<foreignObject width="banana" height="100">{FO_PARAGRAPH}</foreignObject></svg>', False),
+    (f'{SVG}<foreignObject width="50%" height="50%">{FO_PARAGRAPH}</foreignObject></svg>', True),
+    (f'{SVG}<foreignObject width=" 1e2 " height="100PX">{FO_PARAGRAPH}</foreignObject></svg>', True),
+    (f'{SVG}<foreignObject width="300em" height="100">{FO_PARAGRAPH}</foreignObject></svg>', True),
+    (f'{SVG}<foreignObject style="width:300px;height:100px">{FO_PARAGRAPH}</foreignObject></svg>', True),
+    (f'{SVG}<foreignObject style="width:300px;height:100px" width="0">{FO_PARAGRAPH}</foreignObject></svg>',
+     True),
+    (f"<style>.f{{width:300px;height:100px}}</style>{SVG}<foreignObject class=\"f\">{FO_PARAGRAPH}"
+     "</foreignObject></svg>", True),
+    (f'{SVG}<foreignObject width="300" height="100" style="width:0">{FO_PARAGRAPH}</foreignObject></svg>',
+     False),
+    (f'{SVG}<foreignObject width="300" height="100" style="height:auto">{FO_PARAGRAPH}</foreignObject></svg>',
+     False),
+    (f'{SVG}<foreignObject width="300" height="100" style="width:50px">{FO_PARAGRAPH}</foreignObject></svg>',
+     True),
+    (f'{SVG}<foreignObject style="overflow:visible">{FO_PARAGRAPH}</foreignObject></svg>', True),
+    (f'{SVG}<foreignObject overflow="visible">{FO_PARAGRAPH}</foreignObject></svg>', True),
+    (f'{SVG}<foreignObject width="0" height="0" style="overflow:visible">{FO_PARAGRAPH}</foreignObject></svg>',
+     True),
+    (f"<style>foreignObject{{overflow:visible}}</style>{SVG}<foreignObject>{FO_PARAGRAPH}</foreignObject></svg>",
+     True),
+    (f'{SVG}<foreignObject width="300" height="100" overflow="hidden">{FO_PARAGRAPH}</foreignObject></svg>',
+     True),
+    # An <svg> of zero width or height paints nothing, whatever its overflow.
+    (f'<svg width="0" height="100"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<svg width="300" height="0"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<svg width="0" height="0" style="overflow:visible"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<svg width="300" height="100" style="width:0"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<svg width="300" height="100" style="height:0;overflow:visible"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<svg style="width:0;height:0;position:absolute"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<svg width="0" height="100" style="width:300px"><text {AT}>PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT}>PAYLOAD</text></svg>', True),
+    (f'<svg><text y="20">PAYLOAD</text></svg>', True),
+)
+
+
 def hidden_text(fragments):
     texts = []
     for fragment in fragments:
@@ -103,6 +159,16 @@ class SvgTextTests(unittest.TestCase):
 
 class NotDrawnTests(unittest.TestCase):
     """Cases where the reader hides what Chrome's innerText counts."""
+
+    def test_text_is_shown_where_chrome_paints_it(self):
+        for markup, painted in SVG_PAINT_CASES:
+            with self.subTest(markup=markup):
+                visible_text, fragments = extract_visible_text(page(markup))
+                if painted:
+                    self.assertIn("PAYLOAD", visible_text)
+                else:
+                    self.assertNotIn("PAYLOAD", visible_text)
+                    self.assertIn("PAYLOAD", hidden_text(fragments))
 
     def test_definitions_are_not_drawn(self):
         # Chrome's innerText includes this text, but it is not painted (a screenshot with and

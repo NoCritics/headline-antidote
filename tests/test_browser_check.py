@@ -211,6 +211,31 @@ class ParserChromeTests(unittest.TestCase):
             browser.close()
 
 
+@unittest.skipUnless(importlib.util.find_spec("playwright") is not None, "playwright not installed")
+class SvgPaintChromeTests(unittest.TestCase):
+    """test_svg_text.SVG_PAINT_CASES, checked against the installed Chrome: PAYLOAD is painted when a
+    screenshot of the page differs from one without it."""
+
+    def test_paint_matches_chrome(self):
+        from playwright.sync_api import sync_playwright
+
+        from tests.test_svg_text import SVG_PAINT_CASES, page
+
+        with sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch(channel="chrome")
+            except Exception as error:  # Chrome missing or not launchable here
+                self.skipTest(f"Chrome not available: {error}")
+            tab = browser.new_page()
+            for markup, painted in SVG_PAINT_CASES:
+                with self.subTest(markup=markup):
+                    tab.set_content(page(markup))
+                    with_payload = tab.screenshot()
+                    tab.set_content(page(markup.replace("PAYLOAD", "")))
+                    self.assertEqual(with_payload != tab.screenshot(), painted)
+            browser.close()
+
+
 def doctype_cases():
     """Page starts covering every doctype rule of document_mode, and the edge cases around them."""
     from headline_guard import document_mode
