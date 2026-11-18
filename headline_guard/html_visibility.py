@@ -667,6 +667,10 @@ def _element_hiding(element, tag, rules, inherited_background, svg_place):
         size_reason = _svg_size_reason(tag, declarations)
         if size_reason is not None:
             return (size_reason, HIGH), inherited_background, declarations, None
+    if tag == "foreignobject" and svg_place is not None and "color" not in declarations:
+        color_hiding = _foreign_object_color_hiding(element, rules, inherited_background)
+        if color_hiding is not None:
+            return color_hiding, inherited_background, declarations, None
     own_background = declared_background_color(declarations)
     if own_background is not None:
         inherited_background = own_background
@@ -839,17 +843,61 @@ def _is_painted_by_fill(tag, is_svg_element):
     return is_svg_element and tag != "foreignobject"
 
 
-def _svg_paint_value(rules, node, name):
-    """The value node gives the inherited paint property name (CSS over its presentation
-    attribute), or None when it inherits it."""
+# Values that leave an inherited property to the parent.
+_INHERITING_VALUES = (None, "", "inherit", "unset", "revert", "revert-layer")
+# How many gradients a url() paint follows through href before giving up (Chrome stops at cycles).
+MAXIMUM_GRADIENT_LINKS = 16
+
+
+class _SvgPaintCache:
+    """Per rule world: each element's inherited paint and whether it is an SVG element; per page:
+    elements by id and whether each drawing holds shapes."""
+
+    def __init__(self):
+        self.paint = {}
+        self.svg_elements = {}
+        self.ids = None
+        self.has_shapes = {}
+
+
+def _paint_cache(rules):
+    cache = getattr(rules, "_svg_paint_cache", None)
+    if cache is None:
+        cache = _SvgPaintCache()
+        rules._svg_paint_cache = cache
+    return cache
+
+
+def _is_svg_element_cached(cache, node):
+    """_is_svg_element, remembered for every element on the way up."""
+    chain = []
+    current = node
+    while current is not None and isinstance(current.tag, str) and current not in cache.svg_elements:
+        chain.append(current)
+        current = current.getparent()
+    known = cache.svg_elements.get(current, False) if current is not None else False
+    parent_tag = current.tag.lower() if current is not None and isinstance(current.tag, str) else ""
+    for member in reversed(chain):
+        tag = member.tag.lower()
+        if tag == "svg":
+            known = True
+        elif parent_tag == "foreignobject" and known:
+            known = False  # the HTML content of a <foreignObject>
+        cache.svg_elements[member] = known
+        parent_tag = tag
+    return cache.svg_elements[node]
+
+
+def _svg_own_value(rules, cache, node, name):
+    """The value node itself gives property name (CSS over its presentation attribute), or None
+    when it leaves it to its parent."""
     value = _full_declarations(rules, node).get(name)
-    if value in (None, "", "inherit", "unset", "revert", "revert-layer"):
-        node_tag = node.tag.lower() if isinstance(node.tag, str) else ""
-        value = _svg_attribute_value(node, name) if _is_svg_element(node, node_tag) else None
-        if value is not None and not _is_valid_css_value(name, value):
-            value = None
-        if value in (None, "inherit"):
-            return None
+    if value in _INHERITING_VALUES:
+        value = None
+        if node.get(name) is not None and _is_svg_element_cached(cache, node):
+            value = _svg_attribute_value(node, name)
+            if not _is_valid_css_value(name, value) or value == "inherit":
+                value = None
     if value == "initial":
         return SVG_PAINT_PROPERTIES[name]
     return value
@@ -857,58 +905,144 @@ def _svg_paint_value(rules, node, name):
 
 def _svg_paint(rules, element):
     """element's fill, fill-opacity, stroke, stroke-opacity, stroke-width and color, inherited
-    from any ancestor."""
-    paint = {}
-    node = element
-    while node is not None and isinstance(node.tag, str) and len(paint) < len(SVG_PAINT_PROPERTIES):
+    from any ancestor; each element's is computed once."""
+    cache = _paint_cache(rules)
+    chain = []
+    current = element
+    while current is not None and isinstance(current.tag, str) and current not in cache.paint:
+        chain.append(current)
+        current = current.getparent()
+    paint = cache.paint[current] if current is not None and current in cache.paint else SVG_PAINT_PROPERTIES
+    for member in reversed(chain):
+        own = None
         for name in SVG_PAINT_PROPERTIES:
-            if name not in paint:
-                value = _svg_paint_value(rules, node, name)
-                if value is not None:
-                    paint[name] = value
-        node = node.getparent()
-    for name, initial in SVG_PAINT_PROPERTIES.items():
-        paint.setdefault(name, initial)
+            value = _svg_own_value(rules, cache, member, name)
+            if value is not None:
+                if own is None:
+                    own = dict(paint)
+                own[name] = value
+        if own is not None:
+            paint = own
+        cache.paint[member] = paint
     return paint
 
 
-def _paint_color(element, paint, name):
-    """The color a fill or stroke paints with (alpha including its opacity), or None when it paints nothing."""
+def _element_with_id(rules, element, identifier):
+    cache = _paint_cache(rules)
+    if cache.ids is None:
+        cache.ids = {}
+        for node in element.getroottree().iter():
+            if isinstance(node.tag, str):
+                node_id = node.get("id")
+                if node_id is not None and node_id not in cache.ids:
+                    cache.ids[node_id] = node
+    return cache.ids.get(identifier)
+
+
+def _stop_property(rules, stop, name, initial):
+    value = _full_declarations(rules, stop).get(name)
+    if value in _INHERITING_VALUES or value == "initial":
+        value = _svg_attribute_value(stop, name)
+        if value is None or not _is_valid_css_value(name, value) or value in ("inherit", "initial"):
+            value = initial
+    return value
+
+
+def _opacity_number(value):
+    """An opacity value as a number from 0 to 1, or None when it cannot be read."""
+    number = plain_number(value.rstrip("%"))
+    if number is None:
+        return None
+    if value.endswith("%"):
+        number /= 100
+    return min(max(number, 0.0), 1.0)
+
+
+def _paint_server_colors(rules, server):
+    """The colors a gradient or pattern paints with: [] when it paints nothing."""
+    for _ in range(MAXIMUM_GRADIENT_LINKS):
+        tag = server.tag.lower()
+        if tag == "pattern":
+            for child in server:
+                if isinstance(child.tag, str):
+                    return [(0, 0, 0, 1.0)]  # its content is not evaluated: assumed to show
+        else:
+            colors = []
+            stops = 0
+            for stop in server:
+                if not isinstance(stop.tag, str) or stop.tag.lower() != "stop":
+                    continue
+                stops += 1
+                color_value = _stop_property(rules, stop, "stop-color", "black")
+                if color_value == "currentcolor":
+                    color_value = _svg_paint(rules, stop)["color"]
+                color = parse_color(color_value) or (0, 0, 0, 1.0)
+                opacity = _opacity_number(_stop_property(rules, stop, "stop-opacity", "1"))
+                colors.append(color[:3] + (color[3] * (1.0 if opacity is None else opacity),))
+            if stops:
+                return colors
+        link = server.get("href") or server.get("xlink:href")
+        if link is None or not link.strip().startswith("#"):
+            return []
+        server = _element_with_id(rules, server, link.strip()[1:])
+        if server is None or server.tag.lower() not in SVG_PAINT_SERVER_TAGS:
+            return []
+    return []
+
+
+def _paint_colors(rules, element, paint, name):
+    """The colors a fill or stroke paints with (alpha including its opacity): [] when it paints nothing."""
     value = paint[name]
+    colors = None
     if value.startswith("url("):
         reference, _, fallback = value.partition(")")
         target = reference[4:].strip(" \t\n\f\r\"'")
-        if target.startswith("#"):
-            for server in element.getroottree().iter():
-                if isinstance(server.tag, str) and server.get("id") == target[1:]:
-                    if server.tag.lower() in SVG_PAINT_SERVER_TAGS:
-                        return (0, 0, 0, 1.0)  # a gradient or pattern: assumed to show
-                    break
-        value = fallback.strip() or "none"
-    if value in ("none", "context-fill", "context-stroke"):
-        return None
-    if value == "currentcolor":
-        value = paint["color"]
-    color = parse_color(value)
-    if color is None:
-        return (0, 0, 0, 1.0)  # a color this reader cannot evaluate counts as painted
-    opacity = plain_number(paint[name + "-opacity"].rstrip("%"))
-    if opacity is not None and paint[name + "-opacity"].endswith("%"):
-        opacity /= 100
-    if opacity is not None:
-        color = color[:3] + (color[3] * min(max(opacity, 0.0), 1.0),)
-    return color
+        server = _element_with_id(rules, element, target[1:]) if target.startswith("#") else None
+        if server is not None and server.tag.lower() in SVG_PAINT_SERVER_TAGS:
+            colors = _paint_server_colors(rules, server)
+        else:
+            value = fallback.strip() or "none"
+    if colors is None:
+        if value in ("none", "context-fill", "context-stroke"):
+            return []
+        if value == "currentcolor":
+            value = paint["color"]
+        colors = [parse_color(value) or (0, 0, 0, 1.0)]  # a color this reader cannot evaluate counts as painted
+    opacity = _opacity_number(paint[name + "-opacity"])
+    if opacity is None:
+        return colors
+    scaled = []
+    for color in colors:
+        scaled.append(color[:3] + (color[3] * opacity,))
+    return scaled
 
 
-def _svg_paint_hiding(element, rules, inherited_background):
-    """(reason, severity) when neither fill nor stroke shows element's own text, or None."""
+def _drawing_has_shapes(rules, element):
+    """Whether the outermost <svg> around element holds an element whose paint text may lie on."""
+    outermost = None
+    for ancestor in element.iterancestors("svg"):
+        outermost = ancestor
+    if outermost is None:
+        return False
+    cache = _paint_cache(rules)
+    if outermost not in cache.has_shapes:
+        found = False
+        for shape in outermost.iter():
+            if isinstance(shape.tag, str) and shape.tag.lower() in SVG_SHAPE_TAGS:
+                found = True
+                break
+        cache.has_shapes[outermost] = found
+    return cache.has_shapes[outermost]
+
+
+def _paint_hiding_in(rules, element, inherited_background):
     paint = _svg_paint(rules, element)
-    colors = [_paint_color(element, paint, "fill")]
+    colors = _paint_colors(rules, element, paint, "fill")
     if _svg_size(paint["stroke-width"]) not in ("zero", "negative"):
-        colors.append(_paint_color(element, paint, "stroke"))
+        colors = colors + _paint_colors(rules, element, paint, "stroke")
     shown = []
     for color in colors:
-        if color is not None and color[3] >= MINIMUM_VISIBLE_OPACITY:
+        if color[3] >= MINIMUM_VISIBLE_OPACITY:
             shown.append(color)
     if not shown:
         return (f"SVG text painted with no visible fill or stroke (fill:{paint['fill']}, stroke:{paint['stroke']})",
@@ -919,15 +1053,34 @@ def _svg_paint_hiding(element, rules, inherited_background):
         if contrast_ratio(color, reference) >= MINIMUM_VISIBLE_CONTRAST:
             return None
     severity = HIGH
-    if background is None:
-        severity = MEDIUM  # the page background is a guess
-    else:
-        for ancestor in element.iterancestors("svg"):
-            for shape in ancestor.iter():
-                if isinstance(shape.tag, str) and shape.tag.lower() in SVG_SHAPE_TAGS:
-                    severity = MEDIUM  # the text may be drawn on a shape
-                    break
+    if background is None or _drawing_has_shapes(rules, element):
+        severity = MEDIUM  # the page background is a guess, or the text may be drawn on a shape
     return (f"SVG text fill {paint['fill']} nearly matches the background", severity)
+
+
+def _svg_paint_hiding(element, rules, inherited_background):
+    """(reason, severity) when neither fill nor stroke shows element's own text, or None; with and
+    without the undecided CSS blocks (see _rule_worlds), as Chrome may apply either."""
+    hiding = _paint_hiding_in(rules, element, inherited_background)
+    other_rules = getattr(rules, "without_undecided_blocks", None)
+    if hiding is None and other_rules is not None:
+        hiding = _paint_hiding_in(other_rules, element, inherited_background)
+    return hiding
+
+
+def _foreign_object_color_hiding(element, rules, inherited_background):
+    """Why the HTML in a <foreignObject> cannot be seen in the color it inherits from SVG
+    ancestors (CSS or the color attribute), or None."""
+    worlds = [rules]
+    if getattr(rules, "without_undecided_blocks", None) is not None:
+        worlds.append(rules.without_undecided_blocks)
+    for world in worlds:
+        color = _svg_paint(world, element)["color"]
+        hiding = _hiding_reason_from_declarations({"color": color}, inherited_background,
+                                                  _background_lookup(world, element))
+        if hiding is not None:
+            return (f"{hiding[0]} (the color the <foreignObject> inherits)", hiding[1])
+    return None
 
 
 def _visit(element, inherited_background, rules, visible_parts, hidden_fragments, svg_place=None):

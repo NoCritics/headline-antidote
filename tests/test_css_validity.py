@@ -448,6 +448,21 @@ CHROME_CASES = [
     ("stroke-width", "none", INVALID),
     ("stroke-width", "thin", INVALID),
     ("stroke-width", "1 2", INVALID),
+    ("stop-color", "red", VALID),
+    ("stop-color", "transparent", VALID),
+    ("stop-color", "currentcolor", VALID),
+    ("stop-color", "#f008", VALID),
+    ("stop-color", "f00", INVALID),
+    ("stop-color", "none", INVALID),
+    ("stop-color", "url(#a)", INVALID),
+    ("stop-color", "red blue", INVALID),
+    ("stop-opacity", "0", VALID),
+    ("stop-opacity", "50%", VALID),
+    ("stop-opacity", "-1", VALID),
+    ("stop-opacity", "calc(0)", VALID),
+    ("stop-opacity", "0px", INVALID),
+    ("stop-opacity", "none", INVALID),
+    ("stop-opacity", "0 0", INVALID),
 ]
 
 # Values this module does not decide, with why.
@@ -666,6 +681,7 @@ BASES = {
     "bottom": ("33px", "37px"), "margin-left": ("33px", "37px"), "margin-top": ("33px", "37px"),
     "fill": ("rgb(1, 2, 3)", "rgb(4, 5, 6)"), "stroke": ("rgb(1, 2, 3)", "rgb(4, 5, 6)"),
     "fill-opacity": ("0.25", "0.75"), "stroke-opacity": ("0.25", "0.75"), "stroke-width": ("33px", "37px"),
+    "stop-color": ("rgb(1, 2, 3)", "rgb(4, 5, 6)"), "stop-opacity": ("0.25", "0.75"),
 }
 POSITIONED = ("left", "top", "right", "bottom", "inset")
 

@@ -2495,6 +2495,8 @@ _GRAMMARS = {
     "fill-opacity": _slot_grammar(_number_or_percentage),
     "stroke-opacity": _slot_grammar(_number_or_percentage),
     "stroke-width": _slot_grammar(_stroke_width_slot),
+    "stop-color": _color_property(False),
+    "stop-opacity": _slot_grammar(_number_or_percentage),
 }
 
 

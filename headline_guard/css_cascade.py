@@ -90,7 +90,7 @@ HIDING_PROPERTIES = {
     # reordered text and embedded fonts
     "unicode-bidi", "direction", "font-family",
     # how SVG text is painted
-    "fill", "fill-opacity", "stroke", "stroke-opacity", "stroke-width",
+    "fill", "fill-opacity", "stroke", "stroke-opacity", "stroke-width", "stop-color", "stop-opacity",
 }
 
 # Rules on these selectors define site-wide CSS variables, substituted before deciding which rules matter.
@@ -507,11 +507,11 @@ def _could_hide(name, value):
         color = parse_color(value)
         return color is not None and (color[3] < MINIMUM_VISIBLE_OPACITY
                                       or relative_luminance(color) >= LIGHT_TEXT_LUMINANCE)
-    if name == "fill":
+    if name in ("fill", "stop-color"):
         # Any paint but a dark color can leave SVG text unpainted (none, url(), currentcolor, light).
         color = parse_color(value)
         return color is None or color[3] < MINIMUM_VISIBLE_OPACITY or relative_luminance(color) >= LIGHT_TEXT_LUMINANCE
-    if name == "fill-opacity":
+    if name in ("fill-opacity", "stop-opacity"):
         return opacity_is_invisible(value)
     if name in ("background", "background-color"):
         return False  # looked up on demand by background_for(), only for light text
