@@ -1,10 +1,11 @@
 """Separates the text a reader sees from text hidden in the HTML.
 
 This works without a browser. It understands inline styles, the `hidden` attribute,
-<template>/<noscript>/<datalist>, a <title> in the body, closed <details>, SVG tooltip text,
-old presentational attributes (<font color>, bgcolor), comments, and CSS rules: with tinycss2 and
-cssselect2 installed, a real cascade (see css_cascade); otherwise simple `.class`,
-`#id` and `tag` rules in <style> blocks.
+<template>/<noscript>/<datalist>, a <title> in the body, closed <details>, SVG text that is
+not drawn (tooltips, text outside <text>, definitions, <switch> branches), old presentational
+attributes (<font color>, bgcolor), comments, and CSS rules: with tinycss2 and cssselect2
+installed, a real cascade (see css_cascade); otherwise simple `.class`, `#id` and `tag` rules in
+<style> blocks.
 
 "Hidden" includes "practically invisible": tiny fonts, near-zero opacity, text whose
 color barely differs from its background, text collapsed onto itself, text covered by
@@ -50,6 +51,11 @@ MEDIUM = "medium"
 SCREEN_READER_ONLY_REASON = "screen-reader-only box"
 
 POSITIONED = ("relative", "absolute", "fixed", "sticky")
+
+# SVG, as Chrome 157 draws it (see tests/test_svg_text.py).
+SVG_DEFINITION_TAGS = {"defs", "symbol", "mask", "clippath", "pattern", "marker"}
+# The only requiredExtensions Chrome supports.
+SVG_SUPPORTED_EXTENSIONS = {"http://www.w3.org/1999/xhtml", "http://www.w3.org/1998/Math/MathML"}
 
 
 @dataclass
@@ -308,13 +314,85 @@ def _declarations_with_hints(rules, element, tag):
     return merged
 
 
-def _is_svg_tooltip(element, tag):
-    if tag not in ("title", "desc"):
-        return False
-    for ancestor in element.iterancestors():
-        if isinstance(ancestor.tag, str) and ancestor.tag.lower() == "svg":
-            return True
-    return False
+@dataclass(frozen=True)
+class _SvgPlace:
+    """Where an element's children sit inside an <svg>, which decides what they draw. Outside SVG,
+    and inside <foreignObject>, the place is None."""
+    in_text: bool                  # inside <text>, where text is drawn
+    inside_link: bool = False      # an <a> here would be nested in another <a>, which draws nothing
+    allows_text_path: bool = False
+    in_switch: bool = False        # the children of a <switch>, which draws only switch_choice
+    switch_choice: object = None
+
+
+_SVG_ROOT_PLACE = _SvgPlace(in_text=False)
+
+
+def _svg_condition(element):
+    """"holds", "fails" or "unknown": the element's SVG conditional attributes, as Chrome reads them."""
+    extensions = element.get("requiredextensions")
+    if extensions is not None:
+        names = re.split(r"[ \t\n\f\r]+", extensions.strip(" \t\n\f\r"))
+        for name in names:
+            if name not in SVG_SUPPORTED_EXTENSIONS:
+                return "fails"
+    if element.get("systemlanguage") is not None:
+        return "unknown"  # it names languages, and holds when one is the browser's
+    return "holds"
+
+
+def _switch_choice(switch):
+    """The child a <switch> draws: its first element child whose conditions hold, or None when
+    none does or the choice depends on the browser."""
+    for child in switch:
+        if not isinstance(child.tag, str):
+            continue
+        condition = _svg_condition(child)
+        if condition == "holds":
+            return child
+        if condition == "unknown":
+            return None
+    return None
+
+
+def _svg_place(parent_place, element, tag):
+    """(place of element's children, the reason element draws nothing or None). parent_place is
+    the place element sits in."""
+    if parent_place is None:
+        if tag != "svg":
+            return None, None
+        parent_place = _SVG_ROOT_PLACE
+    if tag in ("title", "desc"):
+        return None, "SVG tooltip text"
+    if parent_place.in_switch and element is not parent_place.switch_choice:
+        return None, "SVG <switch> draws another child"
+    condition = _svg_condition(element)
+    if condition == "fails":
+        return None, "SVG requiredExtensions the browser lacks"
+    if condition == "unknown":
+        return None, "SVG systemLanguage, drawn only for some browser languages"
+    if parent_place.in_text:
+        if tag == "tspan":
+            return _SvgPlace(in_text=True, inside_link=parent_place.inside_link), None
+        if tag == "textpath" and parent_place.allows_text_path:
+            return _SvgPlace(in_text=True, inside_link=parent_place.inside_link), None
+        if tag == "a" and not parent_place.inside_link:
+            return _SvgPlace(in_text=True, inside_link=True, allows_text_path=parent_place.allows_text_path), None
+        return None, "SVG element that draws no text inside <text>"
+    if tag == "foreignobject":
+        return None, None
+    if tag == "text":
+        return _SvgPlace(in_text=True, allows_text_path=True), None
+    if tag in ("svg", "g"):
+        return _SvgPlace(in_text=False, inside_link=parent_place.inside_link), None
+    if tag == "switch":
+        return _SvgPlace(in_text=False, inside_link=parent_place.inside_link, in_switch=True,
+                         switch_choice=_switch_choice(element)), None
+    if tag == "a" and not parent_place.inside_link:
+        return _SvgPlace(in_text=False, inside_link=True), None
+    if tag in SVG_DEFINITION_TAGS:
+        return None, "SVG definitions, drawn only where something references them"
+    return None, "SVG element that draws no text"
 
 
 def _is_closed_details(element, tag):
@@ -395,17 +473,19 @@ def _background_lookup(rules, element):
     return lookup
 
 
-def _element_hiding(element, tag, rules, inherited_background):
-    """((reason, severity) or None, background, declarations or None) for one element: why it is
-    hidden, the background its children inherit, and its declarations (None when markup alone hides it)."""
-    if _is_svg_tooltip(element, tag):
-        return ("SVG tooltip text", HIGH), inherited_background, None
+def _element_hiding(element, tag, rules, inherited_background, svg_place):
+    """((reason, severity) or None, background, declarations or None, SVG place of its children) for
+    one element in svg_place: why it is hidden, the background its children inherit, its declarations
+    (None when markup alone hides it), and where its children sit in an SVG."""
+    children_place, svg_reason = _svg_place(svg_place, element, tag)
+    if svg_reason is not None:
+        return (svg_reason, HIGH), inherited_background, None, None
     if tag in HIDDEN_CONTENT_TAGS:
-        return (f"inside <{tag}>", HIGH), inherited_background, None
+        return (f"inside <{tag}>", HIGH), inherited_background, None, None
     if element.get("hidden") is not None:
-        return ("hidden attribute", HIGH), inherited_background, None
+        return ("hidden attribute", HIGH), inherited_background, None, None
     if tag == "input" and (element.get("type") or "").lower() == "hidden":
-        return ("hidden input", HIGH), inherited_background, None
+        return ("hidden input", HIGH), inherited_background, None, None
     declarations = _declarations_with_hints(rules, element, tag)
     own_background = declared_background_color(declarations)
     if own_background is not None:
@@ -423,7 +503,7 @@ def _element_hiding(element, tag, rules, inherited_background):
             hiding = (pseudo_reason, HIGH)
     if hiding is None:
         hiding = _hiding_under_undecided_rules(element, tag, rules)
-    return hiding, inherited_background, declarations
+    return hiding, inherited_background, declarations, children_place
 
 
 def _rule_worlds(rules, element):
@@ -490,26 +570,29 @@ def _overlay_over_content(element, rules, skip_child=None):
 
 
 def _ancestor_state(element, rules):
-    """Background color and hiding inherited from the element's ancestors, outermost first."""
+    """Background color, hiding and SVG place inherited from the element's ancestors, outermost first."""
     ancestors = []
     for ancestor in element.iterancestors():
         ancestors.append(ancestor)
     ancestors.reverse()
     inherited_background = None
+    svg_place = None
     path = ancestors + [element]
     for position, ancestor in enumerate(ancestors):
         ancestor_tag = ancestor.tag.lower() if isinstance(ancestor.tag, str) else ""
-        hiding, inherited_background, _ = _element_hiding(ancestor, ancestor_tag, rules, inherited_background)
+        hiding, inherited_background, _, svg_place = _element_hiding(
+            ancestor, ancestor_tag, rules, inherited_background, svg_place
+        )
         if hiding is not None:
-            return inherited_background, (f"an enclosing element is hidden ({hiding[0]})", hiding[1])
+            return inherited_background, (f"an enclosing element is hidden ({hiding[0]})", hiding[1]), None
         child_on_path = path[position + 1]
         if _is_closed_details(ancestor, ancestor_tag):
             child_tag = child_on_path.tag.lower() if isinstance(child_on_path.tag, str) else ""
             if child_tag != "summary":
-                return inherited_background, ("inside a closed <details>", HIGH)
+                return inherited_background, ("inside a closed <details>", HIGH), None
         if _overlay_over_content(ancestor, rules, skip_child=child_on_path) is not None:
-            return inherited_background, ("covered by an opaque overlay drawn over it", HIGH)
-    return inherited_background, None
+            return inherited_background, ("covered by an opaque overlay drawn over it", HIGH), None
+    return inherited_background, None, svg_place
 
 
 def _hide_loose_content(element, keep_child, reason, hidden_fragments):
@@ -530,12 +613,21 @@ def _hide_loose_content(element, keep_child, reason, hidden_fragments):
             ))
 
 
-def _visit(element, inherited_background, rules, visible_parts, hidden_fragments):
-    """Collects visible text and the outermost hidden elements under element."""
+def _record_undrawn_svg_text(text, owner, hidden_fragments):
+    if text and text.strip():
+        hidden_fragments.append(HiddenFragment(
+            _collapse_whitespace(text), "SVG text outside <text>", "hidden_element", HIGH, None, owner,
+        ))
+
+
+def _visit(element, inherited_background, rules, visible_parts, hidden_fragments, svg_place=None):
+    """Collects visible text and the outermost hidden elements under element, which sits in svg_place."""
     tag = element.tag.lower() if isinstance(element.tag, str) else ""
     if tag in NON_TEXT_TAGS:
         return
-    hiding, inherited_background, declarations = _element_hiding(element, tag, rules, inherited_background)
+    hiding, inherited_background, declarations, children_place = _element_hiding(
+        element, tag, rules, inherited_background, svg_place
+    )
     if hiding is not None:
         hidden_text = _collapse_whitespace(element.text_content())
         if hidden_text:
@@ -551,7 +643,11 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
             f"shown to readers in reverse order ({reordering})", "reordered_text", HIGH, element,
         ))
 
-    if tag in BLOCK_TAGS:
+    # SVG text outside <text> is not drawn, and each <text> is set apart from what is around it.
+    text_is_drawn = children_place is None or children_place.in_text
+    starts_svg_text = children_place is not None and children_place.in_text and not svg_place.in_text
+    is_block = tag in BLOCK_TAGS or starts_svg_text
+    if is_block:
         visible_parts.append(" ")
 
     if _is_closed_details(element, tag):
@@ -562,18 +658,20 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
                 break
         _hide_loose_content(element, summary, "inside a closed <details>", hidden_fragments)
         if summary is not None:
-            _visit(summary, inherited_background, rules, visible_parts, hidden_fragments)
+            _visit(summary, inherited_background, rules, visible_parts, hidden_fragments, children_place)
         visible_parts.append(" ")
         return
 
     overlay = _overlay_over_content(element, rules)
     if overlay is not None:
         _hide_loose_content(element, overlay, "covered by an opaque overlay drawn over it", hidden_fragments)
-        _visit(overlay, inherited_background, rules, visible_parts, hidden_fragments)
+        _visit(overlay, inherited_background, rules, visible_parts, hidden_fragments, children_place)
         visible_parts.append(" ")
         return
 
-    if element.text:
+    if not text_is_drawn:
+        _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments)
+    elif element.text:
         visible_parts.append(element.text)
     for child in element:
         if isinstance(child, etree._Comment):
@@ -581,10 +679,12 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
             if comment_text:
                 hidden_fragments.append(HiddenFragment(comment_text, "HTML comment", "html_comment", MEDIUM, child))
         elif isinstance(child.tag, str):
-            _visit(child, inherited_background, rules, visible_parts, hidden_fragments)
-        if child.tail:
+            _visit(child, inherited_background, rules, visible_parts, hidden_fragments, children_place)
+        if not text_is_drawn:
+            _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments)
+        elif child.tail:
             visible_parts.append(child.tail)
-    if tag in BLOCK_TAGS:
+    if is_block:
         visible_parts.append(" ")
 
 
@@ -629,7 +729,7 @@ def visible_text_of_element(element, rules):
 
     Enclosing elements still apply: if an ancestor is hidden, the whole element is.
     """
-    starting_background, ancestor_hiding = _ancestor_state(element, rules)
+    starting_background, ancestor_hiding, svg_place = _ancestor_state(element, rules)
     if ancestor_hiding is not None:
         hidden_fragments = []
         hidden_text = _collapse_whitespace(element.text_content())
@@ -640,7 +740,7 @@ def visible_text_of_element(element, rules):
         return "", hidden_fragments
     visible_parts = []
     hidden_fragments = []
-    _visit(element, starting_background, rules, visible_parts, hidden_fragments)
+    _visit(element, starting_background, rules, visible_parts, hidden_fragments, svg_place)
     return _collapse_whitespace("".join(visible_parts)), hidden_fragments
 
 

@@ -50,6 +50,10 @@ SVG_CHROME_PAGES = (
     (page(f'<svg><text requiredExtensions="x">PAYLOAD</text><text requiredExtensions="">PAYLOAD</text>'
           f'<text requiredExtensions="{XHTML} http://x">PAYLOAD</text>'
           f'<text requiredExtensions="{MATHML}">M</text></svg>'), "M x"),
+    # The names are separated by ASCII whitespace only.
+    (page(f'<svg><text requiredExtensions=" {XHTML}\t{XHTML} ">T</text>'
+          f'<text requiredExtensions="{XHTML} {XHTML}">PAYLOAD</text>'
+          f'<text requiredExtensions="{XHTML} {XHTML}">PAYLOAD</text></svg>'), "T x"),
     (page('<svg><text>A<tspan systemLanguage="xx">PAYLOAD</tspan></text>'
           '<g systemLanguage="xx"><text>PAYLOAD</text></g></svg>'), "A x"),
 )
