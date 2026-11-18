@@ -188,12 +188,14 @@ class AtRuleChromeTests(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec("playwright") is not None, "playwright not installed")
 class ParserChromeTests(unittest.TestCase):
-    """The texts in test_html_parsing.CHROME_PARSED_PAGES, checked against the installed Chrome."""
+    """The texts in test_html_parsing.CHROME_PARSED_PAGES and test_svg_text.SVG_CHROME_PAGES,
+    checked against the installed Chrome."""
 
     def test_texts_match_chrome(self):
         from playwright.sync_api import sync_playwright
 
         from tests.test_html_parsing import CHROME_PARSED_PAGES
+        from tests.test_svg_text import SVG_CHROME_PAGES
 
         with sync_playwright() as playwright:
             try:
@@ -201,7 +203,7 @@ class ParserChromeTests(unittest.TestCase):
             except Exception as error:  # Chrome missing or not launchable here
                 self.skipTest(f"Chrome not available: {error}")
             tab = browser.new_page()
-            for page, chrome_text in CHROME_PARSED_PAGES:
+            for page, chrome_text in CHROME_PARSED_PAGES + SVG_CHROME_PAGES:
                 with self.subTest(page=page):
                     tab.set_content(page)
                     shown = tab.evaluate("document.body.innerText")
