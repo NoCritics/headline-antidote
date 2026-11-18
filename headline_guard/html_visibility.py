@@ -16,6 +16,7 @@ runs JavaScript. For those, render the page in a browser (browser_visibility).
 """
 
 import re
+import sys
 import unicodedata
 from dataclasses import dataclass
 
@@ -62,6 +63,7 @@ _SVG_LENGTH = re.compile(
     r"(px|em|ex|ch|rem|vw|vh|vmin|vmax|in|cm|mm|q|pt|pc|%)?"
 )
 _OVERFLOW_KEYWORDS = {"visible", "hidden", "clip", "scroll", "auto"}
+_DIGIT_RUN = re.compile(r"\d+")
 # SVG presentation attributes read when their value hides text. Lengths are in the drawing's user
 # units, which a viewBox or a transform may scale up; a font-size is read as CSS reads it only
 # where nothing does, and otherwise counts only when it is zero.
@@ -1171,7 +1173,27 @@ def parse_document(html, stylesheets=None):
         from .css_cascade import CascadeRules
     except ImportError:
         return root, _StylesheetRules(root)
+    _check_css_numbers(root, stylesheets or ())
     return root, CascadeRules(root, stylesheets or (), is_quirks_mode(html))
+
+
+def _check_css_numbers(root, stylesheets):
+    """Raises PageTooComplex when the page's CSS holds an integer too long for tinycss2, which
+    converts each one to a Python int (limited to sys.get_int_max_str_digits() digits)."""
+    limit = sys.get_int_max_str_digits()
+    if limit == 0:
+        return
+    texts = list(stylesheets)
+    for style in root.iter("style"):
+        texts.append(style.text or "")
+    for element in root.iter():
+        if isinstance(element.tag, str) and element.get("style"):
+            texts.append(element.get("style"))
+    for text in texts:
+        for digits in _DIGIT_RUN.finditer(text):
+            if digits.end() - digits.start() <= limit:
+                continue
+            raise PageTooComplex(f"CSS holds a number of more than {limit} digits, which this reader cannot read")
 
 
 def linked_stylesheet_urls(html, base_url):
