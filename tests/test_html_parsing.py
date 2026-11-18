@@ -5,15 +5,25 @@ text the reader thinks is visible, and some hide a hiding wrapper from it, so th
 never shows reaches the model as visible text. The expected texts are Chrome 157's innerText
 (whitespace collapsed); tests/test_browser_check.ParserChromeTests checks them against Chrome."""
 
+import time
 import unittest
 
 from headline_guard.html_visibility import extract_visible_text
+
+# The limit of html_tree, written out so that these tests run against the old parser too.
+MAXIMUM_TAG_OPENINGS = 20_000
 
 HEADLINE = "Alphabet shares surge after dodging antitrust breakup bullet"
 ARTICLE = (f"<html><head><title>{HEADLINE}</title></head><body><article><h1>{HEADLINE}</h1>"
            '<div style="display:none">losses and layoffs</div><p class="a">Body text.</p></article>'
            "</body></html>")
 HIDDEN_AFTER_COMMENT = '<div style="display:none"><!-- -->payload</div><p>Body text.</p></body></html>'
+
+
+def nested_page(depth):
+    return ("<html><body>" + "<div>" * depth + '<span>deep</span><b style="display:none">hidden</b>'
+            + "</div>" * depth + "<p>after</p></body></html>")
+
 
 # (page, the text Chrome shows)
 CHROME_PARSED_PAGES = (
@@ -50,6 +60,10 @@ CHROME_PARSED_PAGES = (
     ("<html><body><p><svg><text><![CDATA[SEEN]]></text></svg></p><p><![CDATA[x>y]]></p></body></html>",
      "SEEN y]]>"),
     ("<html><body><template>PAYLOAD</template><p>Body</p></body></html>", "Body"),
+    # With scripting on, a <noscript> in <head> is text, so its markup opens no <body>.
+    ("<html><head><noscript><p>PAYLOAD</p></noscript></head><body><p>Body</p></body></html>", "Body"),
+    # An element whose parent is more than 512 deep is attached to the grandparent instead.
+    (nested_page(600), "deep after"),
 )
 
 
@@ -59,12 +73,57 @@ class ParsedLikeChromeTests(unittest.TestCase):
             with self.subTest(page=page):
                 self.assertEqual(extract_visible_text(page)[0], chrome_text)
 
+    def test_text_a_browser_does_not_display_is_reported_hidden(self):
+        # A scraper that reads the markup passes this text on, so it is reported.
+        for tag in ("template", "noscript"):
+            with self.subTest(tag=tag):
+                page = f"<html><body><{tag}><p>PAYLOAD</p></{tag}><p>Body</p></body></html>"
+                visible_text, hidden_fragments = extract_visible_text(page)
+                self.assertEqual(visible_text, "Body")
+                hidden_texts = []
+                for fragment in hidden_fragments:
+                    hidden_texts.append(fragment.text)
+                self.assertEqual(hidden_texts, ["PAYLOAD"])
+
+    def test_the_slowest_page_read_statically_is_read_in_seconds(self):
+        # A <select> of options is the slowest shape found for lexbor: 1.7 s on this machine.
+        page = "<html><body><select>" + "<option>" * (MAXIMUM_TAG_OPENINGS - 3)
+        start = time.perf_counter()
+        extract_visible_text(page)
+        self.assertLess(time.perf_counter() - start, 5)
+
     def test_every_doctype_is_read_without_error(self):
         from tests.test_browser_check import doctype_cases
 
         for start in doctype_cases():
             with self.subTest(start=start):
                 extract_visible_text(start + "<html><body><p>x</p></body></html>")
+
+
+class TooLargeToReadTests(unittest.TestCase):
+    """A page with more "<" than MAXIMUM_TAG_OPENINGS is not read statically: it would take
+    minutes. It gets a medium flag, and an article reading asks for the browser check."""
+
+    def test_a_page_nested_a_hundred_thousand_deep_is_flagged_quickly(self):
+        from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+
+        guard = HeadlineGuard(PAPER_WATCHLIST)
+        start = time.perf_counter()
+        result = guard.analyze_html(nested_page(100_000))
+        article = guard.extract_article(nested_page(100_000))
+        self.assertLess(time.perf_counter() - start, 3)
+        kinds = []
+        for flag in result.flags:
+            kinds.append(flag.kind)
+        self.assertIn("page_too_large_to_read", kinds)
+        self.assertEqual(result.verdict, "review")
+        self.assertEqual(article.verdict, "review")
+        self.assertTrue(article.needs_browser_check)
+
+    def test_a_page_at_the_limit_is_read(self):
+        page = "<html><body><p>x</p>" + "<b></b>" * ((MAXIMUM_TAG_OPENINGS - 6) // 2) + "</body></html>"
+        self.assertEqual(page.count("<"), MAXIMUM_TAG_OPENINGS)
+        self.assertEqual(extract_visible_text(page)[0], "x")
 
 
 if __name__ == "__main__":
