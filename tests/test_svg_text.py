@@ -214,6 +214,25 @@ class SvgTextTests(unittest.TestCase):
         self.assertEqual(extract_visible_text(drawn, "//g/tspan")[0], "")
 
 
+class LongValueTests(unittest.TestCase):
+    """Sizes of thousands of digits are read in linear time, and never crash the reader."""
+
+    def test_long_sizes_are_read_quickly(self):
+        import time
+
+        zeros = "0" * 4000  # tinycss2 cannot read a number of more than 4300 digits
+        rules = "".join(f".s{index}{{width:{zeros}1px}}" for index in range(50))
+        classes = " ".join(f"s{index}" for index in range(50))
+        digits = "0" * 30000
+        for markup in (f'<style>{rules}</style><svg class="{classes}"><text>a</text></svg>',
+                       f'<svg><foreignObject width="{digits}x" height="1{digits}!"><p>a</p></foreignObject></svg>',
+                       f'<svg><text font-size="{digits}x">a</text><text opacity="{digits}1">b</text></svg>'):
+            with self.subTest(markup=markup[:60]):
+                started = time.perf_counter()
+                extract_visible_text(page(markup))
+                self.assertLess(time.perf_counter() - started, 1)
+
+
 class NotDrawnTests(unittest.TestCase):
     """Cases where the reader hides what Chrome's innerText counts."""
 
