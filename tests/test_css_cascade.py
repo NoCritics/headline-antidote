@@ -810,6 +810,15 @@ class DeepNestingTests(unittest.TestCase):
             ":root{--v:" + "calc(" * 2000 + "1foo" + ")" * 2000 + "} .x{position:absolute;left:var(--v)}"))
         self.assertLess(time.perf_counter() - started, 1)
 
+    def test_long_resolutions_in_media_queries_are_read_quickly(self):
+        import time
+
+        zeros = "0" * 4000  # tinycss2 cannot read a number of more than 4300 digits
+        queries = "".join(f"@media (resolution:{zeros}!x){{.x{{opacity:0}}}}" for _ in range(50))
+        started = time.perf_counter()
+        self.assert_visible(at_rule_page(queries))
+        self.assertLess(time.perf_counter() - started, 1)
+
     def test_a_z_index_too_large_for_a_float_is_clamped(self):
         # Measured in Chrome 157 with elementFromPoint: 400 nines compute to 2147483647 and the text
         # stays on top; minus 400 nines to -2147483648, under the white heading.

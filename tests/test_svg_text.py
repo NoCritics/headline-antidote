@@ -226,7 +226,8 @@ class LongValueTests(unittest.TestCase):
         digits = "0" * 30000
         for markup in (f'<style>{rules}</style><svg class="{classes}"><text>a</text></svg>',
                        f'<svg><foreignObject width="{digits}x" height="1{digits}!"><p>a</p></foreignObject></svg>',
-                       f'<svg><text font-size="{digits}x">a</text><text opacity="{digits}1">b</text></svg>'):
+                       f'<svg><text font-size="{digits}x">a</text><text opacity="{digits}1">b</text></svg>',
+                       f'<svg><text font-size="{digits}!">a</text></svg>'):
             with self.subTest(markup=markup[:60]):
                 started = time.perf_counter()
                 extract_visible_text(page(markup))
