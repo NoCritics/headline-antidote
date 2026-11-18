@@ -2412,6 +2412,27 @@ def _clip_path(parts):
 
 
 _OVERFLOW_KEYWORDS = frozenset({"auto", "clip", "hidden", "overlay", "scroll", "visible"})
+_PAINT_KEYWORDS = frozenset({"none", "context-fill", "context-stroke"})
+
+
+def _paint(parts):
+    """none | context-fill | context-stroke | <color> | <url> [none | <color>]?"""
+    first = parts[0]
+    if len(parts) == 1:
+        if first.type == "ident" and first.lower_value in _PAINT_KEYWORDS:
+            return VALID
+        if _is_url(first):
+            return _url_verdict(first)
+        return _color(first)
+    if len(parts) != 2 or not _is_url(first):
+        return INVALID
+    fallback = parts[1]
+    if fallback.type == "ident" and fallback.lower_value == "none":
+        return _url_verdict(first)
+    return _worst(_url_verdict(first), _color(fallback))
+
+
+_stroke_width_slot = _length_slot(frozenset(), True, False, accepted=_NUMBER_LENGTH_PERCENTAGE)
 
 _GRAMMARS = {
     "display": _display,
@@ -2469,6 +2490,11 @@ _GRAMMARS = {
     "font": _font,
     "clip-path": _clip_path,
     "mask": _mask,
+    "fill": _paint,
+    "stroke": _paint,
+    "fill-opacity": _slot_grammar(_number_or_percentage),
+    "stroke-opacity": _slot_grammar(_number_or_percentage),
+    "stroke-width": _slot_grammar(_stroke_width_slot),
 }
 
 

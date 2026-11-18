@@ -67,6 +67,15 @@ _OVERFLOW_KEYWORDS = {"visible", "hidden", "clip", "scroll", "auto"}
 # where nothing does, and otherwise counts only when it is zero.
 SVG_HIDING_ATTRIBUTES = ("display", "visibility", "opacity", "font-size", "transform", "clip-path", "filter")
 _ZERO_SCALE = re.compile(r"scale[xy]?\(0(\.0*)?[,)]")
+# How SVG text is painted: inherited properties, with their initial values.
+SVG_PAINT_PROPERTIES = {
+    "fill": "black", "fill-opacity": "1", "stroke": "none", "stroke-opacity": "1", "stroke-width": "1",
+    "color": "black",
+}
+# Elements whose paint may be what SVG text is drawn on.
+SVG_SHAPE_TAGS = {"rect", "circle", "ellipse", "line", "polyline", "polygon", "path", "image", "use", "foreignobject"}
+# The elements a url() paint can use.
+SVG_PAINT_SERVER_TAGS = {"lineargradient", "radialgradient", "pattern"}
 
 
 @dataclass
@@ -118,11 +127,13 @@ def _text_color(declarations):
     return parse_color(color), color
 
 
-def _hiding_reason_from_declarations(declarations, background_color, background_lookup=None):
+def _hiding_reason_from_declarations(declarations, background_color, background_lookup=None, painted_by_fill=False):
     """Returns (reason, severity) when the declarations hide text, otherwise None.
 
     background_lookup: when the rules can compute an element's real background from the
     stylesheets, it is asked only here, for elements whose text color matters.
+    painted_by_fill: an SVG element, whose text is painted with fill and stroke, not color
+    (see _svg_paint_hiding).
     """
     if declarations.get("display") == "none":
         return ("display:none", HIGH)
@@ -142,7 +153,7 @@ def _hiding_reason_from_declarations(declarations, background_color, background_
     if letters_collapsed(declarations.get("letter-spacing")):
         return ("letter-spacing:" + declarations["letter-spacing"] + " draws the letters on top of each other", HIGH)
 
-    text_color, declared_color = _text_color(declarations)
+    text_color, declared_color = (None, None) if painted_by_fill else _text_color(declarations)
     if text_color is not None and not _text_painted_another_way(declarations):
         if text_color[3] < MINIMUM_VISIBLE_OPACITY:
             return ("transparent text color", HIGH)
@@ -660,7 +671,8 @@ def _element_hiding(element, tag, rules, inherited_background, svg_place):
     if own_background is not None:
         inherited_background = own_background
     hiding = _hiding_reason_from_declarations(
-        declarations, inherited_background, _background_lookup(rules, element)
+        declarations, inherited_background, _background_lookup(rules, element),
+        _is_painted_by_fill(tag, svg_place is not None or tag == "svg"),
     )
     if hiding is None:
         behind = _drawn_behind_background(element, declarations, rules)
@@ -697,6 +709,9 @@ def _hiding_under_undecided_rules(element, tag, rules):
                 HIGH)
     hints = _presentational_hints(element, tag)
     sized_svg_element = tag == "svg" or (tag == "foreignobject" and _is_svg_element(element, tag))
+    worlds = _rule_worlds(rules, element)
+    # Asked only when some undecided CSS touches the element.
+    painted_by_fill = (bool(alternatives) or len(worlds) > 1) and _is_painted_by_fill(tag, _is_svg_element(element, tag))
     parent = element.getparent()
     for alternative in alternatives:
         if hints is not None:
@@ -709,7 +724,7 @@ def _hiding_under_undecided_rules(element, tag, rules):
             if own_background is not None or parent is None:
                 return own_background
             return rules.background_for(parent)
-        hiding = _hiding_reason_from_declarations(alternative, None, lookup)
+        hiding = _hiding_reason_from_declarations(alternative, None, lookup, painted_by_fill)
         if hiding is None and sized_svg_element:
             size_reason = _svg_size_reason(tag, alternative)
             if size_reason is not None:
@@ -720,9 +735,10 @@ def _hiding_under_undecided_rules(element, tag, rules):
                 hiding = (behind, HIGH)
         if hiding is not None:
             return hiding
-    for world_rules in _rule_worlds(rules, element)[1:]:
+    for world_rules in worlds[1:]:
         declarations = _declarations_with_hints(world_rules, element, tag)
-        hiding = _hiding_reason_from_declarations(declarations, None, _background_lookup(world_rules, element))
+        hiding = _hiding_reason_from_declarations(
+            declarations, None, _background_lookup(world_rules, element), painted_by_fill)
         if hiding is not None:
             return hiding
         if sized_svg_element:
@@ -811,11 +827,107 @@ def _hide_loose_content(element, keep_child, reason, hidden_fragments):
             ))
 
 
-def _record_undrawn_svg_text(text, owner, hidden_fragments):
+def _record_undrawn_svg_text(text, owner, hidden_fragments, hiding=("SVG text outside <text>", HIGH)):
     if text and text.strip():
         hidden_fragments.append(HiddenFragment(
-            _collapse_whitespace(text), "SVG text outside <text>", "hidden_element", HIGH, None, owner,
+            _collapse_whitespace(text), hiding[0], "hidden_element", hiding[1], None, owner,
         ))
+
+
+def _is_painted_by_fill(tag, is_svg_element):
+    """SVG elements paint text with fill and stroke; a <foreignObject>'s content is HTML, colored by color."""
+    return is_svg_element and tag != "foreignobject"
+
+
+def _svg_paint_value(rules, node, name):
+    """The value node gives the inherited paint property name (CSS over its presentation
+    attribute), or None when it inherits it."""
+    value = _full_declarations(rules, node).get(name)
+    if value in (None, "", "inherit", "unset", "revert", "revert-layer"):
+        node_tag = node.tag.lower() if isinstance(node.tag, str) else ""
+        value = _svg_attribute_value(node, name) if _is_svg_element(node, node_tag) else None
+        if value is not None and not _is_valid_css_value(name, value):
+            value = None
+        if value in (None, "inherit"):
+            return None
+    if value == "initial":
+        return SVG_PAINT_PROPERTIES[name]
+    return value
+
+
+def _svg_paint(rules, element):
+    """element's fill, fill-opacity, stroke, stroke-opacity, stroke-width and color, inherited
+    from any ancestor."""
+    paint = {}
+    node = element
+    while node is not None and isinstance(node.tag, str) and len(paint) < len(SVG_PAINT_PROPERTIES):
+        for name in SVG_PAINT_PROPERTIES:
+            if name not in paint:
+                value = _svg_paint_value(rules, node, name)
+                if value is not None:
+                    paint[name] = value
+        node = node.getparent()
+    for name, initial in SVG_PAINT_PROPERTIES.items():
+        paint.setdefault(name, initial)
+    return paint
+
+
+def _paint_color(element, paint, name):
+    """The color a fill or stroke paints with (alpha including its opacity), or None when it paints nothing."""
+    value = paint[name]
+    if value.startswith("url("):
+        reference, _, fallback = value.partition(")")
+        target = reference[4:].strip(" \t\n\f\r\"'")
+        if target.startswith("#"):
+            for server in element.getroottree().iter():
+                if isinstance(server.tag, str) and server.get("id") == target[1:]:
+                    if server.tag.lower() in SVG_PAINT_SERVER_TAGS:
+                        return (0, 0, 0, 1.0)  # a gradient or pattern: assumed to show
+                    break
+        value = fallback.strip() or "none"
+    if value in ("none", "context-fill", "context-stroke"):
+        return None
+    if value == "currentcolor":
+        value = paint["color"]
+    color = parse_color(value)
+    if color is None:
+        return (0, 0, 0, 1.0)  # a color this reader cannot evaluate counts as painted
+    opacity = plain_number(paint[name + "-opacity"].rstrip("%"))
+    if opacity is not None and paint[name + "-opacity"].endswith("%"):
+        opacity /= 100
+    if opacity is not None:
+        color = color[:3] + (color[3] * min(max(opacity, 0.0), 1.0),)
+    return color
+
+
+def _svg_paint_hiding(element, rules, inherited_background):
+    """(reason, severity) when neither fill nor stroke shows element's own text, or None."""
+    paint = _svg_paint(rules, element)
+    colors = [_paint_color(element, paint, "fill")]
+    if _svg_size(paint["stroke-width"]) not in ("zero", "negative"):
+        colors.append(_paint_color(element, paint, "stroke"))
+    shown = []
+    for color in colors:
+        if color is not None and color[3] >= MINIMUM_VISIBLE_OPACITY:
+            shown.append(color)
+    if not shown:
+        return (f"SVG text painted with no visible fill or stroke (fill:{paint['fill']}, stroke:{paint['stroke']})",
+                HIGH)
+    background = rules.background_for(element) if hasattr(rules, "background_for") else inherited_background
+    reference = background if background is not None else ASSUMED_PAGE_BACKGROUND
+    for color in shown:
+        if contrast_ratio(color, reference) >= MINIMUM_VISIBLE_CONTRAST:
+            return None
+    severity = HIGH
+    if background is None:
+        severity = MEDIUM  # the page background is a guess
+    else:
+        for ancestor in element.iterancestors("svg"):
+            for shape in ancestor.iter():
+                if isinstance(shape.tag, str) and shape.tag.lower() in SVG_SHAPE_TAGS:
+                    severity = MEDIUM  # the text may be drawn on a shape
+                    break
+    return (f"SVG text fill {paint['fill']} nearly matches the background", severity)
 
 
 def _visit(element, inherited_background, rules, visible_parts, hidden_fragments, svg_place=None):
@@ -843,6 +955,9 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
 
     # SVG text outside <text> is not drawn, and each <text> is set apart from what is around it.
     text_is_drawn = children_place is None or children_place.in_text
+    paint_hiding = None
+    if children_place is not None and children_place.in_text:
+        paint_hiding = _svg_paint_hiding(element, rules, inherited_background)
     starts_svg_text = children_place is not None and children_place.in_text and not svg_place.in_text
     is_block = tag in BLOCK_TAGS or starts_svg_text
     if is_block:
@@ -869,6 +984,8 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
 
     if not text_is_drawn:
         _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments)
+    elif paint_hiding is not None:
+        _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments, paint_hiding)
     elif element.text:
         visible_parts.append(element.text)
     for child in element:
@@ -880,6 +997,8 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
             _visit(child, inherited_background, rules, visible_parts, hidden_fragments, children_place)
         if not text_is_drawn:
             _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments)
+        elif paint_hiding is not None:
+            _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments, paint_hiding)
         elif child.tail:
             visible_parts.append(child.tail)
     if is_block:
