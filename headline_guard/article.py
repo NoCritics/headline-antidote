@@ -34,6 +34,7 @@ import unicodedata
 from dataclasses import dataclass, field
 
 from .css_values import quoted_strings
+from .html_tree import TooManyTags
 from .html_visibility import SCREEN_READER_ONLY_REASON, parse_document, visible_text_of_element
 from .text_guard import HIGH, LOW, MEDIUM, Flag, _compact, reordered_text_flag, verdict_for_flags
 
@@ -999,4 +1000,10 @@ def _without_repeated_headline(body, headline_text):
 def extract_article(guard, html, feed_title=None, stylesheets=None, feed_body=None):
     """feed_body: the article's full text from the feed (RSS content:encoded), when there is one;
     otherwise the page's JSON-LD articleBody is used for the body comparison."""
-    return _ArticleExtraction(guard, html, feed_title, stylesheets, feed_body).run()
+    try:
+        extraction = _ArticleExtraction(guard, html, feed_title, stylesheets, feed_body)
+    except TooManyTags as error:
+        flag = Flag("page_too_large_to_read", MEDIUM, None, None, "", str(error), "page")
+        return ArticleResult("", "none: the page was not read", "", [flag], [], {},
+                             ["page too large to read statically"])
+    return extraction.run()

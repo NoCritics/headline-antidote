@@ -8,10 +8,8 @@ never shows reaches the model as visible text. The expected texts are Chrome 157
 import time
 import unittest
 
+from headline_guard.html_tree import MAXIMUM_TAG_OPENINGS, parse_html
 from headline_guard.html_visibility import extract_visible_text
-
-# The limit of html_tree, written out so that these tests run against the old parser too.
-MAXIMUM_TAG_OPENINGS = 20_000
 
 HEADLINE = "Alphabet shares surge after dodging antitrust breakup bullet"
 ARTICLE = (f"<html><head><title>{HEADLINE}</title></head><body><article><h1>{HEADLINE}</h1>"
@@ -62,8 +60,11 @@ CHROME_PARSED_PAGES = (
     ("<html><body><template>PAYLOAD</template><p>Body</p></body></html>", "Body"),
     # With scripting on, a <noscript> in <head> is text, so its markup opens no <body>.
     ("<html><head><noscript><p>PAYLOAD</p></noscript></head><body><p>Body</p></body></html>", "Body"),
-    # An element whose parent is more than 512 deep is attached to the grandparent instead.
+    # An element whose parent is more than 512 deep is attached to the grandparent instead: the
+    # <span> leaves the hidden <div> at depth 513, and its text shows.
     (nested_page(600), "deep after"),
+    ("<html><body>" + "<div>" * 510 + '<div style="display:none"><span>moved out</span>hidden</div>'
+     + "</div>" * 510 + "<p>after</p></body></html>", "moved out after"),
 )
 
 
@@ -92,6 +93,16 @@ class ParsedLikeChromeTests(unittest.TestCase):
         extract_visible_text(page)
         self.assertLess(time.perf_counter() - start, 5)
 
+    def test_comments_keep_their_text_as_written(self):
+        # Chrome's comment.data; trafilatura read the text after an emptied <!-- --> differently.
+        from lxml import etree
+
+        root = parse_html("<html><body><p>2<!-- -->-MIN READ<!--a--b  --></p></body></html>")
+        comment_texts = []
+        for comment in root.iter(etree.Comment):
+            comment_texts.append(comment.text)
+        self.assertEqual(comment_texts, [" ", "a--b  "])
+
     def test_every_doctype_is_read_without_error(self):
         from tests.test_browser_check import doctype_cases
 
@@ -119,6 +130,16 @@ class TooLargeToReadTests(unittest.TestCase):
         self.assertEqual(result.verdict, "review")
         self.assertEqual(article.verdict, "review")
         self.assertTrue(article.needs_browser_check)
+
+    def test_a_page_one_past_the_limit_is_flagged(self):
+        from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+
+        page = "<html><body><p>x</p>" + "<b></b>" * ((MAXIMUM_TAG_OPENINGS - 6) // 2) + "<i>y</body></html>"
+        self.assertEqual(page.count("<"), MAXIMUM_TAG_OPENINGS + 1)
+        kinds = []
+        for flag in HeadlineGuard(PAPER_WATCHLIST).analyze_html(page).flags:
+            kinds.append(flag.kind)
+        self.assertEqual(kinds, ["page_too_large_to_read"])
 
     def test_a_page_at_the_limit_is_read(self):
         page = "<html><body><p>x</p>" + "<b></b>" * ((MAXIMUM_TAG_OPENINGS - 6) // 2) + "</body></html>"
