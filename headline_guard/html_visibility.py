@@ -595,6 +595,27 @@ def _ancestor_state(element, rules):
     return inherited_background, None, svg_place
 
 
+def _text_outside_code(element):
+    """element's text, as text_content() gives it, without what is inside <style>, <script> and
+    the other NON_TEXT_TAGS."""
+    parts = []
+    pending = [element]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            parts.append(item)
+            continue
+        if not isinstance(item.tag, str) or item.tag.lower() in NON_TEXT_TAGS:
+            continue
+        if item.text:
+            parts.append(item.text)
+        for child in reversed(item):
+            if child.tail:
+                pending.append(child.tail)
+            pending.append(child)
+    return "".join(parts)
+
+
 def _hide_loose_content(element, keep_child, reason, hidden_fragments):
     """Records element's own text, tails and children (except keep_child) as hidden."""
     if element.text and element.text.strip():
@@ -603,9 +624,8 @@ def _hide_loose_content(element, keep_child, reason, hidden_fragments):
         ))
     for child in element:
         if child is not keep_child and isinstance(child.tag, str):
-            child_tag = child.tag.lower()
-            child_text = _collapse_whitespace(child.text_content())
-            if child_tag not in NON_TEXT_TAGS and child_text:
+            child_text = _collapse_whitespace(_text_outside_code(child))
+            if child_text:
                 hidden_fragments.append(HiddenFragment(child_text, reason, "hidden_element", HIGH, child))
         if child.tail and child.tail.strip():
             hidden_fragments.append(HiddenFragment(
@@ -629,7 +649,7 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
         element, tag, rules, inherited_background, svg_place
     )
     if hiding is not None:
-        hidden_text = _collapse_whitespace(element.text_content())
+        hidden_text = _collapse_whitespace(_text_outside_code(element))
         if hidden_text:
             hidden_fragments.append(
                 HiddenFragment(hidden_text, hiding[0], "hidden_element", hiding[1], element)
@@ -732,7 +752,7 @@ def visible_text_of_element(element, rules):
     starting_background, ancestor_hiding, svg_place = _ancestor_state(element, rules)
     if ancestor_hiding is not None:
         hidden_fragments = []
-        hidden_text = _collapse_whitespace(element.text_content())
+        hidden_text = _collapse_whitespace(_text_outside_code(element))
         if hidden_text:
             hidden_fragments.append(
                 HiddenFragment(hidden_text, ancestor_hiding[0], "hidden_element", ancestor_hiding[1], element)
