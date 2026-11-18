@@ -1,8 +1,8 @@
 """Separates the text a reader sees from text hidden in the HTML.
 
 This works without a browser. It understands inline styles, the `hidden` attribute,
-<template>/<noscript>/<datalist>, closed <details>, SVG tooltip text, old presentational
-attributes (<font color>, bgcolor), comments, and CSS rules: with tinycss2 and
+<template>/<noscript>/<datalist>, a <title> in the body, closed <details>, SVG tooltip text,
+old presentational attributes (<font color>, bgcolor), comments, and CSS rules: with tinycss2 and
 cssselect2 installed, a real cascade (see css_cascade); otherwise simple `.class`,
 `#id` and `tag` rules in <style> blocks.
 
@@ -34,10 +34,10 @@ from .html_tree import PageTooComplex, parse_html
 # Contents are code or metadata, never headline text, so they are skipped without a flag.
 NON_TEXT_TAGS = {"script", "style", "head", "meta", "link"}
 # Contents are text a browser does not display.
-HIDDEN_CONTENT_TAGS = {"template", "noscript", "datalist"}
+HIDDEN_CONTENT_TAGS = {"template", "noscript", "datalist", "title"}
 BLOCK_TAGS = {
     "p", "div", "br", "li", "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6",
-    "section", "article", "header", "footer", "blockquote", "title", "details", "summary",
+    "section", "article", "header", "footer", "blockquote", "details", "summary",
 }
 
 # When no background is declared, assume the usual white page; an external stylesheet may disagree.
@@ -398,14 +398,14 @@ def _background_lookup(rules, element):
 def _element_hiding(element, tag, rules, inherited_background):
     """((reason, severity) or None, background, declarations or None) for one element: why it is
     hidden, the background its children inherit, and its declarations (None when markup alone hides it)."""
+    if _is_svg_tooltip(element, tag):
+        return ("SVG tooltip text", HIGH), inherited_background, None
     if tag in HIDDEN_CONTENT_TAGS:
         return (f"inside <{tag}>", HIGH), inherited_background, None
     if element.get("hidden") is not None:
         return ("hidden attribute", HIGH), inherited_background, None
     if tag == "input" and (element.get("type") or "").lower() == "hidden":
         return ("hidden input", HIGH), inherited_background, None
-    if _is_svg_tooltip(element, tag):
-        return ("SVG tooltip text", HIGH), inherited_background, None
     declarations = _declarations_with_hints(rules, element, tag)
     own_background = declared_background_color(declarations)
     if own_background is not None:
