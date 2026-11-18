@@ -42,6 +42,8 @@ def parse_html(html):
     """The lxml tree of a page, rooted at <html>. Any markup is parsed as a whole document, as
     Chrome parses it, with scripting on, so <noscript> content is not part of the page.
     Raises PageTooComplex for a page this reader cannot parse as Chrome would."""
+    if html.startswith("\ufeff"):
+        html = html[1:]  # Chrome drops one byte order mark when it decodes the page's bytes
     tag_openings = html.count("<")
     if tag_openings > MAXIMUM_TAG_OPENINGS:
         raise PageTooComplex(f'{tag_openings} "<" in the page, more than the {MAXIMUM_TAG_OPENINGS} read statically')
