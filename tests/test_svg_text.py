@@ -249,6 +249,46 @@ SVG_PAINT_CASES = (
     (f'{SVG}<text {AT} fill="none" stroke="white">PAYLOAD</text></svg>', False),
     (f'{SVG}<text {AT} fill="white" stroke="black">PAYLOAD</text></svg>', True),
     (f'<div style="background:black">{SVG}<text {AT} fill="white">PAYLOAD</text></svg></div>', True),
+    # HTML in a <foreignObject> is colored by the color it inherits, from SVG ancestors too.
+    (f'{SVG}<g style="color:white"><foreignObject width="300" height="100">{FO_PARAGRAPH}</foreignObject></g></svg>',
+     False),
+    (f'{SVG}<g color="white"><foreignObject width="300" height="100">{FO_PARAGRAPH}</foreignObject></g></svg>',
+     False),
+    (f'<svg width="300" height="100" color="white"><foreignObject width="300" height="100">{FO_PARAGRAPH}'
+     "</foreignObject></svg>", False),
+    (f'{SVG}<g style="color:black"><foreignObject width="300" height="100">{FO_PARAGRAPH}</foreignObject></g></svg>',
+     True),
+    # Paint from CSS this reader cannot decide (@supports) counts both ways, inherited too.
+    ("<style>@supports (not (display:grid)) {text{fill:black}}</style>"
+     f'{SVG}<text {AT} fill="none">PAYLOAD</text></svg>', False),
+    ("<style>@supports (not (display:grid)) {g{fill:black}}</style>"
+     f'<svg width="300" height="100" fill="none"><g><text {AT}>PAYLOAD</text></g></svg>', False),
+    # A gradient paints with its stops (its own, or those of the gradient it links to by href); one
+    # whose stops are all transparent, or that has none, paints nothing.
+    (f'{SVG}<defs><linearGradient id="g"><stop offset="0" stop-color="black" stop-opacity="0"/>'
+     f'<stop offset="1" stop-color="red" stop-opacity="0"/></linearGradient></defs>'
+     f'<text {AT} fill="url(#g)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<defs><linearGradient id="g"><stop offset="0" stop-color="black" stop-opacity="0"/>'
+     f'<stop offset="1" stop-color="red"/></linearGradient></defs>'
+     f'<text {AT} fill="url(#g)">PAYLOAD</text></svg>', True),
+    (f'{SVG}<defs><linearGradient id="g"><stop offset="0" stop-color="transparent"/></linearGradient></defs>'
+     f'<text {AT} fill="url(#g)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<defs><radialGradient id="g"></radialGradient></defs><text {AT} fill="url(#g)">PAYLOAD</text></svg>',
+     False),
+    (f'<style>stop{{stop-opacity:0}}</style>{SVG}<defs><linearGradient id="g"><stop offset="0" stop-color="black"/>'
+     f'</linearGradient></defs><text {AT} fill="url(#g)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<defs><linearGradient id="g"><stop offset="0" style="stop-color:transparent"/></linearGradient></defs>'
+     f'<text {AT} fill="url(#g)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<defs><linearGradient id="a"><stop offset="0" stop-color="black" stop-opacity="0"/></linearGradient>'
+     f'<linearGradient id="g" href="#a"></linearGradient></defs><text {AT} fill="url(#g)">PAYLOAD</text></svg>',
+     False),
+    (f'{SVG}<defs><linearGradient id="a"><stop offset="0" stop-color="black"/></linearGradient>'
+     f'<linearGradient id="g" href="#a"></linearGradient></defs><text {AT} fill="url(#g)">PAYLOAD</text></svg>',
+     True),
+    (f'{SVG}<defs><pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse"></pattern></defs>'
+     f'<text {AT} fill="url(#p)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<defs><pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse">'
+     f'<rect width="10" height="10"/></pattern></defs><text {AT} fill="url(#p)">PAYLOAD</text></svg>', True),
 )
 
 
@@ -287,7 +327,21 @@ class SvgTextTests(unittest.TestCase):
 
 
 class LongValueTests(unittest.TestCase):
-    """Sizes of thousands of digits are read in linear time, and never crash the reader."""
+    """Sizes of thousands of digits are read in linear time, and never crash the reader; deep and
+    large drawings are read in time proportional to their size."""
+
+    def test_deep_and_large_drawings_are_read_quickly(self):
+        import time
+
+        gradients = "".join(f'<linearGradient id="g{index}"><stop stop-color="black"/></linearGradient>'
+                            for index in range(300))
+        labels = "".join(f'<text fill="url(#g{index})">a</text><text fill="#fff">b</text>' for index in range(300))
+        spans = "<tspan>s</tspan>" * 3000
+        markup = (f"<svg><defs>{gradients}</defs>{'<rect/>' * 300}{labels}"
+                  + '<g fill="red">' * 450 + f"<text>{spans}</text>" + "</g>" * 450 + "</svg>")
+        started = time.perf_counter()
+        extract_visible_text(page(markup))
+        self.assertLess(time.perf_counter() - started, 3)
 
     def test_long_sizes_are_read_quickly(self):
         import time
