@@ -226,6 +226,34 @@ class TooComplexToReadTests(unittest.TestCase):
         self.assertEqual(page.count("<"), MAXIMUM_TAG_OPENINGS + 1)
         self.assertEqual(flag_kinds(page), ["page_too_complex_to_read"])
 
+    def test_css_with_a_number_too_long_to_read_is_flagged(self):
+        # tinycss2 converts each integer to a Python int, which refuses more than 4300 digits, so
+        # such CSS (in a <style>, a style attribute or an external stylesheet) cannot be read.
+        from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+
+        guard = HeadlineGuard(PAPER_WATCHLIST)
+        digits = "1" * 5000
+        pages = (
+            (f"<html><head><style>.z{{width:{digits}px}}</style></head><body><h1>x</h1></body></html>", None),
+            (f'<html><body><h1 style="z-index:{digits}">x</h1></body></html>', None),
+            ("<html><body><h1>x</h1></body></html>", [f".z{{width:{digits}px}}"]),
+        )
+        for page, stylesheets in pages:
+            with self.subTest(page=page[:60], stylesheets=stylesheets is not None):
+                result = guard.analyze_html(page, stylesheets=stylesheets)
+                article = guard.extract_article(page, stylesheets=stylesheets)
+                kinds = []
+                for flag in result.flags:
+                    kinds.append(flag.kind)
+                self.assertEqual(kinds, ["page_too_complex_to_read"])
+                self.assertEqual(result.verdict, "review")
+                self.assertEqual(article.verdict, "review")
+                self.assertTrue(article.needs_browser_check)
+
+    def test_a_long_number_outside_css_is_read(self):
+        digits = "1" * 5000
+        self.assertEqual(extract_visible_text(f"<html><body><p>{digits}</p></body></html>")[0], digits)
+
     def test_a_page_at_the_limit_is_read(self):
         page = "<html><body><p>x</p>" + "<b></b>" * ((MAXIMUM_TAG_OPENINGS - 6) // 2) + "</body></html>"
         self.assertEqual(page.count("<"), MAXIMUM_TAG_OPENINGS)
