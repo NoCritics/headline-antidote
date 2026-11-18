@@ -60,12 +60,23 @@ CHROME_PARSED_PAGES = (
     ("<html><body><template>PAYLOAD</template><p>Body</p></body></html>", "Body"),
     # With scripting on, a <noscript> in <head> is text, so its markup opens no <body>.
     ("<html><head><noscript><p>PAYLOAD</p></noscript></head><body><p>Body</p></body></html>", "Body"),
-    # An element whose parent is more than 512 deep is attached to the grandparent instead: the
-    # <span> leaves the hidden <div> at depth 513, and its text shows.
-    (nested_page(600), "deep after"),
-    ("<html><body>" + "<div>" * 510 + '<div style="display:none"><span>moved out</span>hidden</div>'
-     + "</div>" * 510 + "<p>after</p></body></html>", "moved out after"),
 )
+
+
+def table_chain_page(units):
+    """Tables nested through foster-parented <div>s. At 128 units Chrome moves the <b> out of
+    the <em> (measured in Chrome 157), where the rule then hides it."""
+    return ("<html><head><style>.x + b { display: none }</style></head><body>"
+            + "<table><tr><div><td>" * units + '<em class="x"><b>PAYLOAD</b></em></body></html>')
+
+
+def flag_kinds(page):
+    from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+
+    kinds = []
+    for flag in HeadlineGuard(PAPER_WATCHLIST).analyze_html(page).flags:
+        kinds.append(flag.kind)
+    return kinds
 
 
 class ParsedLikeChromeTests(unittest.TestCase):
@@ -93,6 +104,17 @@ class ParsedLikeChromeTests(unittest.TestCase):
         extract_visible_text(page)
         self.assertLess(time.perf_counter() - start, 5)
 
+    def test_noscript_nested_hundreds_deep_is_read_quickly(self):
+        # Each <noscript>'s markup is parsed once, not again inside the one around it (that
+        # took 2.3 s here, and 38 s at 1,000 levels).
+        page = "<html><body>" + ("<noscript>" + "a" * 2000) * 700 + "</body></html>"
+        start = time.perf_counter()
+        extract_visible_text(page)
+        self.assertLess(time.perf_counter() - start, 1)
+
+    def test_a_page_nested_200_deep_is_read(self):
+        self.assertEqual(extract_visible_text(nested_page(200))[0], "deep after")
+
     def test_comments_keep_their_text_as_written(self):
         # Chrome's comment.data; trafilatura read the text after an emptied <!-- --> differently.
         from lxml import etree
@@ -111,9 +133,16 @@ class ParsedLikeChromeTests(unittest.TestCase):
                 extract_visible_text(start + "<html><body><p>x</p></body></html>")
 
 
-class TooLargeToReadTests(unittest.TestCase):
-    """A page with more "<" than MAXIMUM_TAG_OPENINGS is not read statically: it would take
-    minutes. It gets a medium flag, and an article reading asks for the browser check."""
+class TooComplexToReadTests(unittest.TestCase):
+    """A page is not read statically when it has more "<" than MAXIMUM_TAG_OPENINGS (it would
+    take minutes), or when it may nest deeper than Chrome's limit, past which Chrome moves
+    elements in a way this reader does not reproduce. It gets a medium flag, and an article
+    reading asks for the browser check."""
+
+    def test_a_page_that_may_nest_past_chromes_limit_is_flagged(self):
+        for page in (nested_page(600), table_chain_page(128), table_chain_page(105)):
+            with self.subTest(page=page[:80]):
+                self.assertEqual(flag_kinds(page), ["page_too_complex_to_read"])
 
     def test_a_page_nested_a_hundred_thousand_deep_is_flagged_quickly(self):
         from headline_guard import HeadlineGuard, PAPER_WATCHLIST
@@ -126,20 +155,15 @@ class TooLargeToReadTests(unittest.TestCase):
         kinds = []
         for flag in result.flags:
             kinds.append(flag.kind)
-        self.assertIn("page_too_large_to_read", kinds)
+        self.assertIn("page_too_complex_to_read", kinds)
         self.assertEqual(result.verdict, "review")
         self.assertEqual(article.verdict, "review")
         self.assertTrue(article.needs_browser_check)
 
     def test_a_page_one_past_the_limit_is_flagged(self):
-        from headline_guard import HeadlineGuard, PAPER_WATCHLIST
-
         page = "<html><body><p>x</p>" + "<b></b>" * ((MAXIMUM_TAG_OPENINGS - 6) // 2) + "<i>y</body></html>"
         self.assertEqual(page.count("<"), MAXIMUM_TAG_OPENINGS + 1)
-        kinds = []
-        for flag in HeadlineGuard(PAPER_WATCHLIST).analyze_html(page).flags:
-            kinds.append(flag.kind)
-        self.assertEqual(kinds, ["page_too_large_to_read"])
+        self.assertEqual(flag_kinds(page), ["page_too_complex_to_read"])
 
     def test_a_page_at_the_limit_is_read(self):
         page = "<html><body><p>x</p>" + "<b></b>" * ((MAXIMUM_TAG_OPENINGS - 6) // 2) + "</body></html>"
