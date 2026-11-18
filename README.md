@@ -147,11 +147,11 @@ Body quality depends on trafilatura. The occasional "Published" label, a related
 
 Pages are parsed by lexbor (`selectolax`, pinned 1.0.2), which follows the HTML standard's parsing algorithm, and copied into the lxml tree the rest of the reader uses (`html_tree.py`). libxml2, the parser under lxml, split some markup differently, and each difference let a page hide text from Chrome while this reader showed it: a doctype with an unclosed quote (`<!doctype html public "x>`) ran on to the next quote and swallowed a `display:none` wrapper, an escaped `<script><!--<script>` ended at its first `</script>`, `<!--` inside `<textarea>` opened a comment, and elements nested deeper than 255 were dropped.
 
-- Scripting is on, as in Chrome: `<noscript>` content is not part of the page. Its markup, and a `<template>`'s content, are still reported as hidden text, since a scraper passes them on.
-- An element whose parent is more than 512 deep is attached to the grandparent, as Chrome attaches it.
+- Scripting is on, as in Chrome: `<noscript>` content is not part of the page. Its markup (parsed once, with scripting off, as a scraper reads it), and a `<template>`'s content, are still reported as hidden text, since a scraper passes them on.
+- Chrome moves an element to its grandparent once its open elements are more than 512 deep, which this copy does not reproduce. Open elements are as deep as the tree plus at most 3 per table, so a page whose depth plus 3 per `<table` passes 512 is not read statically (the saved test pages reach 39).
 - Comments keep their text as written.
-- lexbor's tree building is quadratic in nesting depth, so a page with more than 20,000 `<` is not read statically: it gets a `page_too_large_to_read` flag (medium) and a browser check. The saved test pages have at most 9,230; at the limit the slowest shape found takes 1.7 s.
-- Checked against Chrome 157: 29 parser cases (`tests/test_html_parsing.py`) and the 568 test readings, where the only changes were 6 headline paths, each now Chrome's. Reading takes about 3% longer (80 readings, 5 alternating runs: median 7.21 s against 6.98 s), the cost of copying the tree into lxml.
+- lexbor's tree building is quadratic in nesting depth, so a page with more than 20,000 `<` is not read statically either. Both kinds get a `page_too_complex_to_read` flag (medium) and a browser check. The saved test pages have at most 9,230; at the limit the slowest shape found takes 1.7 s.
+- Checked against Chrome 157: 27 parser cases (`tests/test_html_parsing.py`) and the 568 test readings, where the only changes were 6 headline paths, each now Chrome's. Reading takes about 3% longer (80 readings, 5 alternating runs: median 7.21 s against 6.98 s), the cost of copying the tree into lxml.
 
 ## The CSS engine
 
@@ -405,7 +405,7 @@ Bugs and false alarms found this way, each fixed with a test:
 | `html_comment_text` | medium | text inside `<!-- -->`, which some scrapers pass on |
 | `scraper_text_differs` | high / medium | the scraper's output contains words a reader can't see (high), or is missing visible words (medium) |
 | `headline_not_found` | medium | `headline_xpath` matched nothing |
-| `page_too_large_to_read` | medium | more than 20,000 `<` in the page, too many to parse quickly; it is not read statically, and the browser check is asked for |
+| `page_too_complex_to_read` | medium | more than 20,000 `<` in the page (too many to parse quickly), or nesting that may pass Chrome's depth limit; it is not read statically, and the browser check is asked for |
 | `hidden_text_in_article` | low | hidden body text a standard extractor would pass to the model, or that a browser hides (removed, so the model never sees it) |
 | `possibly_hidden_text` | low | body text whose color may match an undeclared page background (kept; asks for a browser check) |
 | `headline_adds_words` | medium / low | the visible heading adds words no feed or metadata title has (medium for 2+ words, a negation or a number: the model gets the title's wording; low for one ordinary word or a kicker label) |
@@ -486,7 +486,7 @@ The tests cover the paper's attacks, their variants, and attacks shaped to slip 
 - **When the browser shows almost none of the article,** even after a second read, the static result stands (`review` for a triaged page).
 - **Scripts that hide body text without naming it** are seen only by the browser check, which runs only on triaged pages (see the fresh-set test).
 - **Script triage reads only inline scripts.** External bundles that change the headline go unnoticed until the title comparison or the browser check catches the effect.
-- **Pages with more than 20,000 `<`** are not read statically (see "HTML parsed as Chrome parses it"); only the browser check reads them.
+- **Pages with more than 20,000 `<`, or nested near Chrome's depth limit,** are not read statically (see "HTML parsed as Chrome parses it"); only the browser check reads them.
 - **Without tinycss2/cssselect2,** only inline styles and simple `.class`/`#id`/`tag` rules in `<style>` are understood: no external stylesheets, complex selectors or media queries.
 - **Cost of the browser check:** one Chrome kept running, and about 1.1–1.3 s (p50) per checked page, mostly the page's own scripts.
 - **`scraped_text` must come from the same element as `headline_xpath`.** A `<title>` with a " - Reuters" suffix compared against the `<h1>` will be flagged as different.

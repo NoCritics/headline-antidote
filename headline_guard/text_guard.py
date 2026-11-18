@@ -289,14 +289,14 @@ class HeadlineGuard:
         Offsets in the returned flags point into result.original_text. Hidden-text and
         scraper flags have no offsets.
         """
-        from .html_tree import TooManyTags
+        from .html_tree import PageTooComplex
         from .html_visibility import extract_visible_text
 
         try:
             visible_text, hidden_fragments = extract_visible_text(html, headline_xpath, stylesheets)
-        except TooManyTags as error:
+        except PageTooComplex as error:
             result = self.analyze("")
-            result.flags.append(Flag("page_too_large_to_read", MEDIUM, None, None, "", str(error)))
+            result.flags.append(Flag("page_too_complex_to_read", MEDIUM, None, None, "", str(error)))
             return result
         if visible_text is None:
             result = self.analyze("")

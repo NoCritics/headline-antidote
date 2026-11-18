@@ -29,7 +29,7 @@ from .css_hiding import (
 )
 from .css_values import length_in_pixels, parse_color, plain_number, with_math_evaluated
 from .document_mode import is_quirks_mode
-from .html_tree import TooManyTags, parse_html
+from .html_tree import PageTooComplex, parse_html
 
 # Contents are code or metadata, never headline text, so they are skipped without a flag.
 NON_TEXT_TAGS = {"script", "style", "head", "meta", "link"}
@@ -612,7 +612,7 @@ def linked_stylesheet_urls(html, base_url):
 
     try:
         root = parse_html(html)
-    except TooManyTags:
+    except PageTooComplex:
         return []  # the page is not read statically, so its stylesheets are not needed
     urls = []
     for link in root.iter("link"):
