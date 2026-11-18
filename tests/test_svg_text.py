@@ -163,6 +163,11 @@ SVG_PAINT_CASES = (
     (f'{SVG}<text {AT}>A<tspan opacity="0">PAYLOAD</tspan></text></svg>', False),
     (f'{SVG}<text {AT}>A<tspan font-size="0">PAYLOAD</tspan></text></svg>', False),
     (f'{SVG}<text {AT}>A<tspan font-size="20">PAYLOAD</tspan></text></svg>', True),
+    # Sizes are in the drawing's user units: a viewBox or a transform can make a small one large.
+    ('<svg width="300" height="100" viewBox="0 0 30 10"><text x="1" y="5" font-size="1">PAYLOAD</text></svg>',
+     True),
+    (f'{SVG}<g transform="scale(10)"><text x="1" y="5" font-size="1">PAYLOAD</text></g></svg>', True),
+    (f'{SVG}<text x="1" y="5" font-size="1" transform="scale(10)">PAYLOAD</text></svg>', True),
     (f'<svg width="300" height="100" display="none"><text {AT}>PAYLOAD</text></svg>', False),
     (f'<svg width="300" height="100" opacity="0"><text {AT}>PAYLOAD</text></svg>', False),
     (f'{SVG}<foreignObject width="300" height="100" opacity="0">{FO_PARAGRAPH}</foreignObject></svg>', False),
@@ -230,6 +235,16 @@ class NotDrawnTests(unittest.TestCase):
             with self.subTest(tag=tag):
                 visible_text, fragments = extract_visible_text(page(f"<svg><{tag}><text>PAYLOAD</text></{tag}></svg>"))
                 self.assertEqual(visible_text, "x")
+                self.assertIn("PAYLOAD", hidden_text(fragments))
+
+    def test_an_unreadable_font_size_in_an_unscaled_drawing_is_hidden(self):
+        # Without a viewBox or a transform a user unit is a CSS pixel, so the attribute is read
+        # as CSS font-size is: text this small is practically invisible (Chrome still paints it).
+        for size in ("1", "1px", "1.5"):
+            with self.subTest(size=size):
+                markup = f'{SVG}<text x="10" y="50" font-size="{size}">PAYLOAD</text></svg>'
+                visible_text, fragments = extract_visible_text(page(markup))
+                self.assertNotIn("PAYLOAD", visible_text)
                 self.assertIn("PAYLOAD", hidden_text(fragments))
 
     def test_text_that_depends_on_the_browser_language_counts_as_hidden(self):
