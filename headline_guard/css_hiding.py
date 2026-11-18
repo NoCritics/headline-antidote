@@ -89,7 +89,7 @@ def declared_background_color(declarations):
 
 def font_size_is_unreadable(value):
     value = (value or "").strip().lower()
-    match = re.fullmatch(r"(-?\d*\.?\d+)\s*([a-z%]*)", value)
+    match = re.fullmatch(r"(-?(?:\d+(?:\.\d+)?|\.\d+))\s*([a-z%]*)", value)
     if match is not None:
         minimum_size = MINIMUM_READABLE_FONT_SIZES.get(match.group(2))
         if minimum_size is not None:

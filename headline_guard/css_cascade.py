@@ -94,7 +94,7 @@ HIDING_PROPERTIES = {
 # Rules on these selectors define site-wide CSS variables, substituted before deciding which rules matter.
 SITE_WIDE_SELECTORS = {":root", "html", "body", ":root,html", "html,:root", "html,body", ":root,body"}
 # A zero length or percentage in any unit.
-_ZERO_SIZE = re.compile(r"[+-]?(?:0+\.?0*|\.0+)(?:e[+-]?\d+)?(?:[a-z]+|%)?")
+_ZERO_SIZE = re.compile(r"[+-]?(?:0+(?:\.0*)?|\.0+)(?:e[+-]?\d+)?(?:[a-z]+|%)?")
 _VARIABLE_REFERENCE = re.compile(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))?\)")
 
 

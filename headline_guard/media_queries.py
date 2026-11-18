@@ -67,7 +67,7 @@ _WHITE_SPACE = re.compile(r"[ \t\n\r\f]*")
 _MEDIA_TYPE_QUERY = re.compile(
     r"(?:(not|only)[ \t\n\r\f]+)?([a-z-]+)(?:[ \t\n\r\f]+and[ \t\n\r\f]+(.+))?", flags=re.S
 )
-_RESOLUTION = re.compile(r"(\d*\.?\d+)(dppx|x|dpi|dpcm)")
+_RESOLUTION = re.compile(r"(\d+(?:\.\d+)?|\.\d+)(dppx|x|dpi|dpcm)")
 
 
 class _Unparsable(Exception):

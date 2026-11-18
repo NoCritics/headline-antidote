@@ -58,12 +58,13 @@ SVG_DEFINITION_TAGS = {"defs", "symbol", "mask", "clippath", "pattern", "marker"
 SVG_SUPPORTED_EXTENSIONS = {"http://www.w3.org/1999/xhtml", "http://www.w3.org/1998/Math/MathML"}
 # An SVG length or percentage, as the width and height attributes and properties take it.
 _SVG_LENGTH = re.compile(
-    r"([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)"
+    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)"
     r"(px|em|ex|ch|rem|vw|vh|vmin|vmax|in|cm|mm|q|pt|pc|%)?"
 )
 _OVERFLOW_KEYWORDS = {"visible", "hidden", "clip", "scroll", "auto"}
 # SVG presentation attributes read when their value hides text. Lengths are in the drawing's user
-# units, which its viewBox may scale up, so only a zero font-size counts.
+# units, which a viewBox or a transform may scale up; a font-size is read as CSS reads it only
+# where nothing does, and otherwise counts only when it is zero.
 SVG_HIDING_ATTRIBUTES = ("display", "visibility", "opacity", "font-size", "transform", "clip-path", "filter")
 _ZERO_SCALE = re.compile(r"scale[xy]?\(0(\.0*)?[,)]")
 
@@ -337,7 +338,21 @@ def _svg_size(value):
     return "zero" if number == 0 else "negative"
 
 
-def _svg_attribute_hides(name, value):
+def _is_scaled_svg(element):
+    """Whether a viewBox or a transform attribute on element or an enclosing SVG element may make
+    element's user units differ from CSS pixels."""
+    node = element
+    while node is not None and isinstance(node.tag, str):
+        tag = node.tag.lower()
+        if tag == "foreignobject" and node is not element:
+            return False
+        if node.get("transform") is not None or (tag == "svg" and node.get("viewbox") is not None):
+            return True
+        node = node.getparent()
+    return False
+
+
+def _svg_attribute_hides(name, value, element):
     if name == "display":
         return value == "none"
     if name == "visibility":
@@ -345,7 +360,9 @@ def _svg_attribute_hides(name, value):
     if name == "opacity":
         return opacity_is_invisible(value)
     if name == "font-size":
-        return _svg_size(value) == "zero"
+        if _svg_size(value) == "zero":
+            return True
+        return font_size_is_unreadable(value) and not _is_scaled_svg(element)
     if name == "transform":
         return _ZERO_SCALE.search(value) is not None
     if name == "clip-path":
@@ -361,7 +378,11 @@ def _is_valid_css_value(name, value):
         from .css_validity import INVALID, QUIRKS_ONLY, declaration_validity
     except ImportError:
         return True
-    validity = declaration_validity(name, tinycss2.parse_component_value_list(value))
+    try:
+        tokens = tinycss2.parse_component_value_list(value)
+    except ValueError:
+        return True  # a number too long for tinycss2 to read; the value is judged as written
+    validity = declaration_validity(name, tokens)
     return validity not in (INVALID, QUIRKS_ONLY)
 
 
@@ -380,12 +401,16 @@ def _svg_presentation_hints(element, tag):
         value = _svg_attribute_value(element, name)
         if value is None:
             continue
+        if name == "font-size":
+            length = _SVG_LENGTH.fullmatch(value)
+            if length is not None and length.group(2) is None:
+                value += "px"  # SVG attributes take lengths without a unit, in user units
         if name == "transform":
             # The attribute separates numbers with spaces or commas, CSS with commas.
             value = re.sub(r"\s+", ",", re.sub(r"\s*([(),])\s*", r"\1", value))
         elif not _is_valid_css_value(name, value):
             continue
-        if _svg_attribute_hides(name, value):
+        if _svg_attribute_hides(name, value, element):
             hints[name] = value
     if tag == "foreignobject":
         for name in ("width", "height"):
