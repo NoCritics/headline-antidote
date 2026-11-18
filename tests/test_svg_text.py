@@ -121,6 +121,11 @@ SVG_PAINT_CASES = (
     (f'<svg width="300" height="100" style="height:0;overflow:visible"><text {AT}>PAYLOAD</text></svg>', False),
     (f'<svg style="width:0;height:0;position:absolute"><text {AT}>PAYLOAD</text></svg>', False),
     (f'<svg width="0" height="100" style="width:300px"><text {AT}>PAYLOAD</text></svg>', True),
+    (f'<svg width="300" height="100" style="width:0%"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<svg width="300" height="100" style="height:0em"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<style>.s{{height:0%}}</style><svg width="300" height="100" class="s"><text {AT}>PAYLOAD</text></svg>',
+     False),
+    (f'<svg width="300" height="100" style="width:1%"><text {AT}>PAYLOAD</text></svg>', True),
     (f'{SVG}<text {AT}>PAYLOAD</text></svg>', True),
     (f'<svg><text y="20">PAYLOAD</text></svg>', True),
     # SVG presentation attributes are CSS of the lowest priority: any stylesheet rule wins over
