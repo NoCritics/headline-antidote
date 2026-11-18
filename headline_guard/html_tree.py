@@ -39,37 +39,32 @@ class PageTooComplex(Exception):
 
 
 def parse_html(html):
-    """The lxml tree of a page (rooted at <html>) or, for a fragment, a <div> holding it. Parsed
-    with scripting on, as in Chrome, so <noscript> content is not part of the page.
+    """The lxml tree of a page, rooted at <html>. Any markup is parsed as a whole document, as
+    Chrome parses it, with scripting on, so <noscript> content is not part of the page.
     Raises PageTooComplex for a page this reader cannot parse as Chrome would."""
     tag_openings = html.count("<")
     if tag_openings > MAXIMUM_TAG_OPENINGS:
         raise PageTooComplex(f'{tag_openings} "<" in the page, more than the {MAXIMUM_TAG_OPENINGS} read statically')
     deepest_parent = CHROME_DEPTH_LIMIT - OPEN_ELEMENTS_PER_TABLE * html.lower().count("<table")
-    lowered_start = html.lstrip()[:200].lower()
-    if lowered_start.startswith("<!doctype") or "<html" in lowered_start or "<body" in lowered_start:
-        lexbor_root = LexborHTMLParser(html, scripting=True).root
-        root = lxml.html.document_fromstring("<html></html>")
-        _set_attributes(root, _xml_attributes(lexbor_root))
-        _copy_children(lexbor_root.child, root, deepest_parent)
-        return root
-    root = lxml.html.fragment_fromstring("<div></div>")
-    first_node = LexborHTMLParser(html, is_fragment=True, scripting=True).root
-    _copy_children(first_node, root, deepest_parent)
+    lexbor_root = LexborHTMLParser(html, scripting=True).root
+    root = lxml.html.document_fromstring("<html></html>")
+    _set_attributes(root, _xml_attributes(lexbor_root))
+    _copy_children(lexbor_root.child, root, deepest_parent)
     return root
 
 
-def _content_start(node):
-    """The first node to copy under an element. Content that is not part of the page is copied
-    too, so that the reader can report it as hidden: a <template>'s content, and the markup in a
-    <noscript> (raw text with scripting on). That markup is parsed with scripting off, as a
-    scraper reads it, so a <noscript> inside it is markup too and nothing is parsed twice."""
+def _content_start(node, in_noscript_markup):
+    """(first node to copy under an element, whether it is inside a <noscript>'s markup).
+    Content that is not part of the page is copied too, so that the reader can report it as
+    hidden: a <template>'s content, and the markup in a <noscript> (raw text with scripting on).
+    That markup is parsed with scripting off, as a scraper reads it, so a <noscript> inside it
+    is already elements and nothing is parsed twice."""
     if node.tag == "template":
         fragments = node.template_fragments()
-        return fragments[0].child if fragments else None
-    if node.tag == "noscript" and node.child is not None and node.child.is_text_node:
-        return LexborHTMLParser(node.child.text_content or "", is_fragment=True).root
-    return node.child
+        return (fragments[0].child if fragments else None), in_noscript_markup
+    if node.tag == "noscript" and not in_noscript_markup and node.child is not None:
+        return LexborHTMLParser(node.child.text_content or "", is_fragment=True).root, True
+    return node.child, in_noscript_markup
 
 
 def _xml_text(text):
@@ -119,19 +114,20 @@ def _append_text(parent, text):
 def _copy_children(first_node, root, deepest_parent):
     """Copies first_node and its following siblings, with their descendants, under root (at
     depth 1). An explicit stack, so that depth costs no recursion. Raises PageTooComplex for an
-    element whose parent is deeper than deepest_parent."""
-    pending = [(first_node, root, 1)]
+    element whose parent is deeper than deepest_parent, outside a <noscript>'s markup."""
+    pending = [(first_node, root, 1, False)]
     while pending:
-        node, parent, parent_depth = pending.pop()
+        node, parent, parent_depth, in_noscript_markup = pending.pop()
         while node is not None:
             if node.is_element_node:
-                if parent_depth > deepest_parent:
+                if parent_depth > deepest_parent and not in_noscript_markup:  # Chrome builds no tree there
                     raise PageTooComplex(
                         f"nested {parent_depth + 1} deep: Chrome may move elements past"
                         f" {CHROME_DEPTH_LIMIT} open elements, which this reader does not reproduce")
                 element = _new_element(parent, node)
-                pending.append((node.next, parent, parent_depth))
-                pending.append((_content_start(node), element, parent_depth + 1))
+                pending.append((node.next, parent, parent_depth, in_noscript_markup))
+                content_start, content_in_noscript_markup = _content_start(node, in_noscript_markup)
+                pending.append((content_start, element, parent_depth + 1, content_in_noscript_markup))
                 break
             if node.is_text_node:
                 text = _xml_text(node.text_content or "")
