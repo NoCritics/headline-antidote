@@ -104,6 +104,15 @@ class ParsedLikeChromeTests(unittest.TestCase):
         extract_visible_text(page)
         self.assertLess(time.perf_counter() - start, 5)
 
+    def test_a_noscript_inside_noscript_markup_keeps_all_its_content(self):
+        page = "<html><body><noscript><noscript>a<b>PAYLOAD</b></noscript></noscript><p>Body</p></body></html>"
+        visible_text, hidden_fragments = extract_visible_text(page)
+        self.assertEqual(visible_text, "Body")
+        hidden_text = ""
+        for fragment in hidden_fragments:
+            hidden_text += fragment.text + " "
+        self.assertIn("PAYLOAD", hidden_text)
+
     def test_noscript_nested_hundreds_deep_is_read_quickly(self):
         # Each <noscript>'s markup is parsed once, not again inside the one around it (that
         # took 2.3 s here, and 38 s at 1,000 levels).
@@ -159,6 +168,14 @@ class TooComplexToReadTests(unittest.TestCase):
         self.assertEqual(result.verdict, "review")
         self.assertEqual(article.verdict, "review")
         self.assertTrue(article.needs_browser_check)
+
+    def test_markup_without_html_or_body_counts_their_depth(self):
+        # Chrome parses any page as a document, so this <span> is 514 deep (html, body, 511
+        # divs), its parent past the limit; a page starting with a long comment is the same.
+        markup = "<div>" * 511 + "<span>x</span>"
+        for page in (markup, "<!--" + "c" * 300 + "-->" + markup):
+            with self.subTest(page=page[:40]):
+                self.assertEqual(flag_kinds(page), ["page_too_complex_to_read"])
 
     def test_a_page_one_past_the_limit_is_flagged(self):
         page = "<html><body><p>x</p>" + "<b></b>" * ((MAXIMUM_TAG_OPENINGS - 6) // 2) + "<i>y</body></html>"
