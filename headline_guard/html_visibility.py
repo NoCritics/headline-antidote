@@ -58,7 +58,7 @@ SVG_DEFINITION_TAGS = {"defs", "symbol", "mask", "clippath", "pattern", "marker"
 SVG_SUPPORTED_EXTENSIONS = {"http://www.w3.org/1999/xhtml", "http://www.w3.org/1998/Math/MathML"}
 # An SVG length or percentage, as the width and height attributes and properties take it.
 _SVG_LENGTH = re.compile(
-    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)"
+    r"([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)"
     r"(px|em|ex|ch|rem|vw|vh|vmin|vmax|in|cm|mm|q|pt|pc|%)?"
 )
 _OVERFLOW_KEYWORDS = {"visible", "hidden", "clip", "scroll", "auto"}
@@ -403,8 +403,12 @@ def _svg_presentation_hints(element, tag):
             continue
         if name == "font-size":
             length = _SVG_LENGTH.fullmatch(value)
-            if length is not None and length.group(2) is None:
-                value += "px"  # SVG attributes take lengths without a unit, in user units
+            if length is not None:
+                if length.group(2) is None:
+                    value += "px"  # SVG attributes take lengths without a unit, in user units
+                # Written plainly ("1e0" is "1"), as the CSS checks read numbers.
+                number = f"{float(length.group(1)):.6f}".rstrip("0").rstrip(".")
+                value = (number if number not in ("", "-0") else "0") + (length.group(2) or "px")
         if name == "transform":
             # The attribute separates numbers with spaces or commas, CSS with commas.
             value = re.sub(r"\s+", ",", re.sub(r"\s*([(),])\s*", r"\1", value))
