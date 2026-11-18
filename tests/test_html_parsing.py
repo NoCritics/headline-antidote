@@ -117,6 +117,15 @@ class ParsedLikeChromeTests(unittest.TestCase):
             hidden_texts.append(fragment.text)
         self.assertEqual(hidden_texts, ["PAYLOAD"])
 
+    def test_one_leading_byte_order_mark_is_not_text(self):
+        # Chrome drops one leading BOM when it decodes a page's bytes; a second is text, and opens
+        # <body> before the <title> (measured with pages served as bytes, since set_content keeps it).
+        head = "<!doctype html><html><head><title>T</title></head><body><p>x</p></body></html>"
+        self.assertEqual(extract_visible_text("﻿" + head), ("x", []))
+        visible_text, hidden_fragments = extract_visible_text("﻿﻿" + head)
+        self.assertEqual(visible_text, "﻿ x")
+        self.assertEqual(len(hidden_fragments), 1)
+
     def test_the_slowest_page_read_statically_is_read_in_seconds(self):
         # A <select> of options is the slowest shape found for lexbor: 1.7 s on this machine.
         page = "<html><body><select>" + "<option>" * (MAXIMUM_TAG_OPENINGS - 3)
