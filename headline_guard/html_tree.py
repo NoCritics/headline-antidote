@@ -62,9 +62,13 @@ def _content_start(node, in_noscript_markup):
     if node.tag == "template":
         fragments = node.template_fragments()
         return (fragments[0].child if fragments else None), in_noscript_markup
-    if node.tag == "noscript" and not in_noscript_markup and node.child is not None:
-        return LexborHTMLParser(node.child.text_content or "", is_fragment=True).root, True
-    return node.child, in_noscript_markup
+    child = node.child
+    # Raw text is the one text child of a <noscript> parsed with scripting on; in SVG and in
+    # scripting-off markup a <noscript> holds elements.
+    if (node.tag == "noscript" and not in_noscript_markup and child is not None and child.is_text_node
+            and child.next is None):
+        return LexborHTMLParser(child.text_content or "", is_fragment=True).root, True
+    return child, in_noscript_markup
 
 
 def _xml_text(text):
@@ -114,13 +118,14 @@ def _append_text(parent, text):
 def _copy_children(first_node, root, deepest_parent):
     """Copies first_node and its following siblings, with their descendants, under root (at
     depth 1). An explicit stack, so that depth costs no recursion. Raises PageTooComplex for an
-    element whose parent is deeper than deepest_parent, outside a <noscript>'s markup."""
+    element whose parent is deeper than deepest_parent, in a <noscript>'s markup too: Chrome
+    builds no tree from it, but this reader walks it."""
     pending = [(first_node, root, 1, False)]
     while pending:
         node, parent, parent_depth, in_noscript_markup = pending.pop()
         while node is not None:
             if node.is_element_node:
-                if parent_depth > deepest_parent and not in_noscript_markup:  # Chrome builds no tree there
+                if parent_depth > deepest_parent:
                     raise PageTooComplex(
                         f"nested {parent_depth + 1} deep: Chrome may move elements past"
                         f" {CHROME_DEPTH_LIMIT} open elements, which this reader does not reproduce")
