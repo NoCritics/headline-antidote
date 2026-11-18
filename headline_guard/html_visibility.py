@@ -56,6 +56,12 @@ POSITIONED = ("relative", "absolute", "fixed", "sticky")
 SVG_DEFINITION_TAGS = {"defs", "symbol", "mask", "clippath", "pattern", "marker"}
 # The only requiredExtensions Chrome supports.
 SVG_SUPPORTED_EXTENSIONS = {"http://www.w3.org/1999/xhtml", "http://www.w3.org/1998/Math/MathML"}
+# An SVG length or percentage, as the width and height attributes and properties take it.
+_SVG_LENGTH = re.compile(
+    r"([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)"
+    r"(px|em|ex|ch|rem|vw|vh|vmin|vmax|in|cm|mm|q|pt|pc|%)?"
+)
+_OVERFLOW_KEYWORDS = {"visible", "hidden", "clip", "scroll", "auto"}
 
 
 @dataclass
@@ -291,9 +297,85 @@ def _drawn_behind_background(element, declarations, rules):
 
 # ---- presentational HTML --------------------------------------------------
 
+def _is_svg_element(element, tag):
+    """Whether element is an SVG element: an <svg>, or inside one and not in a <foreignObject>'s HTML."""
+    if tag == "svg":
+        return True
+    for ancestor in element.iterancestors():
+        if not isinstance(ancestor.tag, str):
+            continue
+        ancestor_tag = ancestor.tag.lower()
+        if ancestor_tag == "svg":
+            return True
+        if ancestor_tag == "foreignobject":
+            return False
+    return False
+
+
+def _svg_attribute_value(element, name):
+    """An SVG presentation attribute's value as CSS reads it, or None when it is not set."""
+    value = element.get(name)
+    if value is None:
+        return None
+    return with_math_evaluated(value.strip(" \t\n\f\r").lower())
+
+
+def _svg_size(value):
+    """"positive", "zero", "negative", "auto" (no size given) or "unknown" for a width or height."""
+    if value is None or value in ("", "auto"):
+        return "auto"
+    match = _SVG_LENGTH.fullmatch(value)
+    if match is None:
+        return "unknown"
+    number = float(match.group(1))
+    if number > 0:
+        return "positive"
+    return "zero" if number == 0 else "negative"
+
+
+def _svg_presentation_hints(element, tag):
+    """Styles set by SVG presentation attributes that can hide text, as Chrome reads them: CSS
+    wins over them, and a value they cannot take is ignored."""
+    hints = {}
+    if tag == "foreignobject":
+        for name in ("width", "height"):
+            value = _svg_attribute_value(element, name)
+            if value is not None and _svg_size(value) != "unknown":
+                hints[name] = value
+        overflow = _svg_attribute_value(element, "overflow")
+        if overflow in _OVERFLOW_KEYWORDS:
+            hints["overflow"] = overflow
+    elif tag == "svg":
+        for name in ("width", "height"):
+            value = _svg_attribute_value(element, name)
+            if value is not None and _svg_size(value) == "zero":
+                hints[name] = value
+    return hints
+
+
+def _svg_size_reason(tag, declarations):
+    """Why an <svg> or <foreignObject> paints nothing because of its size, or None."""
+    if tag == "svg":
+        for name in ("width", "height"):
+            if _svg_size(declarations.get(name)) == "zero":
+                return f"zero-size <svg> ({name}:{declarations[name]})"
+        return None
+    overflow_words = declarations.get("overflow", "").split()
+    overflow_x = declarations.get("overflow-x") or (overflow_words[0] if overflow_words else "")
+    overflow_y = declarations.get("overflow-y") or (overflow_words[-1] if overflow_words else "")
+    if overflow_x == "visible" and overflow_y == "visible":
+        return None
+    for name in ("width", "height"):
+        if _svg_size(declarations.get(name)) != "positive":
+            return f"SVG <foreignObject> with no {name}, which clips its content away"
+    return None
+
+
 def _presentational_hints(element, tag):
-    """Styles set by old HTML attributes: <font color>, bgcolor."""
+    """Styles set by old HTML attributes (<font color>, bgcolor) and by SVG presentation attributes."""
     hints = None
+    if tag in ("svg", "foreignobject") and _is_svg_element(element, tag):
+        hints = _svg_presentation_hints(element, tag) or None
     if tag == "font" and element.get("color"):
         hints = {"color": element.get("color").strip().lower()}
     bgcolor = element.get("bgcolor")
@@ -305,8 +387,12 @@ def _presentational_hints(element, tag):
 
 
 def _declarations_with_hints(rules, element, tag):
-    declarations = rules.declarations_for(element, tag)
     hints = _presentational_hints(element, tag)
+    if hints is None and tag != "foreignobject":
+        return rules.declarations_for(element, tag)
+    # Every winning declaration: CSS overrides a hint even with a value that cannot hide, and
+    # sizes a <foreignObject>.
+    declarations = _full_declarations(rules, element)
     if hints is None:
         return declarations
     merged = dict(hints)
@@ -487,6 +573,10 @@ def _element_hiding(element, tag, rules, inherited_background, svg_place):
     if tag == "input" and (element.get("type") or "").lower() == "hidden":
         return ("hidden input", HIGH), inherited_background, None, None
     declarations = _declarations_with_hints(rules, element, tag)
+    if tag == "svg" or (tag == "foreignobject" and svg_place is not None):
+        size_reason = _svg_size_reason(tag, declarations)
+        if size_reason is not None:
+            return (size_reason, HIGH), inherited_background, declarations, None
     own_background = declared_background_color(declarations)
     if own_background is not None:
         inherited_background = own_background
@@ -527,6 +617,7 @@ def _hiding_under_undecided_rules(element, tag, rules):
                 "custom function",
                 HIGH)
     hints = _presentational_hints(element, tag)
+    sized_svg_element = tag == "svg" or (tag == "foreignobject" and _is_svg_element(element, tag))
     parent = element.getparent()
     for alternative in alternatives:
         if hints is not None:
@@ -540,6 +631,10 @@ def _hiding_under_undecided_rules(element, tag, rules):
                 return own_background
             return rules.background_for(parent)
         hiding = _hiding_reason_from_declarations(alternative, None, lookup)
+        if hiding is None and sized_svg_element:
+            size_reason = _svg_size_reason(tag, alternative)
+            if size_reason is not None:
+                hiding = (size_reason, HIGH)
         if hiding is None:
             behind = _drawn_behind_background(element, alternative, rules)
             if behind is not None:
@@ -551,6 +646,10 @@ def _hiding_under_undecided_rules(element, tag, rules):
         hiding = _hiding_reason_from_declarations(declarations, None, _background_lookup(world_rules, element))
         if hiding is not None:
             return hiding
+        if sized_svg_element:
+            size_reason = _svg_size_reason(tag, declarations)
+            if size_reason is not None:
+                return (size_reason, HIGH)
         behind = _drawn_behind_background(element, declarations, world_rules)
         if behind is not None:
             return (behind, HIGH)
