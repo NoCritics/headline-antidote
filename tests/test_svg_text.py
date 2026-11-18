@@ -178,6 +178,77 @@ SVG_PAINT_CASES = (
     (f'{SVG}<foreignObject width="300" height="100"><p style="margin:0;font-size:40px" opacity="0">PAYLOAD</p>'
      "</foreignObject></svg>", True),
     ('<p display="none" opacity="0">PAYLOAD</p>', True),
+    # SVG text is painted with fill (black when not set) and stroke (none when not set), both
+    # inherited from any ancestor, HTML ones included; color matters only through currentColor.
+    (f'{SVG}<text {AT} fill="none">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="black">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} FILL=" NONE ">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="transparent">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="rgba(0,0,0,0)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="#0000">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="banana">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} fill-opacity="0">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill-opacity="0%">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill-opacity="banana">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} fill="context-fill">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="context-stroke">PAYLOAD</text></svg>', False),
+    # url() paints with a gradient or pattern of this page, else with its fallback, else not at all.
+    (f'{SVG}<defs><linearGradient id="g"><stop offset="0" stop-color="black"/></linearGradient></defs>'
+     f'<text {AT} fill="url(#g)">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} fill="url(#missing)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="url(#missing) red">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} fill="url(#missing) none">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="url(other.svg#a)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<rect id="r" width="1" height="1"/><text {AT} fill="url(#r)">PAYLOAD</text></svg>', False),
+    (f'{SVG}<rect id="r" width="1" height="1"/><text {AT} fill="url(#r) red">PAYLOAD</text></svg>', True),
+    # CSS wins over the attribute.
+    (f'{SVG}<text {AT} style="fill:none">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} style="fill:none" fill="black">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="none" style="fill:black">PAYLOAD</text></svg>', True),
+    (f'<style>text{{fill:none}}</style>{SVG}<text {AT}>PAYLOAD</text></svg>', False),
+    (f'<style>text{{fill:none}}</style>{SVG}<text {AT} fill="black">PAYLOAD</text></svg>', False),
+    (f'<style>text{{fill:black}}</style>{SVG}<text {AT} fill="none">PAYLOAD</text></svg>', True),
+    (f'<style>.t{{fill-opacity:0}}</style>{SVG}<text {AT} class="t">PAYLOAD</text></svg>', False),
+    # Inherited fill, and a descendant's own fill painting again.
+    (f'{SVG}<g fill="none"><text {AT}>PAYLOAD</text></g></svg>', False),
+    (f'{SVG}<g fill="none"><text {AT} fill="black">PAYLOAD</text></g></svg>', True),
+    (f'{SVG}<g fill="none"><text {AT} fill="currentColor">PAYLOAD</text></g></svg>', True),
+    (f'{SVG}<g fill="none"><text {AT} fill="inherit">PAYLOAD</text></g></svg>', False),
+    (f'<svg width="300" height="100" fill="none"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<svg width="300" height="100" style="fill:none"><text {AT}>PAYLOAD</text></svg>', False),
+    (f'<div style="fill:none">{SVG}<text {AT}>PAYLOAD</text></svg></div>', False),
+    (f'<style>g{{fill:none}}</style>{SVG}<g><text {AT}>PAYLOAD</text></g></svg>', False),
+    (f'{SVG}<text {AT} fill="none"><tspan fill="black">PAYLOAD</tspan></text></svg>', True),
+    (f'{SVG}<text {AT}>A<tspan fill="none">PAYLOAD</tspan></text></svg>', False),
+    (f'{SVG}<text {AT}>A<a fill="none">PAYLOAD</a></text></svg>', False),
+    (f'{SVG}<text {AT} fill="none"><textPath>PAYLOAD</textPath></text></svg>', False),
+    (f'{SVG}<text {AT} fill="none">A<tspan fill="black">B</tspan>PAYLOAD</text></svg>', False),
+    # currentColor is the color property, which paints nothing by itself.
+    (f'{SVG}<text {AT} color="transparent" fill="currentColor">PAYLOAD</text></svg>', False),
+    (f'{SVG}<g color="transparent"><text {AT} fill="currentColor">PAYLOAD</text></g></svg>', False),
+    (f'<div style="color:transparent">{SVG}<text {AT} fill="currentColor">PAYLOAD</text></svg></div>', False),
+    (f'{SVG}<text {AT} color="transparent">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} style="color:white">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} style="-webkit-text-fill-color:transparent">PAYLOAD</text></svg>', True),
+    # A stroke paints the text when its paint shows and its width is not zero.
+    (f'{SVG}<text {AT} fill="none" stroke="black">PAYLOAD</text></svg>', True),
+    (f'<svg width="300" height="100" fill="none" stroke="currentColor"><text {AT}>PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} fill-opacity="0" stroke="black">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} fill="none" stroke="black" stroke-width="0">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="none" stroke="black" stroke-width="0px">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="none" stroke="black" stroke-width="-1">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text {AT} fill="none" stroke="black" stroke-opacity="0">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="none" stroke="black" stroke-opacity="0" style="stroke-opacity:1">PAYLOAD</text>'
+     "</svg>", True),
+    (f'{SVG}<text {AT} fill="none" stroke="none">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="none" stroke="transparent">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="none" stroke="url(#missing)">PAYLOAD</text></svg>', False),
+    # A fill (or stroke) no different from the page background shows nothing.
+    (f'{SVG}<text {AT} fill="white">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="#fff8">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="none" stroke="white">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text {AT} fill="white" stroke="black">PAYLOAD</text></svg>', True),
+    (f'<div style="background:black">{SVG}<text {AT} fill="white">PAYLOAD</text></svg></div>', True),
 )
 
 
@@ -272,6 +343,16 @@ class NotDrawnTests(unittest.TestCase):
                 visible_text, fragments = extract_visible_text(page(markup))
                 self.assertNotIn("PAYLOAD", visible_text)
                 self.assertIn("PAYLOAD", hidden_text(fragments))
+
+    def test_a_light_fill_over_svg_shapes_is_only_suspected(self):
+        # A shape in the drawing may be what the text is painted on, which this reader does not
+        # work out, so text that would vanish on the page background is a medium finding.
+        markup = (f'<div style="background:white">{SVG}<rect width="300" height="100" fill="black"/>'
+                  f'<text {AT} fill="white">PAYLOAD</text></svg></div>')
+        visible_text, fragments = extract_visible_text(page(markup))
+        self.assertNotIn("PAYLOAD", visible_text)
+        severities = [fragment.severity for fragment in fragments if "PAYLOAD" in fragment.text]
+        self.assertEqual(severities, ["medium"])
 
     def test_text_that_depends_on_the_browser_language_counts_as_hidden(self):
         # systemLanguage holds when it names the browser's language, which differs between
