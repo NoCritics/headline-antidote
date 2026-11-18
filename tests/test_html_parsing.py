@@ -66,6 +66,12 @@ CHROME_PARSED_PAGES = (
     ("<html><head><noscript><p>PAYLOAD</p></noscript></head><body><p>Body</p></body></html>", "Body"),
     # In SVG a <noscript> is an unknown SVG element: its content is elements, and none is drawn.
     (SVG_NOSCRIPT_PAGE, "Body"),
+    # A <title> in <body> is not displayed (Chrome's default stylesheet has title{display:none}).
+    ("<html><body><title>PAYLOAD</title><p>x</p></body></html>", "x"),
+    ("<html><body><p>a<title>PAYLOAD</title>b</p></body></html>", "ab"),
+    ("<html><body><title><!--</title>SEEN--></body></html>", "SEEN-->"),
+    # A stray > opens <body> early, so the page's <title> lands in it.
+    ('<!doctype html public "x>>' + ARTICLE, f"> {HEADLINE} Body text."),
 )
 
 
@@ -102,6 +108,14 @@ class ParsedLikeChromeTests(unittest.TestCase):
                 for fragment in hidden_fragments:
                     hidden_texts.append(fragment.text)
                 self.assertEqual(hidden_texts, ["PAYLOAD"])
+
+    def test_a_title_in_the_body_is_reported_hidden(self):
+        visible_text, hidden_fragments = extract_visible_text("<html><body><title>PAYLOAD</title><p>Body</p>")
+        self.assertEqual(visible_text, "Body")
+        hidden_texts = []
+        for fragment in hidden_fragments:
+            hidden_texts.append(fragment.text)
+        self.assertEqual(hidden_texts, ["PAYLOAD"])
 
     def test_the_slowest_page_read_statically_is_read_in_seconds(self):
         # A <select> of options is the slowest shape found for lexbor: 1.7 s on this machine.
