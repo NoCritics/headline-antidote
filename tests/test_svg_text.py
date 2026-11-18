@@ -91,6 +91,7 @@ SVG_PAINT_CASES = (
     (f'{SVG}<foreignObject width="50%" height="50%">{FO_PARAGRAPH}</foreignObject></svg>', True),
     (f'{SVG}<foreignObject width=" 1e2 " height="100PX">{FO_PARAGRAPH}</foreignObject></svg>', True),
     (f'{SVG}<foreignObject width="300em" height="100">{FO_PARAGRAPH}</foreignObject></svg>', True),
+    (f'{SVG}<foreignObject width="300." height="100">{FO_PARAGRAPH}</foreignObject></svg>', False),
     (f'{SVG}<foreignObject style="width:300px;height:100px">{FO_PARAGRAPH}</foreignObject></svg>', True),
     (f'{SVG}<foreignObject style="width:300px;height:100px" width="0">{FO_PARAGRAPH}</foreignObject></svg>',
      True),
@@ -257,10 +258,15 @@ class NotDrawnTests(unittest.TestCase):
                 self.assertEqual(visible_text, "x")
                 self.assertIn("PAYLOAD", hidden_text(fragments))
 
+    def test_a_font_size_chrome_ignores_leaves_the_text_shown(self):
+        # Measured in Chrome 157: "1." is not a number, so the font-size stays 16px.
+        markup = f'{SVG}<text x="10" y="50" font-size="1.">PAYLOAD</text></svg>'
+        self.assertIn("PAYLOAD", extract_visible_text(page(markup))[0])
+
     def test_an_unreadable_font_size_in_an_unscaled_drawing_is_hidden(self):
         # Without a viewBox or a transform a user unit is a CSS pixel, so the attribute is read
         # as CSS font-size is: text this small is practically invisible (Chrome still paints it).
-        for size in ("1", "1px", "1.5"):
+        for size in ("1", "1px", "1.5", "1e0", "+1", "10e-1px", "1E0PX"):
             with self.subTest(size=size):
                 markup = f'{SVG}<text x="10" y="50" font-size="{size}">PAYLOAD</text></svg>'
                 visible_text, fragments = extract_visible_text(page(markup))
