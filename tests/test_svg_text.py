@@ -355,7 +355,7 @@ class SvgTextTests(unittest.TestCase):
     def test_svg_text_that_is_not_drawn_is_reported_hidden(self):
         # A scraper that reads the markup passes this text on, so it is reported.
         for markup in ("<svg>PAYLOAD<text>a</text></svg>", "<svg><g><text>a</text>PAYLOAD</g></svg>",
-                       "<svg><rect>PAYLOAD</rect></svg>", "<svg><text><g>PAYLOAD</g></text></svg>"):
+                       "<svg><rect>PAYLOAD</rect></svg>", "<svg><text y=20><g>PAYLOAD</g></text></svg>"):
             with self.subTest(markup=markup):
                 self.assertIn("PAYLOAD", hidden_text(extract_visible_text(page(markup))[1]))
 
@@ -382,13 +382,25 @@ class LongValueTests(unittest.TestCase):
 
         gradients = "".join(f'<linearGradient id="g{index}"><stop stop-color="black"/></linearGradient>'
                             for index in range(300))
-        labels = "".join(f'<text fill="url(#g{index})">a</text><text fill="#fff">b</text>' for index in range(300))
+        labels = "".join(f'<text y="20" fill="url(#g{index})">a</text><text y="20" fill="#fff">b</text>'
+                         for index in range(300))
         spans = "<tspan>s</tspan>" * 3000
         markup = (f"<svg><defs>{gradients}</defs>{'<rect/>' * 300}{labels}"
-                  + '<g fill="red">' * 450 + f"<text>{spans}</text>" + "</g>" * 450 + "</svg>")
+                  + '<g fill="red">' * 450 + f'<text y="20">{spans}</text>' + "</g>" * 450 + "</svg>")
         started = time.perf_counter()
         extract_visible_text(page(markup))
         self.assertLess(time.perf_counter() - started, 3)
+
+    def test_many_texts_deep_in_a_drawing_are_placed_quickly(self):
+        import time
+
+        for y in ("20", "0", "1200"):
+            with self.subTest(y=y):
+                texts = "".join(f'<text x="10" y="{y}">t{index}</text>' for index in range(3000))
+                markup = f'{SVG}{"<g font-size=10>" * 450}{texts}{"</g>" * 450}</svg>'
+                started = time.perf_counter()
+                extract_visible_text(page(markup))
+                self.assertLess(time.perf_counter() - started, 5)
 
     def test_long_sizes_are_read_quickly(self):
         import time
@@ -397,10 +409,10 @@ class LongValueTests(unittest.TestCase):
         rules = "".join(f".s{index}{{width:{zeros}1px}}" for index in range(50))
         classes = " ".join(f"s{index}" for index in range(50))
         digits = "0" * 30000
-        for markup in (f'<style>{rules}</style><svg class="{classes}"><text>a</text></svg>',
+        for markup in (f'<style>{rules}</style><svg class="{classes}"><text y="20">a</text></svg>',
                        f'<svg><foreignObject width="{digits}x" height="1{digits}!"><p>a</p></foreignObject></svg>',
-                       f'<svg><text font-size="{digits}x">a</text><text opacity="{digits}1">b</text></svg>',
-                       f'<svg><text font-size="{digits}!">a</text></svg>'):
+                       f'<svg><text y="20" font-size="{digits}x">a</text><text y="20" opacity="{digits}1">b</text></svg>',
+                       f'<svg><text y="20" font-size="{digits}!">a</text></svg>'):
             with self.subTest(markup=markup[:60]):
                 started = time.perf_counter()
                 extract_visible_text(page(markup))
@@ -426,6 +438,22 @@ class NotDrawnTests(unittest.TestCase):
             with self.subTest(markup=markup):
                 fragments = extract_visible_text(page(markup))[1]
                 self.assertEqual([fragment.severity for fragment in fragments], ["medium"])
+
+    def test_a_surer_reason_outranks_the_place_outside_the_drawing(self):
+        # Off the drawing only demotes text that would otherwise show; what CSS, paint or markup
+        # hides keeps its HIGH severity.
+        for text, high, medium in (('<text fill="none">PAYLOAD</text>', "PAYLOAD", ""),
+                                   ('<text style="display:none">PAYLOAD</text>', "PAYLOAD", ""),
+                                   ('<text opacity="0">PAYLOAD</text>', "PAYLOAD", ""),
+                                   ('<text>A<tspan fill="none">PAYLOAD</tspan></text>', "PAYLOAD", "A"),
+                                   ('<text>A<g>PAYLOAD</g></text>', "PAYLOAD", "A")):
+            with self.subTest(text=text):
+                fragments = extract_visible_text(page(f"{SVG}{text}</svg>"))[1]
+                by_severity = {"high": [], "medium": []}
+                for fragment in fragments:
+                    by_severity[fragment.severity].append(fragment.text)
+                self.assertEqual(" ".join(by_severity["high"]), high)
+                self.assertEqual(" ".join(by_severity["medium"]), medium)
 
     def test_text_outside_the_drawing_is_hidden_when_read_alone(self):
         markup = page(f'{SVG}<text x="10"><tspan>PAYLOAD</tspan></text></svg>')
