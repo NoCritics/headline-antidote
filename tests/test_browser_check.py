@@ -79,16 +79,16 @@ class RenderedPageComparisonTests(unittest.TestCase):
         self.assertEqual(verified.verdict, "review")
         self.assertFalse(verified.browser_verified)
 
-    def _off_drawing_headline(self, rendered_headline):
-        """The static reading of a headline whose SVG word has no y, then the comparison with a
-        browser showing rendered_headline."""
+    def _off_drawing_headline(self, rendered_headline, extra=""):
+        """The static reading of a headline whose SVG word has no y (and extra after it), then the
+        comparison with a browser showing rendered_headline."""
         import re
 
         from headline_guard.browser_check import compare_with_rendered_page
         from headline_guard.browser_visibility import RenderedPage
 
         article = GUARD.extract_article(page(
-            'Alphabet shares surge <svg width="300" height="40"><text x="10">fraud</text></svg>'
+            f'Alphabet shares surge <svg width="300" height="40"><text x="10">fraud</text></svg>{extra}'
             "after dodging antitrust breakup bullet"))
         body_text = re.sub(r"<[^>]+>", "\n", BODY)
         rendered = RenderedPage(rendered_headline, f"{rendered_headline}\n{body_text}", "", 5.0, True)
@@ -113,6 +113,22 @@ class RenderedPageComparisonTests(unittest.TestCase):
         self.assertNotIn("hidden_html_text", kinds)
         self.assertNotIn("scraper_text_differs", kinds)
         self.assertIn("fraud", verified.headline)
+
+    def test_settling_svg_text_leaves_other_hidden_words_flagged(self):
+        # The same word hidden for sure elsewhere in the heading keeps its HIGH flag.
+        shown = "Alphabet shares surge fraud after dodging antitrust breakup bullet"
+        _, verified = self._off_drawing_headline(shown, '<span style="display:none">fraud</span> ')
+        hidden = [flag.severity for flag in verified.flags if flag.kind == "hidden_html_text"]
+        self.assertEqual(hidden, ["high"])
+        self.assertEqual(verified.verdict, "quarantine")
+
+    def test_settled_svg_text_does_not_replace_a_reordered_headline(self):
+        # A browser's text is in source order, so it cannot stand for a headline shown reversed.
+        shown = "Alphabet shares surge fraud after dodging antitrust breakup bullet sffoyal"
+        article, verified = self._off_drawing_headline(
+            shown, '<span style="unicode-bidi:bidi-override;direction:rtl">layoffs</span> ')
+        self.assertIn("reordered_text", [flag.kind for flag in verified.flags])
+        self.assertEqual(verified.headline, article.headline)
 
     def test_headline_svg_paint_is_not_left_to_the_browser(self):
         # The browser check does not read SVG fill or the shapes under the text, so it cannot
