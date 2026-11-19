@@ -157,17 +157,20 @@ def _compare_headline(guard, article, rendered, flags):
     hidden_words = _missing_words(static_words, rendered_words)
     added_words = _missing_words(rendered_words, static_words)
     # Words the static reading hid only for a browser to settle: the render decides them.
-    settled_words = _comparison_words(" ".join(article.heading_settled_by_browser))
+    settled_ids = set()
+    settled_texts = []
+    for settled_flag in article.heading_settled_by_browser:
+        settled_ids.add(id(settled_flag))
+        settled_texts.append(settled_flag.original)
+    settled_words = _comparison_words(" ".join(settled_texts))
     still_hidden = _missing_words(settled_words, added_words)
     shown_settled = len(still_hidden) < len(settled_words)
     added_words = _missing_words(added_words, settled_words)
-    if settled_words:
-        kept_flags = []
-        for flag in flags:
-            if not (flag.kind == "hidden_html_text" and flag.field == "headline"
-                    and flag.original in article.heading_settled_by_browser):
-                kept_flags.append(flag)
-        flags = kept_flags
+    kept_flags = []
+    for flag in flags:
+        if id(flag) not in settled_ids:  # by identity: a flag with the same text may be a sure one
+            kept_flags.append(flag)
+    flags = kept_flags
     if still_hidden:
         flags.append(Flag(
             "hidden_html_text", HIGH, None, None, " ".join(still_hidden),
@@ -202,7 +205,7 @@ def _compare_headline(guard, article, rendered, flags):
             headline = guard.analyze(article.heading_text).clean_text
             headline_source = headline_source.replace("; words no title has were left out", "")
             headline_source += "; every word confirmed visible in a browser"
-    if shown_settled and not hidden_words:
+    if shown_settled and not hidden_words and not _has_reordered_headline(flags):
         headline = guard.analyze(rendered.headline_text).clean_text
         headline_source += "; as shown in a browser"
     if added_words:

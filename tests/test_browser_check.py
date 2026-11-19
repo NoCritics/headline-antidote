@@ -124,7 +124,7 @@ class RenderedPageComparisonTests(unittest.TestCase):
 
     def test_settled_svg_text_does_not_replace_a_reordered_headline(self):
         # A browser's text is in source order, so it cannot stand for a headline shown reversed.
-        shown = "Alphabet shares surge fraud after dodging antitrust breakup bullet sffoyal"
+        shown = "Alphabet shares surge fraud layoffs after dodging antitrust breakup bullet"
         article, verified = self._off_drawing_headline(
             shown, '<span style="unicode-bidi:bidi-override;direction:rtl">layoffs</span> ')
         self.assertIn("reordered_text", [flag.kind for flag in verified.flags])

@@ -120,7 +120,8 @@ class ArticleResult:
     headline_xpath: str = None  # the headline element's path in the page, for the browser check
     heading_text: str = ""      # the heading's visible text as this static reading sees it
     heading_full_text: str = ""  # all of the heading element's text, hidden parts included
-    # Heading text this static reading hid that a browser's rendering settles (see browser_check).
+    # The flags (in flags) of heading text this static reading hid that a browser's rendering
+    # settles (see browser_check).
     heading_settled_by_browser: list = field(default_factory=list)
     browser_verified: bool = False
     browser_milliseconds: float = None
@@ -493,13 +494,14 @@ class _ArticleExtraction:
                     "text inside an HTML comment in the headline", "headline",
                 ))
             else:
-                self.flags.append(Flag(
+                flag = Flag(
                     "hidden_html_text", fragment.severity, None, None, fragment.text,
                     f"hidden text in the headline ({fragment.reason}); a standard scraper would pass it on",
                     "headline",
-                ))
+                )
+                self.flags.append(flag)
                 if fragment.settled_by_rendering:
-                    self.heading_settled_by_browser.append(fragment.text)
+                    self.heading_settled_by_browser.append(flag)
                     self._add_browser_reason("headline SVG text placed outside its drawing")
 
     def _check_metadata(self, metadata_titles, headline_text):
