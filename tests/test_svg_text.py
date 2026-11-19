@@ -8,7 +8,10 @@ screenshots), the cases are in NotDrawnTests instead.
 innerText also counts text Chrome does not paint because of the drawing's sizes and paint: a
 <foreignObject> without a size, an <svg> of zero size. SVG_PAINT_CASES holds those, each checked
 against Chrome with screenshots (tests/test_browser_check.SvgPaintChromeTests). innerText also
-counts text placed outside the canvas (a <text> with no y), which is not read yet."""
+counts text placed outside the drawing: a <text> with no y (its baseline at the top edge, so its
+letters sit above it), or one thousands of pixels off. The reader hides the plain cases and keeps
+text whenever something else may move it (a transform, a baseline, a <tspan> position, a <use>),
+which the browser check settles (tests/test_browser_check.SVG_POSITION_CASES)."""
 
 import unittest
 
@@ -289,6 +292,49 @@ SVG_PAINT_CASES = (
      f'<text {AT} fill="url(#p)">PAYLOAD</text></svg>', False),
     (f'{SVG}<defs><pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse">'
      f'<rect width="10" height="10"/></pattern></defs><text {AT} fill="url(#p)">PAYLOAD</text></svg>', True),
+    # Text outside the drawing: with no y (or y <= 0) its letters sit above the top edge; far right
+    # of it or far below it. (A <svg> with no size is 300 x 150.)
+    (f'{SVG}<text x="10">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text>PAYLOAD</text></svg>', False),
+    (f'{SVG}<text x="10" y="0">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text x="10" y="-5px">PAYLOAD</text></svg>', False),
+    (f'{SVG}<g fill="black"><text x="10">PAYLOAD</text></g></svg>', False),
+    (f'{SVG}<text x="1400" y="20">PAYLOAD</text></svg>', False),
+    (f'{SVG}<text x="10" y="1200">PAYLOAD</text></svg>', False),
+    ('<svg><text x="10" y="1200">PAYLOAD</text></svg>', False),
+    ('<svg width="300" height="100" style="overflow-y:visible"><text x="10" y="1200">PAYLOAD</text></svg>', False),
+    # ... but drawn where something else places it.
+    (f'{SVG}<text x="10" y="20">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" dy="20">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10"><tspan dy="20">PAYLOAD</tspan></text></svg>', True),
+    (f'{SVG}<text x="10"><tspan y="20">PAYLOAD</tspan></text></svg>', True),
+    (f'{SVG}<text x="10"><tspan dy="20">A</tspan><tspan>PAYLOAD</tspan></text></svg>', True),
+    (f'{SVG}<defs><path id="p" d="M10 50 H290"/></defs><text><textPath href="#p">PAYLOAD</textPath></text></svg>',
+     True),
+    (f'{SVG}<g transform="translate(0,20)"><text x="10">PAYLOAD</text></g></svg>', True),
+    (f'{SVG}<text x="10" style="transform:translateY(20px)">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" style="translate:0 20px">PAYLOAD</text></svg>', True),
+    (f'<style>g{{transform:translateY(20px)}}</style>{SVG}<g><text x="10">PAYLOAD</text></g></svg>', True),
+    ('<svg width="300" height="100" viewBox="0 -50 300 100"><text x="10">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" dominant-baseline="hanging">PAYLOAD</text></svg>', True),
+    (f'{SVG}<g dominant-baseline="central"><text x="10">PAYLOAD</text></g></svg>', True),
+    (f'{SVG}<text x="10" style="dominant-baseline:text-before-edge">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" alignment-baseline="hanging">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" baseline-shift="-20">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" writing-mode="vertical-rl">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" rotate="90">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10">PAYLOAD<set attributeName="y" to="20"/></text></svg>', True),
+    (f'{SVG}<text x="10" y="0 20 20 20 20 20 20">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" y="2em">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="10" id="t">PAYLOAD</text><use href="#t" y="20"/></svg>', True),
+    # (Overflowing text makes the page no taller: the spacer lets a screenshot reach it.)
+    ('<svg width="300" height="100" overflow="visible"><text x="10" y="1200">PAYLOAD</text></svg>'
+     '<div style="height:1400px"></div>', True),
+    ('<style>svg{overflow:visible}</style><svg width="300" height="100"><text x="10" y="1200">PAYLOAD</text></svg>'
+     '<div style="height:1400px"></div>', True),
+    (f'{SVG}<text x="10" y="1200" font-size="2000">PAYLOAD</text></svg>', True),
+    (f'{SVG}<text x="1400" y="20" text-anchor="end">{"PAYLOAD" * 40}</text></svg>', True),
+    ('<svg width="300" height="100" style="height:1300px"><text x="10" y="1200">PAYLOAD</text></svg>', True),
 )
 
 
@@ -372,6 +418,13 @@ class NotDrawnTests(unittest.TestCase):
                 else:
                     self.assertNotIn("PAYLOAD", visible_text)
                     self.assertIn("PAYLOAD", hidden_text(fragments))
+
+    def test_text_outside_the_drawing_goes_to_review(self):
+        # Text with no y is a common authoring slip as well as a hiding place: hidden, at MEDIUM.
+        for markup in (f'{SVG}<text x="10">PAYLOAD</text></svg>', f'{SVG}<text x="1400" y="20">PAYLOAD</text></svg>'):
+            with self.subTest(markup=markup):
+                fragments = extract_visible_text(page(markup))[1]
+                self.assertEqual([fragment.severity for fragment in fragments], ["medium"])
 
     def test_definitions_are_not_drawn(self):
         # Chrome's innerText includes this text, but it is not painted (a screenshot with and

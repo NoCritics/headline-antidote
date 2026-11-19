@@ -230,9 +230,9 @@ class SvgPaintChromeTests(unittest.TestCase):
             for markup, painted in SVG_PAINT_CASES:
                 with self.subTest(markup=markup):
                     tab.set_content(page(markup))
-                    with_payload = tab.screenshot()
+                    with_payload = tab.screenshot(full_page=True)
                     tab.set_content(page(markup.replace("PAYLOAD", "")))
-                    self.assertEqual(with_payload != tab.screenshot(), painted)
+                    self.assertEqual(with_payload != tab.screenshot(full_page=True), painted)
             browser.close()
 
 
@@ -403,6 +403,24 @@ class BrowserCheckTests(unittest.TestCase):
         ))
         self.assertEqual(verified.verdict, "quarantine", verified.flags)
         self.assertEqual(verified.headline, HEADLINE)
+
+    def test_svg_text_outside_the_drawing_in_the_headline(self):
+        # The static reading keeps it (x=400 is near the drawing); the browser sees it clipped away.
+        article, verified = self.check(page(
+            'Alphabet shares surge <svg width="300" height="40"><text x="400" y="20">fraud</text></svg>'
+            "after dodging antitrust breakup bullet"))
+        self.assertTrue(article.needs_browser_check)
+        self.assertEqual(verified.verdict, "quarantine")
+        self.assertEqual(verified.headline, HEADLINE)
+
+    def test_svg_text_never_reaches_the_body(self):
+        # The body extractor leaves SVG text out, so no browser check is needed for it.
+        article = GUARD.extract_article(page(HEADLINE, article_extra=(
+            f'<svg width="300" height="100"><text x="400" y="20">{PAYLOAD}</text></svg>'
+            f'<p>Analysts expect <svg width="300" height="40"><text x="10" y="20">{PAYLOAD}</text></svg> growth.</p>')))
+        self.assertFalse(article.needs_browser_check)
+        self.assertNotIn("layoffs", article.body)
+        self.assertIn("Analysts expect growth.", article.body)
 
     def test_one_word_hidden_by_javascript(self):
         article, verified = self.check(page(
