@@ -457,6 +457,15 @@ class BrowserCheckTests(unittest.TestCase):
         self.assertEqual(verified.verdict, "quarantine")
         self.assertEqual(verified.headline, HEADLINE)
 
+    def test_svg_text_with_no_y_in_the_headline(self):
+        # The static reading hides it at MEDIUM and leaves it to the browser, which confirms it.
+        article, verified = self.check(page(
+            'Alphabet shares surge <svg width="300" height="40"><text x="10">fraud</text></svg>'
+            "after dodging antitrust breakup bullet"))
+        self.assertTrue(article.needs_browser_check)
+        self.assertEqual(verified.verdict, "quarantine")
+        self.assertEqual(verified.headline, HEADLINE)
+
     def test_svg_text_never_reaches_the_body(self):
         # The body extractor leaves SVG text out, so no browser check is needed for it.
         article = GUARD.extract_article(page(HEADLINE, article_extra=(

@@ -156,6 +156,25 @@ def _compare_headline(guard, article, rendered, flags):
     rendered_words = _comparison_words(rendered.headline_text)
     hidden_words = _missing_words(static_words, rendered_words)
     added_words = _missing_words(rendered_words, static_words)
+    # Words the static reading hid only for a browser to settle: the render decides them.
+    settled_words = _comparison_words(" ".join(article.heading_settled_by_browser))
+    still_hidden = _missing_words(settled_words, added_words)
+    shown_settled = len(still_hidden) < len(settled_words)
+    added_words = _missing_words(added_words, settled_words)
+    if settled_words:
+        kept_flags = []
+        for flag in flags:
+            if not (flag.kind == "hidden_html_text" and flag.field == "headline"
+                    and flag.original in article.heading_settled_by_browser):
+                kept_flags.append(flag)
+        flags = kept_flags
+    if still_hidden:
+        flags.append(Flag(
+            "hidden_html_text", HIGH, None, None, " ".join(still_hidden),
+            "in a browser too these headline words are not shown (SVG text placed outside its drawing); "
+            "HTML-based scrapers would pass them on",
+            "headline",
+        ))
     if hidden_words:
         flags.append(Flag(
             "hidden_html_text", HIGH, None, None, " ".join(hidden_words),
@@ -183,6 +202,9 @@ def _compare_headline(guard, article, rendered, flags):
             headline = guard.analyze(article.heading_text).clean_text
             headline_source = headline_source.replace("; words no title has were left out", "")
             headline_source += "; every word confirmed visible in a browser"
+    if shown_settled and not hidden_words:
+        headline = guard.analyze(rendered.headline_text).clean_text
+        headline_source += "; as shown in a browser"
     if added_words:
         flags.append(Flag(
             "scraper_text_differs", MEDIUM, None, None, rendered.headline_text,

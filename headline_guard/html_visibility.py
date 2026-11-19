@@ -89,6 +89,8 @@ class HiddenFragment:
     element: object = None  # the lxml element (or comment) that is hidden
     # For loose text rather than an element: (element, "text") or (element, "tail").
     text_of: tuple = None
+    # Whether a browser's rendering decides it (SVG text placed outside its drawing).
+    settled_by_rendering: bool = False
 
 
 def _parse_declarations(style_text):
@@ -840,10 +842,11 @@ def _hide_loose_content(element, keep_child, reason, hidden_fragments):
             ))
 
 
-def _record_undrawn_svg_text(text, owner, hidden_fragments, hiding=("SVG text outside <text>", HIGH)):
+def _record_undrawn_svg_text(text, owner, hidden_fragments, hiding=("SVG text outside <text>", HIGH),
+                             settled_by_rendering=False):
     if text and text.strip():
         hidden_fragments.append(HiddenFragment(
-            _collapse_whitespace(text), hiding[0], "hidden_element", hiding[1], None, owner,
+            _collapse_whitespace(text), hiding[0], "hidden_element", hiding[1], None, owner, settled_by_rendering,
         ))
 
 
@@ -1357,8 +1360,12 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
     # SVG text outside <text> is not drawn, and each <text> is set apart from what is around it.
     text_is_drawn = children_place is None or children_place.in_text
     text_hiding = None
+    settled_by_rendering = False
     if children_place is not None and children_place.in_text:
-        text_hiding = _svg_paint_hiding(element, rules, inherited_background) or children_place.off_drawing
+        text_hiding = _svg_paint_hiding(element, rules, inherited_background)
+        if text_hiding is None and children_place.off_drawing is not None:
+            text_hiding = children_place.off_drawing
+            settled_by_rendering = True
     starts_svg_text = children_place is not None and children_place.in_text and not svg_place.in_text
     is_block = tag in BLOCK_TAGS or starts_svg_text
     if is_block:
@@ -1386,7 +1393,7 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
     if not text_is_drawn:
         _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments)
     elif text_hiding is not None:
-        _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments, text_hiding)
+        _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments, text_hiding, settled_by_rendering)
     elif element.text:
         visible_parts.append(element.text)
     for child in element:
@@ -1399,7 +1406,8 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
         if not text_is_drawn:
             _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments)
         elif text_hiding is not None:
-            _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments, text_hiding)
+            _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments, text_hiding,
+                                     settled_by_rendering)
         elif child.tail:
             visible_parts.append(child.tail)
     if is_block:

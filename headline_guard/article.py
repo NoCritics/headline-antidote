@@ -120,6 +120,8 @@ class ArticleResult:
     headline_xpath: str = None  # the headline element's path in the page, for the browser check
     heading_text: str = ""      # the heading's visible text as this static reading sees it
     heading_full_text: str = ""  # all of the heading element's text, hidden parts included
+    # Heading text this static reading hid that a browser's rendering settles (see browser_check).
+    heading_settled_by_browser: list = field(default_factory=list)
     browser_verified: bool = False
     browser_milliseconds: float = None
     # Hidden text that is most of the article and runs to its end: usually a "Read more" collapse
@@ -389,6 +391,7 @@ class _ArticleExtraction:
         self.flags = []
         self.tickers = []
         self.browser_check_reasons = []
+        self.heading_settled_by_browser = []
         self.hidden_ending = ""
         self._page_wrappers = set()
 
@@ -431,7 +434,7 @@ class _ArticleExtraction:
             model_headline, headline_source, body_result.clean_text,
             self.flags, self.tickers, metadata_titles, self.browser_check_reasons, headline_xpath,
             headline_text if headline_element is not None else "", heading_full_text,
-            hidden_ending=self.hidden_ending,
+            hidden_ending=self.hidden_ending, heading_settled_by_browser=self.heading_settled_by_browser,
         )
 
     # ---- headline ---------------------------------------------------------
@@ -495,6 +498,9 @@ class _ArticleExtraction:
                     f"hidden text in the headline ({fragment.reason}); a standard scraper would pass it on",
                     "headline",
                 ))
+                if fragment.settled_by_rendering:
+                    self.heading_settled_by_browser.append(fragment.text)
+                    self._add_browser_reason("headline SVG text placed outside its drawing")
 
     def _check_metadata(self, metadata_titles, headline_text):
         """Unicode checks on metadata titles, which scrapers such as newspaper4k use as the headline."""
