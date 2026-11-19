@@ -236,6 +236,65 @@ class SvgPaintChromeTests(unittest.TestCase):
             browser.close()
 
 
+# Text an <svg> drawing clips, as the browser check reads it: "kept" when the text lies mostly inside
+# the drawing, "hidden" when mostly outside it (Chrome paints none of it, or a sliver). Measured with
+# capital-only text, whose glyphs sit above the baseline.
+SVG_AT = '<svg width="300" height="100">'
+SVG_POSITION_CASES = (
+    (f'{SVG_AT}<text x="10" y="20">PAYLOAD</text></svg>', "kept"),
+    (f'{SVG_AT}<text x="10" y="15">PAYLOAD</text></svg>', "kept"),
+    (f'{SVG_AT}<text x="10" dy="20">PAYLOAD</text></svg>', "kept"),
+    (f'{SVG_AT}<g transform="translate(0,20)"><text x="10">PAYLOAD</text></g></svg>', "kept"),
+    ('<svg width="300" height="100" viewBox="0 -50 300 100"><text x="10" y="-5">PAYLOAD</text></svg>', "kept"),
+    (f'{SVG_AT}<text x="10">PAYLOAD</text></svg>', "hidden"),
+    (f'{SVG_AT}<text>PAYLOAD</text></svg>', "hidden"),
+    (f'{SVG_AT}<text x="10" y="0">PAYLOAD</text></svg>', "hidden"),
+    (f'{SVG_AT}<text x="10" y="5">PAYLOAD</text></svg>', "hidden"),
+    (f'{SVG_AT}<text x="400" y="20">PAYLOAD</text></svg>', "hidden"),
+    (f'{SVG_AT}<text x="10" y="150">PAYLOAD</text></svg>', "hidden"),
+    (f'{SVG_AT}<text x="290" y="20">PAYLOADPAYLOADPAYLOAD</text></svg>', "hidden"),
+    (f'{SVG_AT}<text x="10" y="200%">PAYLOAD</text></svg>', "hidden"),
+    (f'{SVG_AT}<svg width="50" height="50"><text x="10" y="200">PAYLOAD</text></svg></svg>', "hidden"),
+    (f'{SVG_AT}<text x="10" y="5000">PAYLOAD</text></svg>', "hidden"),
+)
+
+
+@unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
+class SvgClippingChromeTests(unittest.TestCase):
+    """An <svg> drawing is not a preview window: text it clips is hidden, not kept as clipped."""
+
+    def _read_bodies(self, markups):
+        from playwright.sync_api import sync_playwright
+
+        from headline_guard.browser_visibility import BODY_TEXT_SCRIPT, _limits
+
+        with sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch(channel="chrome")
+            except Exception as error:  # Chrome missing or not launchable here
+                self.skipTest(f"Chrome not available: {error}")
+            tab = browser.new_page()
+            bodies = []
+            for markup in markups:
+                tab.set_content(f'<html><body style="margin:0"><p>Above.</p>{markup}<p>Below.</p></body></html>')
+                bodies.append(tab.evaluate(BODY_TEXT_SCRIPT, _limits(True, with_clipped=True)))
+            browser.close()
+        return bodies
+
+    def test_text_an_svg_clips_is_hidden(self):
+        markups = [markup for markup, _ in SVG_POSITION_CASES]
+        for (markup, expected), body in zip(SVG_POSITION_CASES, self._read_bodies(markups)):
+            with self.subTest(markup=markup):
+                self.assertNotIn("PAYLOAD", body["clipped"])
+                self.assertEqual("PAYLOAD" in body["visible"], expected == "kept")
+
+    def test_a_large_html_box_is_still_a_preview_window(self):
+        long_text = "PAYLOAD " + "more words of the article " * 80
+        body, = self._read_bodies([f'<div style="width:300px;height:100px;overflow:hidden"><p>Shown.</p>'
+                                   f'<div style="height:400px"></div><p>{long_text}</p></div>'])
+        self.assertIn("PAYLOAD", body["clipped"])
+
+
 def doctype_cases():
     """Page starts covering every doctype rule of document_mode, and the edge cases around them."""
     from headline_guard import document_mode
