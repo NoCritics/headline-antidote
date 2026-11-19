@@ -18,7 +18,7 @@ runs JavaScript. For those, render the page in a browser (browser_visibility).
 import re
 import sys
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from lxml import etree
 
@@ -501,6 +501,7 @@ class _SvgPlace:
     allows_text_path: bool = False
     in_switch: bool = False        # the children of a <switch>, which draws only switch_choice
     switch_choice: object = None
+    off_drawing: tuple = None      # (reason, severity) when the <text> lies outside its drawing
 
 
 _SVG_ROOT_PLACE = _SvgPlace(in_text=False)
@@ -551,11 +552,14 @@ def _svg_place(parent_place, element, tag):
         return None, "SVG systemLanguage, drawn only for some browser languages"
     if parent_place.in_text:
         if tag == "tspan":
-            return _SvgPlace(in_text=True, inside_link=parent_place.inside_link), None
+            return _SvgPlace(in_text=True, inside_link=parent_place.inside_link,
+                             off_drawing=parent_place.off_drawing), None
         if tag == "textpath" and parent_place.allows_text_path:
-            return _SvgPlace(in_text=True, inside_link=parent_place.inside_link), None
+            return _SvgPlace(in_text=True, inside_link=parent_place.inside_link,
+                             off_drawing=parent_place.off_drawing), None
         if tag == "a" and not parent_place.inside_link:
-            return _SvgPlace(in_text=True, inside_link=True, allows_text_path=parent_place.allows_text_path), None
+            return _SvgPlace(in_text=True, inside_link=True, allows_text_path=parent_place.allows_text_path,
+                             off_drawing=parent_place.off_drawing), None
         return None, "SVG element that draws no text inside <text>"
     if tag == "foreignobject":
         return None, None
@@ -673,10 +677,6 @@ def _element_hiding(element, tag, rules, inherited_background, svg_place):
         color_hiding = _foreign_object_color_hiding(element, rules, inherited_background)
         if color_hiding is not None:
             return color_hiding, inherited_background, declarations, None
-    if tag == "text" and children_place is not None and not svg_place.in_text:
-        position_hiding = _svg_text_position_hiding(element, rules)
-        if position_hiding is not None:
-            return position_hiding, inherited_background, declarations, None
     own_background = declared_background_color(declarations)
     if own_background is not None:
         inherited_background = own_background
@@ -694,6 +694,9 @@ def _element_hiding(element, tag, rules, inherited_background, svg_place):
             hiding = (pseudo_reason, HIGH)
     if hiding is None:
         hiding = _hiding_under_undecided_rules(element, tag, rules)
+    if hiding is None and tag == "text" and children_place is not None and children_place.in_text:
+        # Placed outside the drawing: its text is reported where nothing surer hides it (see _visit).
+        children_place = replace(children_place, off_drawing=_svg_text_position_hiding(element, rules))
     return hiding, inherited_background, declarations, children_place
 
 
@@ -856,8 +859,9 @@ MAXIMUM_GRADIENT_LINKS = 16
 
 
 class _SvgPaintCache:
-    """Per rule world: each element's inherited paint and whether it is an SVG element; per page:
-    elements by id and whether each drawing holds shapes."""
+    """Per rule world: each element's inherited paint, whether it is an SVG element, its font size
+    estimate, where it sits in a drawing and whether its text is anchored at its start; per page:
+    elements by id, whether each drawing holds shapes and the ids <use> and animations point at."""
 
     def __init__(self):
         self.paint = {}
@@ -865,6 +869,9 @@ class _SvgPaintCache:
         self.ids = None
         self.has_shapes = {}
         self.referenced_ids = None
+        self.font_pixels = {}
+        self.drawing = {}
+        self.anchored = {}
 
 
 def _paint_cache(rules):
@@ -1147,36 +1154,81 @@ def _is_placed_elsewhere(node, worlds):
     return False
 
 
+def _folded_down_the_tree(table, element, own, start):
+    """own(node, parent's value) for element, computed from the root down and remembered in table
+    for every element on the way, so each is computed once; start stands for the root's parent."""
+    chain = []
+    current = element
+    while current is not None and isinstance(current.tag, str) and current not in table:
+        chain.append(current)
+        current = current.getparent()
+    value = table[current] if current is not None and current in table else start
+    for member in reversed(chain):
+        value = own(member, value)
+        table[member] = value
+    return value
+
+
+def _font_step(world, node, parent_sizes):
+    """(font size, root font size) estimates at node from its parent's, or None when unknown."""
+    if parent_sizes is None:
+        return None
+    size, root_size = parent_sizes
+    value = _full_declarations(world, node).get("font-size")
+    if value is None and node.get("font-size") is not None and _is_svg_element(node, node.tag.lower()):
+        value = _svg_attribute_value(node, "font-size")
+    match = None if value is None else _SVG_LENGTH.fullmatch(value)
+    if value is None or value in _INHERITING_VALUES or value == "smaller":
+        pass
+    elif match is not None and match.group(2) in (None, "px"):
+        size = float(match.group(1))
+    elif match is not None and match.group(2) in ("em", "%"):
+        size *= float(match.group(1)) / (100 if match.group(2) == "%" else 1)
+    elif match is not None and match.group(2) == "rem":
+        size = root_size * float(match.group(1))
+    elif value == "larger":
+        size *= _LARGER_FONT_FACTOR
+    elif value in _FONT_SIZE_KEYWORDS:
+        size = _LARGEST_FONT_KEYWORD_PIXELS
+    else:
+        return None
+    return size, size if node.getparent() is None else root_size
+
+
 def _largest_font_pixels(element, worlds):
     """An upper estimate of element's font size in pixels, or None when it cannot be estimated."""
-    chain = [element] + list(element.iterancestors())
     largest = 0.0
     for world in worlds:
-        size = 16.0
-        root_size = 16.0
-        for node in reversed(chain):
-            value = _full_declarations(world, node).get("font-size")
-            if value is None and node.get("font-size") is not None and _is_svg_element(node, node.tag.lower()):
-                value = _svg_attribute_value(node, "font-size")
-            if value is None or value in _INHERITING_VALUES:
-                continue
-            match = _SVG_LENGTH.fullmatch(value)
-            if match is not None and match.group(2) in (None, "px"):
-                size = float(match.group(1))
-            elif match is not None and match.group(2) in ("em", "%"):
-                size *= float(match.group(1)) / (100 if match.group(2) == "%" else 1)
-            elif match is not None and match.group(2) == "rem":
-                size = root_size * float(match.group(1))
-            elif value == "larger":
-                size *= _LARGER_FONT_FACTOR
-            elif value in _FONT_SIZE_KEYWORDS:
-                size = _LARGEST_FONT_KEYWORD_PIXELS
-            elif value != "smaller":
-                return None
-            if node.tag.lower() == "html":
-                root_size = size
-        largest = max(largest, size)
+        sizes = _folded_down_the_tree(_paint_cache(world).font_pixels, element,
+                                      lambda node, parent_sizes: _font_step(world, node, parent_sizes),
+                                      (16.0, 16.0))
+        if sizes is None:
+            return None
+        largest = max(largest, sizes[0])
     return largest
+
+
+def _drawing_step(worlds, referenced, node, parent_drawing):
+    """(nearest <svg> or None, whether anything from it down to node may move text, how many <svg>
+    enclose node) from the parent's."""
+    svg, placed, svg_count = parent_drawing
+    tag = node.tag.lower()
+    if svg is None and tag != "svg":
+        return parent_drawing  # outside SVG: nothing here places SVG text
+    own_placing = (tag == "foreignobject" or _is_placed_elsewhere(node, worlds)
+                   or node.get("id") in referenced)
+    if tag == "svg":
+        return node, own_placing, svg_count + 1
+    return svg, placed or own_placing, svg_count
+
+
+def _is_anchored_at_start(rules, element):
+    """Whether no text-anchor or direction attribute on element or an ancestor may anchor its text elsewhere."""
+    return _folded_down_the_tree(
+        _paint_cache(rules).anchored, element,
+        lambda node, anchored: anchored and node.get("text-anchor") is None and node.get("direction") is None,
+        True,
+    )
 
 
 def _known_svg_size(svg, worlds):
@@ -1221,15 +1273,11 @@ def _svg_text_position_hiding(element, rules):
         return None
     worlds = _rule_worlds_of(rules)
     referenced = _referenced_ids(rules, element)
-    svg = None
-    for node in [element] + list(element.iterancestors()):
-        tag = node.tag.lower() if isinstance(node.tag, str) else ""
-        if tag == "foreignobject" or _is_placed_elsewhere(node, worlds) or node.get("id") in referenced:
-            return None
-        if tag == "svg":
-            svg = node
-            break
-    if svg is None or svg.get("viewbox") is not None or any(True for _ in svg.iterancestors("svg")):
+    svg, placed, svg_count = _folded_down_the_tree(
+        _paint_cache(rules).drawing, element,
+        lambda node, parent_drawing: _drawing_step(worlds, referenced, node, parent_drawing), (None, False, 0),
+    )
+    if svg is None or placed or svg_count != 1 or svg.get("viewbox") is not None:
         return None
     for name in ("dx", "dy", "rotate"):
         if element.get(name) is not None:
@@ -1254,19 +1302,18 @@ def _svg_text_position_hiding(element, rules):
                 "above the top edge)", MEDIUM)
     if "far" in css_mentions:
         return None
+    sizes = _known_svg_size(svg, worlds)
+    far_below = sizes["height"] is not None and y >= sizes["height"] + FAR_OUTSIDE_DRAWING_PIXELS
+    far_right = (sizes["width"] is not None and x >= sizes["width"] + FAR_OUTSIDE_DRAWING_PIXELS
+                 and _is_anchored_at_start(rules, element))
+    if not far_below and not far_right:
+        return None
     font_pixels = _largest_font_pixels(element, worlds)
     if font_pixels is None or font_pixels >= FAR_OUTSIDE_DRAWING_PIXELS / 2:
         return None
-    sizes = _known_svg_size(svg, worlds)
-    if sizes["height"] is not None and y >= sizes["height"] + FAR_OUTSIDE_DRAWING_PIXELS:
+    if far_below:
         return (f"SVG text placed far below its drawing (y={element.get('y')})", MEDIUM)
-    anchored_at_start = True
-    for node in [element] + list(element.iterancestors()):
-        if node.get("text-anchor") is not None or node.get("direction") is not None:
-            anchored_at_start = False
-    if anchored_at_start and sizes["width"] is not None and x >= sizes["width"] + FAR_OUTSIDE_DRAWING_PIXELS:
-        return (f"SVG text placed far right of its drawing (x={element.get('x')})", MEDIUM)
-    return None
+    return (f"SVG text placed far right of its drawing (x={element.get('x')})", MEDIUM)
 
 
 def _foreign_object_color_hiding(element, rules, inherited_background):
@@ -1309,9 +1356,9 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
 
     # SVG text outside <text> is not drawn, and each <text> is set apart from what is around it.
     text_is_drawn = children_place is None or children_place.in_text
-    paint_hiding = None
+    text_hiding = None
     if children_place is not None and children_place.in_text:
-        paint_hiding = _svg_paint_hiding(element, rules, inherited_background)
+        text_hiding = _svg_paint_hiding(element, rules, inherited_background) or children_place.off_drawing
     starts_svg_text = children_place is not None and children_place.in_text and not svg_place.in_text
     is_block = tag in BLOCK_TAGS or starts_svg_text
     if is_block:
@@ -1338,8 +1385,8 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
 
     if not text_is_drawn:
         _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments)
-    elif paint_hiding is not None:
-        _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments, paint_hiding)
+    elif text_hiding is not None:
+        _record_undrawn_svg_text(element.text, (element, "text"), hidden_fragments, text_hiding)
     elif element.text:
         visible_parts.append(element.text)
     for child in element:
@@ -1351,8 +1398,8 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
             _visit(child, inherited_background, rules, visible_parts, hidden_fragments, children_place)
         if not text_is_drawn:
             _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments)
-        elif paint_hiding is not None:
-            _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments, paint_hiding)
+        elif text_hiding is not None:
+            _record_undrawn_svg_text(child.tail, (child, "tail"), hidden_fragments, text_hiding)
         elif child.tail:
             visible_parts.append(child.tail)
     if is_block:
