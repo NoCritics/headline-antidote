@@ -79,6 +79,50 @@ class RenderedPageComparisonTests(unittest.TestCase):
         self.assertEqual(verified.verdict, "review")
         self.assertFalse(verified.browser_verified)
 
+    def _off_drawing_headline(self, rendered_headline):
+        """The static reading of a headline whose SVG word has no y, then the comparison with a
+        browser showing rendered_headline."""
+        import re
+
+        from headline_guard.browser_check import compare_with_rendered_page
+        from headline_guard.browser_visibility import RenderedPage
+
+        article = GUARD.extract_article(page(
+            'Alphabet shares surge <svg width="300" height="40"><text x="10">fraud</text></svg>'
+            "after dodging antitrust breakup bullet"))
+        body_text = re.sub(r"<[^>]+>", "\n", BODY)
+        rendered = RenderedPage(rendered_headline, f"{rendered_headline}\n{body_text}", "", 5.0, True)
+        return article, compare_with_rendered_page(GUARD, article, rendered)
+
+    def test_headline_svg_text_off_its_drawing_goes_to_the_browser(self):
+        # The static reading hides it at MEDIUM (a missing y is often a slip); a browser settles it.
+        article, _ = self._off_drawing_headline(HEADLINE)
+        self.assertTrue(article.needs_browser_check)
+        self.assertEqual(article.verdict, "review")
+
+    def test_headline_svg_text_the_browser_also_hides_is_quarantined(self):
+        _, verified = self._off_drawing_headline(HEADLINE)
+        self.assertEqual(verified.verdict, "quarantine")
+        hidden = [(flag.severity, flag.original) for flag in verified.flags if flag.kind == "hidden_html_text"]
+        self.assertEqual(hidden, [("high", "fraud")])
+
+    def test_headline_svg_text_the_browser_shows_is_kept(self):
+        shown = "Alphabet shares surge fraud after dodging antitrust breakup bullet"
+        _, verified = self._off_drawing_headline(shown)
+        kinds = [flag.kind for flag in verified.flags]
+        self.assertNotIn("hidden_html_text", kinds)
+        self.assertNotIn("scraper_text_differs", kinds)
+        self.assertIn("fraud", verified.headline)
+
+    def test_headline_svg_paint_is_not_left_to_the_browser(self):
+        # The browser check does not read SVG fill or the shapes under the text, so it cannot
+        # settle a light fill over shapes: the static MEDIUM finding stands without a check.
+        article = GUARD.extract_article(page(
+            'Alphabet shares surge <svg width="300" height="40"><rect width="300" height="40" fill="black"/>'
+            '<text x="10" y="30" fill="white">fraud</text></svg>after dodging antitrust breakup bullet'))
+        self.assertEqual([flag.severity for flag in article.flags if flag.kind == "hidden_html_text"], ["medium"])
+        self.assertFalse(article.needs_browser_check)
+
 
 @unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")
 class MediaFeatureTableTests(unittest.TestCase):
