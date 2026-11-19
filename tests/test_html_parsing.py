@@ -59,7 +59,7 @@ CHROME_PARSED_PAGES = (
     ("<html><body><script><!--<script></script>PAYLOAD</script><p>Body</p></body></html>", "Body"),
     # Everything after <plaintext> is text, and in SVG a CDATA section is text too.
     ("<html><body><plaintext><!--x</body></html>", "<!--x</body></html>"),
-    ("<html><body><p><svg><text><![CDATA[SEEN]]></text></svg></p><p><![CDATA[x>y]]></p></body></html>",
+    ("<html><body><p><svg><text y=20><![CDATA[SEEN]]></text></svg></p><p><![CDATA[x>y]]></p></body></html>",
      "SEEN y]]>"),
     ("<html><body><template>PAYLOAD</template><p>Body</p></body></html>", "Body"),
     # With scripting on, a <noscript> in <head> is text, so its markup opens no <body>.

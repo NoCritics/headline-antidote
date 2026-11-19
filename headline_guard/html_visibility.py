@@ -673,6 +673,10 @@ def _element_hiding(element, tag, rules, inherited_background, svg_place):
         color_hiding = _foreign_object_color_hiding(element, rules, inherited_background)
         if color_hiding is not None:
             return color_hiding, inherited_background, declarations, None
+    if tag == "text" and children_place is not None and not svg_place.in_text:
+        position_hiding = _svg_text_position_hiding(element, rules)
+        if position_hiding is not None:
+            return position_hiding, inherited_background, declarations, None
     own_background = declared_background_color(declarations)
     if own_background is not None:
         inherited_background = own_background
@@ -860,6 +864,7 @@ class _SvgPaintCache:
         self.svg_elements = {}
         self.ids = None
         self.has_shapes = {}
+        self.referenced_ids = None
 
 
 def _paint_cache(rules):
@@ -1070,6 +1075,200 @@ def _svg_paint_hiding(element, rules, inherited_background):
     return hiding
 
 
+# How far right of or below its drawing SVG text must start to count as off it, while the font
+# stays under half this size (so no letter reaches back in).
+FAR_OUTSIDE_DRAWING_PIXELS = 1000
+# The size of an <svg> without width or height.
+DEFAULT_SVG_SIZE = {"width": 300.0, "height": 150.0}
+# Presentation attributes that move or turn SVG text away from where x and y put it.
+SVG_TEXT_PLACING_ATTRIBUTES = (
+    "transform", "dominant-baseline", "alignment-baseline", "baseline-shift", "writing-mode",
+    "text-orientation", "glyph-orientation-vertical",
+)
+# The CSS properties among those the cascade keeps (the others are found by _SVG_PLACING_CSS).
+SVG_TEXT_PLACING_CSS = ("transform", "translate", "scale")
+SVG_TEXT_POSITION_ATTRIBUTES = ("x", "y", "dx", "dy", "rotate")
+SVG_ANIMATION_TAGS = ("animate", "set", "animatetransform", "animatemotion")
+# CSS the cascade does not keep, named anywhere in the page's CSS: what may move SVG text ("placing"),
+# and what may resize an <svg> or anchor text at its end ("far", which only the far-off rule needs).
+_SVG_PLACING_CSS = re.compile(
+    r"(?<![\w-])(?:(dominant-baseline|alignment-baseline|baseline-shift|writing-mode|text-orientation"
+    r"|glyph-orientation-vertical|rotate|offset(?:-[a-z]+)?|animation(?:-[a-z]+)?)"
+    r"|(aspect-ratio|flex(?:-basis|-grow|-shrink)?|(?:min-|max-)?(?:inline|block)-size|min-width|zoom"
+    r"|text-anchor|direction))\s*:",
+    re.IGNORECASE,
+)
+# CSS the cascade keeps that can change an <svg>'s size from its width and height attributes.
+SVG_SIZING_PROPERTIES = ("width", "height", "min-height", "max-width", "max-height")
+_STRETCHING_DISPLAYS = ("flex", "inline-flex", "grid", "inline-grid")
+# The largest absolute font-size keyword (xxx-large), and at most how much "larger" grows a size.
+_LARGEST_FONT_KEYWORD_PIXELS = 48.0
+_LARGER_FONT_FACTOR = 1.5
+_FONT_SIZE_KEYWORDS = ("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large")
+
+
+def _svg_pixels(value):
+    """A single SVG coordinate or size in pixels (unitless or px), or None for anything else."""
+    match = _SVG_LENGTH.fullmatch(with_math_evaluated(value.strip(" \t\n\f\r").lower()))
+    if match is None or match.group(2) not in (None, "px"):
+        return None
+    return float(match.group(1))
+
+
+def _rule_worlds_of(rules):
+    other_rules = getattr(rules, "without_undecided_blocks", None)
+    return (rules,) if other_rules is None else (rules, other_rules)
+
+
+def _referenced_ids(rules, element):
+    """Ids that a <use> or an animation element on the page points at: drawn or moved from there."""
+    cache = _paint_cache(rules)
+    if cache.referenced_ids is None:
+        cache.referenced_ids = set()
+        for node in element.getroottree().iter():
+            if not isinstance(node.tag, str) or node.tag.lower() not in ("use",) + SVG_ANIMATION_TAGS:
+                continue
+            link = (node.get("href") or node.get("xlink:href") or "").strip()
+            if link.startswith("#"):
+                cache.referenced_ids.add(link[1:])
+    return cache.referenced_ids
+
+
+def _is_placed_elsewhere(node, worlds):
+    """Whether an attribute or CSS on node may move or turn the text under it."""
+    for name in SVG_TEXT_PLACING_ATTRIBUTES:
+        if node.get(name) is not None:
+            return True
+    for world in worlds:
+        declarations = _full_declarations(world, node)
+        for name in SVG_TEXT_PLACING_CSS:
+            if declarations.get(name, "none") != "none":
+                return True
+    return False
+
+
+def _largest_font_pixels(element, worlds):
+    """An upper estimate of element's font size in pixels, or None when it cannot be estimated."""
+    chain = [element] + list(element.iterancestors())
+    largest = 0.0
+    for world in worlds:
+        size = 16.0
+        root_size = 16.0
+        for node in reversed(chain):
+            value = _full_declarations(world, node).get("font-size")
+            if value is None and node.get("font-size") is not None and _is_svg_element(node, node.tag.lower()):
+                value = _svg_attribute_value(node, "font-size")
+            if value is None or value in _INHERITING_VALUES:
+                continue
+            match = _SVG_LENGTH.fullmatch(value)
+            if match is not None and match.group(2) in (None, "px"):
+                size = float(match.group(1))
+            elif match is not None and match.group(2) in ("em", "%"):
+                size *= float(match.group(1)) / (100 if match.group(2) == "%" else 1)
+            elif match is not None and match.group(2) == "rem":
+                size = root_size * float(match.group(1))
+            elif value == "larger":
+                size *= _LARGER_FONT_FACTOR
+            elif value in _FONT_SIZE_KEYWORDS:
+                size = _LARGEST_FONT_KEYWORD_PIXELS
+            elif value != "smaller":
+                return None
+            if node.tag.lower() == "html":
+                root_size = size
+        largest = max(largest, size)
+    return largest
+
+
+def _known_svg_size(svg, worlds):
+    """The <svg>'s width and height in pixels from its attributes ({name: None} when unknown)."""
+    sizes = {}
+    for name in ("width", "height"):
+        value = svg.get(name)
+        sizes[name] = DEFAULT_SVG_SIZE[name] if value is None else _svg_pixels(value)
+    parent = svg.getparent()
+    for world in worlds:
+        declarations = _full_declarations(world, svg)
+        if any(name in declarations for name in SVG_SIZING_PROPERTIES):
+            return {"width": None, "height": None}
+        if parent is not None and _full_declarations(world, parent).get("display") in _STRETCHING_DISPLAYS:
+            # A flex or grid container may stretch an <svg> that has no size of its own.
+            for name in ("width", "height"):
+                if svg.get(name) is None:
+                    sizes[name] = None
+    return sizes
+
+
+def _clips_its_content(svg, worlds):
+    """Whether the <svg> cuts off what is drawn outside it (unless both overflow axes are visible)."""
+    for world in worlds:
+        declarations = dict(_full_declarations(world, svg))
+        if "overflow" not in declarations and svg.get("overflow") is not None:
+            declarations["overflow"] = _svg_attribute_value(svg, "overflow")
+        overflow_words = declarations.get("overflow", "").split()
+        overflow_x = declarations.get("overflow-x") or (overflow_words[0] if overflow_words else "")
+        overflow_y = declarations.get("overflow-y") or (overflow_words[-1] if overflow_words else "")
+        if overflow_x == "visible" and overflow_y == "visible":
+            return False
+    return True
+
+
+def _svg_text_position_hiding(element, rules):
+    """(reason, MEDIUM) when a <text> is placed wholly outside the <svg> that clips it, or None.
+    Only the plain cases: no viewBox, nested <svg> or <foreignObject>, nothing that moves or turns
+    the text, and no <tspan> or <textPath> with a place of its own; the browser check reads the rest."""
+    css_mentions = getattr(rules, "svg_css_mentions", frozenset(("placing", "far")))
+    if "placing" in css_mentions:
+        return None
+    worlds = _rule_worlds_of(rules)
+    referenced = _referenced_ids(rules, element)
+    svg = None
+    for node in [element] + list(element.iterancestors()):
+        tag = node.tag.lower() if isinstance(node.tag, str) else ""
+        if tag == "foreignobject" or _is_placed_elsewhere(node, worlds) or node.get("id") in referenced:
+            return None
+        if tag == "svg":
+            svg = node
+            break
+    if svg is None or svg.get("viewbox") is not None or any(True for _ in svg.iterancestors("svg")):
+        return None
+    for name in ("dx", "dy", "rotate"):
+        if element.get(name) is not None:
+            return None
+    for descendant in element.iterdescendants():
+        if not isinstance(descendant.tag, str):
+            continue
+        tag = descendant.tag.lower()
+        if tag == "textpath" or tag in SVG_ANIMATION_TAGS or descendant.get("id") in referenced:
+            return None
+        if _is_placed_elsewhere(descendant, worlds):
+            return None
+        for name in SVG_TEXT_POSITION_ATTRIBUTES:
+            if descendant.get(name) is not None:
+                return None
+    x = 0.0 if element.get("x") is None else _svg_pixels(element.get("x"))
+    y = 0.0 if element.get("y") is None else _svg_pixels(element.get("y"))
+    if x is None or y is None or not _clips_its_content(svg, worlds):
+        return None
+    if y <= 0:
+        return (f"SVG text placed above its drawing (y={element.get('y', 'not set')}: its letters sit "
+                "above the top edge)", MEDIUM)
+    if "far" in css_mentions:
+        return None
+    font_pixels = _largest_font_pixels(element, worlds)
+    if font_pixels is None or font_pixels >= FAR_OUTSIDE_DRAWING_PIXELS / 2:
+        return None
+    sizes = _known_svg_size(svg, worlds)
+    if sizes["height"] is not None and y >= sizes["height"] + FAR_OUTSIDE_DRAWING_PIXELS:
+        return (f"SVG text placed far below its drawing (y={element.get('y')})", MEDIUM)
+    anchored_at_start = True
+    for node in [element] + list(element.iterancestors()):
+        if node.get("text-anchor") is not None or node.get("direction") is not None:
+            anchored_at_start = False
+    if anchored_at_start and sizes["width"] is not None and x >= sizes["width"] + FAR_OUTSIDE_DRAWING_PIXELS:
+        return (f"SVG text placed far right of its drawing (x={element.get('x')})", MEDIUM)
+    return None
+
+
 def _foreign_object_color_hiding(element, rules, inherited_background):
     """Why the HTML in a <foreignObject> cannot be seen in the color it inherits from SVG
     ancestors (CSS or the color attribute), or None."""
@@ -1169,26 +1368,38 @@ def parse_document(html, stylesheets=None):
     in <style> blocks, which ignores external stylesheets.
     """
     root = parse_html(html)
+    css_texts = list(stylesheets or ())
+    for style in root.iter("style"):
+        css_texts.append(style.text or "")
+    for element in root.iter():
+        if isinstance(element.tag, str) and element.get("style"):
+            css_texts.append(element.get("style"))
     try:
         from .css_cascade import CascadeRules
     except ImportError:
-        return root, _StylesheetRules(root)
-    _check_css_numbers(root, stylesheets or ())
-    return root, CascadeRules(root, stylesheets or (), is_quirks_mode(html))
+        rules = _StylesheetRules(root)
+    else:
+        _check_css_numbers(css_texts)
+        rules = CascadeRules(root, stylesheets or (), is_quirks_mode(html))
+    rules.svg_css_mentions = _svg_css_mentions(css_texts)
+    return root, rules
 
 
-def _check_css_numbers(root, stylesheets):
+def _svg_css_mentions(css_texts):
+    """Which groups of _SVG_PLACING_CSS the page's CSS names ("placing", "far")."""
+    mentions = set()
+    for text in css_texts:
+        for match in _SVG_PLACING_CSS.finditer(text):
+            mentions.add("placing" if match.group(1) else "far")
+    return frozenset(mentions)
+
+
+def _check_css_numbers(texts):
     """Raises PageTooComplex when the page's CSS holds an integer too long for tinycss2, which
     converts each one to a Python int (limited to sys.get_int_max_str_digits() digits)."""
     limit = sys.get_int_max_str_digits()
     if limit == 0:
         return
-    texts = list(stylesheets)
-    for style in root.iter("style"):
-        texts.append(style.text or "")
-    for element in root.iter():
-        if isinstance(element.tag, str) and element.get("style"):
-            texts.append(element.get("style"))
     for text in texts:
         for digits in _DIGIT_RUN.finditer(text):
             if digits.end() - digits.start() <= limit:
