@@ -255,7 +255,9 @@ VISIBLE_TEXT_SCRIPT = """
       const overlapHeight = Math.max(0, Math.min(box.bottom, clipBox.bottom) - Math.max(box.top, clipBox.top));
       if (ancestorStyle.clip.startsWith('rect(0px, 0px, 0px, 0px') || ancestorStyle.clipPath.startsWith('inset(50%')) return HIDDEN;
       if (overlapWidth * overlapHeight < 0.5 * box.width * box.height) {
-        const previewWindow = clipBox.height >= limits.previewMinimumPixels && clipBox.width >= limits.previewMinimumPixels;
+        // An <svg> viewport is a drawing's edge, not a "read more" box: what it clips is not shown.
+        const previewWindow = !(ancestor instanceof SVGElement)
+          && clipBox.height >= limits.previewMinimumPixels && clipBox.width >= limits.previewMinimumPixels;
         return previewWindow ? CLIPPED : HIDDEN;
       }
     }
