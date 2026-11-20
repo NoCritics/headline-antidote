@@ -78,6 +78,14 @@ SVG_PAINT_PROPERTIES = {
 SVG_SHAPE_TAGS = {"rect", "circle", "ellipse", "line", "polyline", "polygon", "path", "image", "use", "foreignobject"}
 # The elements a url() paint can use.
 SVG_PAINT_SERVER_TAGS = {"lineargradient", "radialgradient", "pattern"}
+GRADIENT_TAGS = ("lineargradient", "radialgradient")
+# Gradient attributes that place it other than across the painted box from left to right.
+GRADIENT_GEOMETRY_ATTRIBUTES = ("x1", "y1", "x2", "y2", "gradientunits", "gradienttransform")
+SVG_BASIC_SHAPE_TAGS = ("rect", "circle", "ellipse", "line", "polyline", "polygon", "path")
+# Children that draw nothing where they stand.
+SVG_NON_RENDERING_TAGS = SVG_DEFINITION_TAGS | SVG_PAINT_SERVER_TAGS | {
+    "title", "desc", "metadata", "style", "script", "filter",
+}
 
 
 @dataclass
@@ -956,13 +964,25 @@ def _element_with_id(rules, element, identifier):
     return cache.ids.get(identifier)
 
 
-def _stop_property(rules, stop, name, initial):
-    value = _full_declarations(rules, stop).get(name)
-    if value in _INHERITING_VALUES or value == "initial":
-        value = _svg_attribute_value(stop, name)
-        if value is None or not _is_valid_css_value(name, value) or value in ("inherit", "initial"):
-            value = initial
-    return value
+def _stop_property(rules, element, name, initial):
+    """element's stop-color or stop-opacity. Neither is inherited: inherit (in CSS or the attribute)
+    takes the parent's, initial, unset and revert give the initial value, and revert-layer the attribute."""
+    cache = _paint_cache(rules)
+    node = element
+    while node is not None and isinstance(node.tag, str):
+        value = _full_declarations(rules, node).get(name)
+        if value in ("initial", "unset", "revert"):
+            return initial
+        if value in (None, "", "revert-layer"):
+            value = _svg_attribute_value(node, name) if _is_svg_element_cached(cache, node) else None
+            if value is None or value in ("initial", "unset", "revert", "revert-layer"):
+                return initial
+            if value != "inherit" and not _is_valid_css_value(name, value):
+                return initial
+        if value != "inherit":
+            return value
+        node = node.getparent()
+    return initial
 
 
 def _opacity_number(value):
@@ -975,63 +995,138 @@ def _opacity_number(value):
     return min(max(number, 0.0), 1.0)
 
 
-def _paint_server_colors(rules, server):
-    """The colors a gradient or pattern paints with: [] when it paints nothing."""
+def _linked_paint_server(rules, node, tags):
+    """The SVG element with one of tags that node's href points at, or None."""
+    link = (node.get("href") or node.get("xlink:href") or "").strip()
+    if not link.startswith("#"):
+        return None
+    target = _element_with_id(rules, node, link[1:])
+    if target is None or target.tag.lower() not in tags or not _is_svg_element_cached(_paint_cache(rules), target):
+        return None
+    return target
+
+
+def _stop_color(rules, stop):
+    color_value = _stop_property(rules, stop, "stop-color", "black")
+    if color_value == "currentcolor":
+        color_value = _svg_paint(rules, stop)["color"]
+    color = parse_color(color_value) or (0, 0, 0, 1.0)
+    opacity = _opacity_number(_stop_property(rules, stop, "stop-opacity", "1"))
+    return color[:3] + (color[3] * (1.0 if opacity is None else opacity),)
+
+
+def _gradient_colors(rules, gradient):
+    """(the colors a gradient surely paints with, those it paints with only where its geometry
+    reaches): a stop paints where it has width, and the first and last stops also fill what lies
+    before and after them. Across the painted box from left to right (a linear gradient with no
+    geometry of its own) that is exact; otherwise the stops between are taken as painted and the
+    first and last as maybe."""
+    stops = None
+    placed = gradient.tag.lower() == "radialgradient"
+    node = gradient
     for _ in range(MAXIMUM_GRADIENT_LINKS):
-        tag = server.tag.lower()
-        if tag == "pattern":
-            for child in server:
-                if isinstance(child.tag, str):
-                    return [(0, 0, 0, 1.0)]  # its content is not evaluated: assumed to show
-        else:
-            colors = []
-            stops = 0
-            for stop in server:
-                if not isinstance(stop.tag, str) or stop.tag.lower() != "stop":
-                    continue
-                stops += 1
-                color_value = _stop_property(rules, stop, "stop-color", "black")
-                if color_value == "currentcolor":
-                    color_value = _svg_paint(rules, stop)["color"]
-                color = parse_color(color_value) or (0, 0, 0, 1.0)
-                opacity = _opacity_number(_stop_property(rules, stop, "stop-opacity", "1"))
-                colors.append(color[:3] + (color[3] * (1.0 if opacity is None else opacity),))
-            if stops:
-                return colors
-        link = server.get("href") or server.get("xlink:href")
-        if link is None or not link.strip().startswith("#"):
-            return []
-        server = _element_with_id(rules, server, link.strip()[1:])
-        if server is None or server.tag.lower() not in SVG_PAINT_SERVER_TAGS:
-            return []
-    return []
+        if stops is None:
+            own_stops = [child for child in node if isinstance(child.tag, str) and child.tag.lower() == "stop"]
+            stops = own_stops or None
+        if (any(node.get(name) is not None for name in GRADIENT_GEOMETRY_ATTRIBUTES)
+                or _full_declarations(rules, node).get("transform", "none") != "none"):
+            placed = True
+        node = _linked_paint_server(rules, node, GRADIENT_TAGS)
+        if node is None:
+            break
+    if stops is None:
+        return [], []
+    colors = []
+    offsets = []
+    largest = 0.0
+    for stop in stops:
+        largest = max(largest, _opacity_number((stop.get("offset") or "").strip(" \t\n\f\r")) or 0.0)
+        offsets.append(largest)
+        colors.append(_stop_color(rules, stop))
+    if len(colors) == 1:
+        return colors, []
+    last = len(colors) - 1
+    sure = []
+    maybe = []
+    for index, color in enumerate(colors):
+        between = ((index > 0 and offsets[index - 1] < offsets[index])
+                   or (index < last and offsets[index] < offsets[index + 1]))
+        padding = (index == 0 and offsets[0] > 0) or (index == last and offsets[last] < 1)
+        if between or (padding and not placed):
+            sure.append(color)
+        elif placed and index in (0, last):
+            maybe.append(color)
+    return sure, maybe
+
+
+def _pattern_child_draws(rules, child):
+    """Whether a child of a <pattern> may draw: a basic shape when its fill or stroke shows; any
+    other drawing element is not evaluated and taken as drawing."""
+    tag = child.tag.lower()
+    if tag in SVG_NON_RENDERING_TAGS:
+        return False
+    if tag not in SVG_BASIC_SHAPE_TAGS:
+        return True
+    paint = _svg_paint(rules, child)
+    for name in ("fill", "stroke"):
+        if name == "stroke" and _svg_size(paint["stroke-width"]) in ("zero", "negative"):
+            continue
+        if paint[name].startswith("url("):
+            return True  # another paint server: not followed from inside a pattern
+        for color in _paint_colors(rules, child, paint, name)[0]:
+            if color[3] >= MINIMUM_VISIBLE_OPACITY:
+                return True
+    return False
+
+
+def _pattern_paints(rules, pattern):
+    """Whether a <pattern> paints: a positive width and height and content that draws (each its
+    own, or from the pattern it links to by href)."""
+    sizes = {"width": None, "height": None}
+    content = None
+    node = pattern
+    for _ in range(MAXIMUM_GRADIENT_LINKS):
+        for name in sizes:
+            if sizes[name] is None and node.get(name) is not None:
+                sizes[name] = _svg_size(_svg_attribute_value(node, name))
+        if content is None:
+            content = [child for child in node if isinstance(child.tag, str)] or None
+        node = _linked_paint_server(rules, node, ("pattern",))
+        if node is None:
+            break
+    if any(size in (None, "zero", "negative") for size in sizes.values()) or content is None:
+        return False
+    return any(_pattern_child_draws(rules, child) for child in content)
 
 
 def _paint_colors(rules, element, paint, name):
-    """The colors a fill or stroke paints with (alpha including its opacity): [] when it paints nothing."""
+    """(the colors a fill or stroke surely paints with, those it paints with only where a gradient's
+    geometry reaches), alpha including its opacity; both empty when it paints nothing."""
     value = paint[name]
     colors = None
+    maybe = []
     if value.startswith("url("):
         reference, _, fallback = value.partition(")")
         target = reference[4:].strip(" \t\n\f\r\"'")
         server = _element_with_id(rules, element, target[1:]) if target.startswith("#") else None
-        if server is not None and server.tag.lower() in SVG_PAINT_SERVER_TAGS:
-            colors = _paint_server_colors(rules, server)
-        else:
+        if (server is None or server.tag.lower() not in SVG_PAINT_SERVER_TAGS
+                or not _is_svg_element_cached(_paint_cache(rules), server)):
             value = fallback.strip() or "none"
+        elif server.tag.lower() == "pattern":
+            colors = [(0, 0, 0, 1.0)] if _pattern_paints(rules, server) else []  # its colors are not evaluated
+        else:
+            colors, maybe = _gradient_colors(rules, server)
     if colors is None:
         if value in ("none", "context-fill", "context-stroke"):
-            return []
+            return [], []
         if value == "currentcolor":
             value = paint["color"]
         colors = [parse_color(value) or (0, 0, 0, 1.0)]  # a color this reader cannot evaluate counts as painted
     opacity = _opacity_number(paint[name + "-opacity"])
     if opacity is None:
-        return colors
-    scaled = []
-    for color in colors:
-        scaled.append(color[:3] + (color[3] * opacity,))
-    return scaled
+        return colors, maybe
+    return ([color[:3] + (color[3] * opacity,) for color in colors],
+            [color[:3] + (color[3] * opacity,) for color in maybe])
 
 
 def _drawing_has_shapes(rules, element):
@@ -1054,24 +1149,27 @@ def _drawing_has_shapes(rules, element):
 
 def _paint_hiding_in(rules, element, inherited_background):
     paint = _svg_paint(rules, element)
-    colors = _paint_colors(rules, element, paint, "fill")
+    colors, maybe = _paint_colors(rules, element, paint, "fill")
     if _svg_size(paint["stroke-width"]) not in ("zero", "negative"):
-        colors = colors + _paint_colors(rules, element, paint, "stroke")
-    shown = []
-    for color in colors:
-        if color[3] >= MINIMUM_VISIBLE_OPACITY:
-            shown.append(color)
+        stroke_colors, stroke_maybe = _paint_colors(rules, element, paint, "stroke")
+        colors = colors + stroke_colors
+        maybe = maybe + stroke_maybe
+    shown = [color for color in colors if color[3] >= MINIMUM_VISIBLE_OPACITY]
+    maybe_shown = [color for color in maybe if color[3] >= MINIMUM_VISIBLE_OPACITY]
+    paint_values = f"fill:{paint['fill']}, stroke:{paint['stroke']}"
+    if not shown and maybe_shown:
+        return f"SVG text painted only by gradient stops that may lie outside it ({paint_values})", MEDIUM
     if not shown:
-        return (f"SVG text painted with no visible fill or stroke (fill:{paint['fill']}, stroke:{paint['stroke']})",
-                HIGH)
+        return f"SVG text painted with no visible fill or stroke ({paint_values})", HIGH
     background = rules.background_for(element) if hasattr(rules, "background_for") else inherited_background
     reference = background if background is not None else ASSUMED_PAGE_BACKGROUND
     for color in shown:
         if contrast_ratio(color, reference) >= MINIMUM_VISIBLE_CONTRAST:
             return None
     severity = HIGH
-    if background is None or _drawing_has_shapes(rules, element):
-        severity = MEDIUM  # the page background is a guess, or the text may be drawn on a shape
+    if (background is None or _drawing_has_shapes(rules, element)
+            or any(contrast_ratio(color, reference) >= MINIMUM_VISIBLE_CONTRAST for color in maybe_shown)):
+        severity = MEDIUM  # the background is a guess, the text may lie on a shape, or a maybe-stop shows it
     return (f"SVG text fill {paint['fill']} nearly matches the background", severity)
 
 
