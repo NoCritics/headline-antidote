@@ -77,6 +77,18 @@ SVG = '<svg width="300" height="100">'
 AT = 'x="10" y="50" font-size="40"'
 FO_PARAGRAPH = '<p style="margin:0;font-size:40px">PAYLOAD</p>'
 
+CLEAR = 'stop-color="transparent"'
+TILE = 'width="10" height="10" patternUnits="userSpaceOnUse"'
+
+
+def gradient(stops, attributes="", tag="linearGradient"):
+    return f'{SVG}<defs><{tag} id="g" {attributes}>{stops}</{tag}></defs><text {AT} fill="url(#g)">PAYLOAD</text></svg>'
+
+
+def pattern(content, attributes):
+    return f'{SVG}<defs><pattern id="g" {attributes}>{content}</pattern></defs><text {AT} fill="url(#g)">PAYLOAD</text></svg>'
+
+
 # (markup, whether Chrome paints PAYLOAD): a screenshot of the page with PAYLOAD differs from one
 # without it. Each unpainted case has a painted one beside it that differs only in what stops it.
 SVG_PAINT_CASES = (
@@ -293,6 +305,58 @@ SVG_PAINT_CASES = (
      f'<text {AT} fill="url(#p)">PAYLOAD</text></svg>', False),
     (f'{SVG}<defs><pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse">'
      f'<rect width="10" height="10"/></pattern></defs><text {AT} fill="url(#p)">PAYLOAD</text></svg>', True),
+    # stop-color and stop-opacity are not inherited: initial, unset and revert give the initial value
+    # over the attribute, revert-layer gives the attribute, and inherit (in CSS or the attribute) the
+    # gradient's.
+    (gradient(f'<stop offset="0" {CLEAR} style="stop-color:initial"/>'), True),
+    (gradient(f'<stop offset="0" {CLEAR} style="stop-color:unset"/>'), True),
+    (gradient(f'<stop offset="0" {CLEAR} style="stop-color:revert"/>'), True),
+    (gradient(f'<stop offset="0" {CLEAR} style="stop-color:inherit"/>'), True),
+    (gradient(f'<stop offset="0" {CLEAR} style="stop-color:revert-layer"/>'), False),
+    (gradient('<stop offset="0" style="stop-color:inherit"/>', CLEAR), False),
+    (gradient('<stop offset="0" style="stop-color:inherit"/>', 'style="stop-color:transparent"'), False),
+    (gradient('<stop offset="0" stop-color="inherit"/>', CLEAR), False),
+    (gradient('<stop offset="0" stop-opacity="0" style="stop-opacity:initial"/>'), True),
+    (gradient('<stop offset="0" style="stop-opacity:inherit"/>', 'stop-opacity="0"'), False),
+    # A stop paints only where it has width: offsets are clamped to 0..1 and to the largest before
+    # them (an unreadable one is 0); the first and last stops also fill what lies before and after.
+    (gradient(f'<stop offset="0" stop-color="black"/><stop offset="0" {CLEAR}/><stop offset="1" {CLEAR}/>'), False),
+    (gradient(f'<stop offset="0" {CLEAR}/><stop offset="1" {CLEAR}/><stop offset="1" stop-color="black"/>'), False),
+    (gradient(f'<stop offset="0" {CLEAR}/><stop offset=".5" {CLEAR}/><stop offset=".5" stop-color="black"/>'
+              f'<stop offset=".5" {CLEAR}/><stop offset="1" {CLEAR}/>'), False),
+    (gradient(f'<stop offset="0%" {CLEAR}/><stop offset="50%" stop-color="black"/><stop offset="20%" {CLEAR}/>'
+              f'<stop offset="1" {CLEAR}/>'), True),
+    (gradient(f'<stop offset="banana" stop-color="black"/><stop offset="0" {CLEAR}/><stop offset="1" {CLEAR}/>'),
+     False),
+    (gradient(f'<stop offset=".3" stop-color="black"/><stop offset=".3" {CLEAR}/>'), True),
+    (gradient(f'<stop offset=".7" {CLEAR}/><stop offset=".7" stop-color="black"/>'), True),
+    (gradient('<stop offset=".5" stop-color="black"/>'), True),
+    (gradient(f'<stop offset="0" stop-color="black"/><stop offset="0" {CLEAR}/><stop offset="1" {CLEAR}/>',
+              'x1="-1"'), False),
+    (gradient(f'<stop offset="0" stop-color="black"/><stop offset="0" {CLEAR}/><stop offset="1" {CLEAR}/>',
+              tag="radialGradient"), False),
+    (f'{SVG}<defs><linearGradient id="b" x2="0.1"/><linearGradient id="g" href="#b"><stop offset="0" '
+     f'stop-color="black"/><stop offset="0" {CLEAR}/><stop offset="1" {CLEAR}/></linearGradient></defs>'
+     f'<text {AT} fill="url(#g)">PAYLOAD</text></svg>', False),
+    # url() points at an SVG paint server only: an HTML <lineargradient> paints nothing (or the fallback).
+    (f'<div><lineargradient id="g"><stop offset="0" stop-color="black"></stop></lineargradient></div>'
+     f'{SVG}<text {AT} fill="url(#g)">PAYLOAD</text></svg>', False),
+    (f'<div><lineargradient id="g"><stop offset="0" stop-color="black"></stop></lineargradient></div>'
+     f'{SVG}<text {AT} fill="url(#g) black">PAYLOAD</text></svg>', True),
+    (f'<svg width="0" height="0"><linearGradient id="g"><stop offset="0" stop-color="black"/></linearGradient>'
+     f'</svg>{SVG}<text {AT} fill="url(#g)">PAYLOAD</text></svg>', True),
+    # A pattern paints only with a positive width and height (its own, or from the pattern it links
+    # to) and content that draws.
+    (pattern('<rect width="10" height="10"/>', 'patternUnits="userSpaceOnUse"'), False),
+    (pattern('<rect width="10" height="10"/>', 'width="0" height="10" patternUnits="userSpaceOnUse"'), False),
+    (pattern('<rect width="10" height="10"/>', 'width="-5" height="10" patternUnits="userSpaceOnUse"'), False),
+    (pattern('<rect width="10" height="10"/>', 'width=".5" height=".5"'), True),
+    (f'{SVG}<defs><pattern id="b" width="10" height="10" patternUnits="userSpaceOnUse"/><pattern id="g" '
+     f'href="#b"><rect width="10" height="10"/></pattern></defs><text {AT} fill="url(#g)">PAYLOAD</text></svg>',
+     True),
+    (pattern('<rect width="10" height="10" fill="none"/>', TILE), False),
+    (pattern('<title>t</title>', TILE), False),
+    (pattern('<rect width="10" height="10" fill="none" stroke="black"/>', TILE), True),
     # Text outside the drawing: with no y (or y <= 0) its letters sit above the top edge; far right
     # of it or far below it. (A <svg> with no size is 300 x 150.)
     (f'{SVG}<text x="10">PAYLOAD</text></svg>', False),
@@ -431,6 +495,19 @@ class NotDrawnTests(unittest.TestCase):
                 else:
                     self.assertNotIn("PAYLOAD", visible_text)
                     self.assertIn("PAYLOAD", hidden_text(fragments))
+
+    def test_a_gradient_shown_only_where_its_geometry_may_reach_goes_to_review(self):
+        # Chrome paints this radial gradient's last stop in the corners past its circle; this reader
+        # does not place gradients, so text whose only visible stop is such an end stop is reviewed.
+        markup = gradient(f'<stop offset="0" {CLEAR}/><stop offset="1" {CLEAR}/><stop offset="1" stop-color="black"/>',
+                          tag="radialGradient")
+        fragments = extract_visible_text(page(markup))[1]
+        self.assertEqual([fragment.severity for fragment in fragments], ["medium"])
+
+    def test_a_gradient_that_surely_paints_nothing_is_high(self):
+        markup = gradient(f'<stop offset="0" stop-color="black"/><stop offset="0" {CLEAR}/><stop offset="1" {CLEAR}/>')
+        fragments = extract_visible_text(page(markup))[1]
+        self.assertEqual([fragment.severity for fragment in fragments], ["high"])
 
     def test_text_outside_the_drawing_goes_to_review(self):
         # Text with no y is a common authoring slip as well as a hiding place: hidden, at MEDIUM.
