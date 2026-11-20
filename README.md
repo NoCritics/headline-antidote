@@ -19,6 +19,18 @@ NFKC normalization and the Unicode confusables data already exist. This project 
 | Tells you an attack happened | no | no | **yes, every change comes with a flag** |
 | Hidden HTML text, invisible Unicode tag characters | no | no | yes |
 
+## Install
+
+Python 3.11 or later. From this folder:
+
+```powershell
+pip install .              # the guard, the static reader and the article extractor
+pip install ".[browser]"   # also Playwright, for the browser check (it drives the installed Chrome)
+```
+
+selectolax, tinycss2 and cssselect2 are pinned to the versions the tests ran against, because a new
+release of the HTML parser or the CSS cascade can change what counts as visible.
+
 ## Usage
 
 ```python
@@ -474,7 +486,7 @@ The tests cover the paper's attacks, their variants, and attacks shaped to slip 
 
 ## Data
 
-`unicode_data/` holds three official Unicode files: `confusables.txt` (UTS #39), `Scripts.txt` and `DerivedCoreProperties.txt` (Unicode 18.0). They are parsed as data only. The loader refuses to start if any file's SHA-256 differs from `unicode_data/manifest.json`.
+`headline_guard/unicode_data/` holds three official Unicode files: `confusables.txt` (UTS #39), `Scripts.txt` and `DerivedCoreProperties.txt` (Unicode 18.0). They are parsed as data only. The loader refuses to start if any file's SHA-256 differs from `headline_guard/unicode_data/manifest.json`.
 
 ## Known limits
 

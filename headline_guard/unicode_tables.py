@@ -11,9 +11,7 @@ import json
 import os
 import unicodedata
 
-DATA_DIRECTORY = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "unicode_data"
-)
+DATA_DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unicode_data")
 
 
 class UnicodeDataError(RuntimeError):
