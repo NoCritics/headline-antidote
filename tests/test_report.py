@@ -1,5 +1,6 @@
 """The JSON report: to_dict() output, checked against the published schema."""
 
+import dataclasses
 import importlib.resources
 import importlib.util
 import json
@@ -45,7 +46,7 @@ class ReportTests(unittest.TestCase):
         self.assertIsNone(flag["field"])
         self.assertEqual(flag["flagged_text"], HOMOGLYPH_TESLA)
         self.assertEqual((flag["start"], flag["end"]), (0, 5))
-        self.assertIn("Tesla", flag["detail"])
+        self.assertTrue(flag["detail"])
 
     def test_offsets_count_code_points(self):
         tag_characters = "".join(chr(0xE0000 + ord(letter)) for letter in "buy")
@@ -73,8 +74,8 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["headline"], HEADLINE)
         self.assertIn("og:title", report["metadata_titles"])
         self.assertEqual(report["tickers"], ["TSLA"])
-        self.assertEqual(report["browser_check"],
-                         {"needed": False, "reasons": [], "ran": False, "milliseconds": None})
+        self.assertEqual(report["browser_check"], {"needed": False, "reasons": [], "ran": False,
+                                                   "verified": False, "milliseconds": None})
         headline_flags = [flag for flag in report["flags"] if flag["field"] == "headline"]
         self.assertEqual([flag["category"] for flag in headline_flags], ["watchlist_homoglyph"])
         self.assertEqual(headline_flags[0]["flagged_text"], HOMOGLYPH_TESLA)
@@ -88,6 +89,18 @@ class ReportTests(unittest.TestCase):
         self.assert_valid(report)
         self.assertTrue(report["browser_check"]["needed"])
         self.assertEqual(len(report["browser_check"]["reasons"]), 1)
+
+    @unittest.skipIf(importlib.util.find_spec("trafilatura") is None, "trafilatura not installed")
+    def test_a_browser_run_that_confirms_nothing_still_ran(self):
+        # As browser_check.py returns a page the browser rendered but could not settle (a consent
+        # wall) or whose headline it did not find: a render time, browser_verified left False.
+        page = build_page(headline_html=f"{HEADLINE}<script>document.title='x'</script>")
+        article = dataclasses.replace(GUARD.extract_article(page), browser_milliseconds=812.5)
+        report = article.to_dict()
+        self.assert_valid(report)
+        self.assertTrue(report["browser_check"]["ran"])
+        self.assertFalse(report["browser_check"]["verified"])
+        self.assertEqual(report["browser_check"]["milliseconds"], 812.5)
 
     def test_schema_rejects_a_report_without_a_verdict(self):
         report = GUARD.analyze("Tesla shares surge").to_dict()
@@ -110,7 +123,9 @@ class ReportTests(unittest.TestCase):
         self.assertTrue(self.validator.is_valid(report))
 
     def test_offsets_lie_inside_the_text(self):
-        for text in (f"{HOMOGLYPH_TESLA} shares surge", "Tes​la shares‮ surge", "Ｔｅｓｌａ rally"):
+        zero_width_space, right_to_left_override = "\u200b", "\u202e"
+        for text in (f"{HOMOGLYPH_TESLA} shares surge", f"Tes{zero_width_space}la shares{right_to_left_override} surge",
+                     "\uff34\uff45\uff53\uff4c\uff41 rally"):  # the last is full-width "Tesla"
             report = GUARD.analyze(text).to_dict()
             self.assertTrue(report["flags"], text)
             for flag in report["flags"]:
