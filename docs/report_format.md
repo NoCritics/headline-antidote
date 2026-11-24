@@ -22,19 +22,19 @@ dicts. The schema is [headline_guard/report_schema.json](../headline_guard/repor
 | `headline_source` | string | where the headline came from, e.g. "<h1> matching the og:title" |
 | `body` | string | the article text a reader sees, cleaned |
 | `hidden_ending` | string | hidden text that is most of the article and runs to its end; never part of `body` |
-| `tickers` | list of strings | watched tickers named in the result |
+| `tickers` | list of strings | watched tickers named in the result, each once |
 | `metadata_titles` | object | the page's titles by name (`<title>`, `og:title`, ...) |
-| `browser_check` | object | `needed`, `reasons` (sentences), `ran`, `milliseconds` (null unless it ran) |
+| `browser_check` | object | `needed`, `reasons` (sentences; emptied once the check has run), `ran`, `milliseconds` (null unless it ran) |
 | `flags` | list | see below |
 
 ## Text report
 
 | field | type | meaning |
 |---|---|---|
-| `verdict` | pass, review, quarantine | as above |
+| `verdict` | pass, review, quarantine | as above; the schema checks it against the flags |
 | `text_as_written` | string | the text as given (for `analyze_html`, the visible text it read) |
 | `text_cleaned` | string | the text to give the model |
-| `tickers` | list of strings | watched tickers named in the text |
+| `tickers` | list of strings | watched tickers named in the text, each once |
 | `flags` | list | see below |
 
 ## A flag

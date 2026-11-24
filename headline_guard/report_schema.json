@@ -4,84 +4,369 @@
   "title": "headline_guard report",
   "description": "The guard's results as JSON; see docs/report_format.md. Every string taken from the page is untrusted.",
   "oneOf": [
-    {"$ref": "#/$defs/article_report"},
-    {"$ref": "#/$defs/text_report"}
+    {
+      "$ref": "#/$defs/article_report"
+    },
+    {
+      "$ref": "#/$defs/text_report"
+    }
   ],
   "$defs": {
-    "schema_version": {"type": "string", "pattern": "^1[.][0-9]+$"},
-    "verdict": {"enum": ["pass", "review", "quarantine"]},
-    "severity": {"enum": ["high", "medium", "low"]},
-    "tickers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1[.][0-9]+$"
+    },
+    "verdict": {
+      "enum": [
+        "pass",
+        "review",
+        "quarantine"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "tickers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
     "flag": {
       "type": "object",
-      "required": ["category", "severity", "field", "flagged_text", "detail"],
+      "required": [
+        "category",
+        "severity",
+        "field",
+        "flagged_text",
+        "detail"
+      ],
       "properties": {
-        "category": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-        "severity": {"$ref": "#/$defs/severity"},
-        "flagged_text": {"type": "string"},
-        "detail": {"type": "string"}
+        "category": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "severity": {
+          "$ref": "#/$defs/severity"
+        },
+        "flagged_text": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        }
       }
     },
     "article_report": {
       "type": "object",
-      "required": ["schema_version", "report_type", "verdict", "headline", "headline_source", "body",
-                   "hidden_ending", "tickers", "metadata_titles", "browser_check", "flags"],
+      "required": [
+        "schema_version",
+        "report_type",
+        "verdict",
+        "headline",
+        "headline_source",
+        "body",
+        "hidden_ending",
+        "tickers",
+        "metadata_titles",
+        "browser_check",
+        "flags"
+      ],
       "properties": {
-        "schema_version": {"$ref": "#/$defs/schema_version"},
-        "report_type": {"const": "article"},
-        "verdict": {"$ref": "#/$defs/verdict"},
-        "headline": {"type": "string"},
-        "headline_source": {"type": "string"},
-        "body": {"type": "string"},
-        "hidden_ending": {"type": "string"},
-        "tickers": {"$ref": "#/$defs/tickers"},
-        "metadata_titles": {"type": "object", "additionalProperties": {"type": "string"}},
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "report_type": {
+          "const": "article"
+        },
+        "verdict": {
+          "$ref": "#/$defs/verdict"
+        },
+        "headline": {
+          "type": "string"
+        },
+        "headline_source": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "hidden_ending": {
+          "type": "string"
+        },
+        "tickers": {
+          "$ref": "#/$defs/tickers"
+        },
+        "metadata_titles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "browser_check": {
           "type": "object",
-          "required": ["needed", "reasons", "ran", "milliseconds"],
+          "required": [
+            "needed",
+            "reasons",
+            "ran",
+            "milliseconds"
+          ],
           "properties": {
-            "needed": {"type": "boolean"},
-            "reasons": {"type": "array", "items": {"type": "string"}},
-            "ran": {"type": "boolean"},
-            "milliseconds": {"type": ["number", "null"], "minimum": 0}
+            "needed": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "ran": {
+              "type": "boolean"
+            },
+            "milliseconds": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            }
           },
-          "if": {"properties": {"ran": {"const": false}}},
-          "then": {"properties": {"milliseconds": {"const": null}}}
+          "if": {
+            "properties": {
+              "ran": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "milliseconds": {
+                "const": null
+              }
+            }
+          }
         },
         "flags": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/flag",
-            "properties": {"field": {"enum": ["headline", "body", "metadata", "page"]}},
-            "not": {"anyOf": [{"required": ["start"]}, {"required": ["end"]}]}
+            "properties": {
+              "field": {
+                "enum": [
+                  "headline",
+                  "body",
+                  "metadata",
+                  "page"
+                ]
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "start"
+                  ]
+                },
+                {
+                  "required": [
+                    "end"
+                  ]
+                }
+              ]
+            }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/verdict_rule"
+        }
+      ]
     },
     "text_report": {
       "type": "object",
-      "required": ["schema_version", "report_type", "verdict", "text_as_written", "text_cleaned",
-                   "tickers", "flags"],
+      "required": [
+        "schema_version",
+        "report_type",
+        "verdict",
+        "text_as_written",
+        "text_cleaned",
+        "tickers",
+        "flags"
+      ],
       "properties": {
-        "schema_version": {"$ref": "#/$defs/schema_version"},
-        "report_type": {"const": "text"},
-        "verdict": {"$ref": "#/$defs/verdict"},
-        "text_as_written": {"type": "string"},
-        "text_cleaned": {"type": "string"},
-        "tickers": {"$ref": "#/$defs/tickers"},
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "report_type": {
+          "const": "text"
+        },
+        "verdict": {
+          "$ref": "#/$defs/verdict"
+        },
+        "text_as_written": {
+          "type": "string"
+        },
+        "text_cleaned": {
+          "type": "string"
+        },
+        "tickers": {
+          "$ref": "#/$defs/tickers"
+        },
         "flags": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/flag",
-            "required": ["start", "end"],
+            "required": [
+              "start",
+              "end"
+            ],
             "properties": {
-              "field": {"const": null},
-              "start": {"type": ["integer", "null"], "minimum": 0},
-              "end": {"type": ["integer", "null"], "minimum": 0}
+              "field": {
+                "const": null
+              },
+              "start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "end": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            },
+            "anyOf": [
+              {
+                "properties": {
+                  "start": {
+                    "type": "null"
+                  },
+                  "end": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "start": {
+                    "type": "integer"
+                  },
+                  "end": {
+                    "type": "integer"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/verdict_rule"
+        }
+      ]
+    },
+    "verdict_rule": {
+      "description": "quarantine if any flag is high, review if any is medium, otherwise pass.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "flags": {
+                "contains": {
+                  "properties": {
+                    "severity": {
+                      "enum": [
+                        "high"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verdict": {
+                "const": "quarantine"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "flags": {
+                "contains": {
+                  "properties": {
+                    "severity": {
+                      "enum": [
+                        "medium"
+                      ]
+                    }
+                  }
+                },
+                "not": {
+                  "contains": {
+                    "properties": {
+                      "severity": {
+                        "enum": [
+                          "high"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verdict": {
+                "const": "review"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "flags": {
+                "not": {
+                  "contains": {
+                    "properties": {
+                      "severity": {
+                        "enum": [
+                          "high",
+                          "medium"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verdict": {
+                "const": "pass"
+              }
             }
           }
         }
-      }
+      ]
     }
   }
 }

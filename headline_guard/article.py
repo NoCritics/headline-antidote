@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from .css_values import quoted_strings
 from .html_tree import PageTooComplex
 from .html_visibility import SCREEN_READER_ONLY_REASON, parse_document, visible_text_of_element
-from .text_guard import HIGH, LOW, MEDIUM, Flag, _compact, reordered_text_flag, verdict_for_flags
+from .text_guard import HIGH, LOW, MEDIUM, REPORT_SCHEMA_VERSION, Flag, _compact, reordered_text_flag, verdict_for_flags
 
 HEADLINE_MATCH_THRESHOLD = 0.6
 SITE_NAME_SEPARATORS = (" | ", " - ", " – ", " — ", " :: ", " · ")
@@ -138,6 +138,26 @@ class ArticleResult:
     @property
     def needs_browser_check(self):
         return bool(self.browser_check_reasons)
+
+    def to_dict(self):
+        """The article report: plain JSON types, matching report_schema.json (docs/report_format.md)."""
+        flags = []
+        for flag in self.flags:
+            flags.append({
+                "category": flag.kind, "severity": flag.severity, "field": flag.field,
+                "flagged_text": flag.original, "detail": flag.detail,
+            })
+        return {
+            "schema_version": REPORT_SCHEMA_VERSION, "report_type": "article", "verdict": self.verdict,
+            "headline": self.headline, "headline_source": self.headline_source, "body": self.body,
+            "hidden_ending": self.hidden_ending, "tickers": list(self.tickers),
+            "metadata_titles": dict(self.metadata_titles),
+            "browser_check": {
+                "needed": self.needs_browser_check, "reasons": list(self.browser_check_reasons),
+                "ran": self.browser_verified, "milliseconds": self.browser_milliseconds,
+            },
+            "flags": flags,
+        }
 
 
 def _normalized_title(text):

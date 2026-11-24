@@ -94,6 +94,31 @@ class ReportTests(unittest.TestCase):
         del report["verdict"]
         self.assertFalse(self.validator.is_valid(report))
 
+    def test_schema_rejects_a_verdict_the_flags_do_not_give(self):
+        report = GUARD.analyze(f"{HOMOGLYPH_TESLA} shares surge").to_dict()
+        self.assertTrue(self.validator.is_valid(report))
+        report["verdict"] = "pass"
+        self.assertFalse(self.validator.is_valid(report))
+        report["flags"] = []
+        self.assertTrue(self.validator.is_valid(report))
+
+    def test_schema_rejects_half_known_offsets(self):
+        report = GUARD.analyze(f"{HOMOGLYPH_TESLA} shares surge").to_dict()
+        report["flags"][0]["end"] = None
+        self.assertFalse(self.validator.is_valid(report))
+        report["flags"][0]["start"] = None
+        self.assertTrue(self.validator.is_valid(report))
+
+    def test_offsets_lie_inside_the_text(self):
+        for text in (f"{HOMOGLYPH_TESLA} shares surge", "Tes​la shares‮ surge", "Ｔｅｓｌａ rally"):
+            report = GUARD.analyze(text).to_dict()
+            self.assertTrue(report["flags"], text)
+            for flag in report["flags"]:
+                self.assertLessEqual(0, flag["start"])
+                self.assertLessEqual(flag["start"], flag["end"])
+                self.assertLessEqual(flag["end"], len(report["text_as_written"]))
+                self.assertEqual(report["text_as_written"][flag["start"]:flag["end"]], flag["flagged_text"])
+
     def test_schema_rejects_offsets_in_an_article_flag(self):
         report = {
             "schema_version": "1.0", "report_type": "article", "verdict": "pass", "headline": "",

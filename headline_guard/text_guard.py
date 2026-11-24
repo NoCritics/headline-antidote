@@ -112,6 +112,10 @@ def _hidden_fragment_flag(fragment, severity):
     )
 
 
+# The version of report_schema.json that to_dict() output follows.
+REPORT_SCHEMA_VERSION = "1.0"
+
+
 def verdict_for_flags(flags):
     """'quarantine' (any high flag), 'review' (any medium flag) or 'pass'."""
     highest_rank = 0
@@ -152,6 +156,20 @@ class GuardResult:
             if entity.ticker not in found_tickers:
                 found_tickers.append(entity.ticker)
         return found_tickers
+
+    def to_dict(self):
+        """The text report: plain JSON types, matching report_schema.json (docs/report_format.md)."""
+        flags = []
+        for flag in self.flags:
+            flags.append({
+                "category": flag.kind, "severity": flag.severity, "field": None,
+                "flagged_text": flag.original, "detail": flag.detail, "start": flag.start, "end": flag.end,
+            })
+        return {
+            "schema_version": REPORT_SCHEMA_VERSION, "report_type": "text", "verdict": self.verdict,
+            "text_as_written": self.original_text, "text_cleaned": self.clean_text,
+            "tickers": self.tickers, "flags": flags,
+        }
 
 
 def _is_word_character(character):
