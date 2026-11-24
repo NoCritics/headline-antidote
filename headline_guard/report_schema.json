@@ -114,6 +114,7 @@
             "needed",
             "reasons",
             "ran",
+            "verified",
             "milliseconds"
           ],
           "properties": {
@@ -127,6 +128,9 @@
               }
             },
             "ran": {
+              "type": "boolean"
+            },
+            "verified": {
               "type": "boolean"
             },
             "milliseconds": {
@@ -146,8 +150,18 @@
           },
           "then": {
             "properties": {
+              "verified": {
+                "const": false
+              },
               "milliseconds": {
                 "const": null
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "milliseconds": {
+                "type": "number"
               }
             }
           }

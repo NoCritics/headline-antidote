@@ -24,7 +24,7 @@ dicts. The schema is [headline_guard/report_schema.json](../headline_guard/repor
 | `hidden_ending` | string | hidden text that is most of the article and runs to its end; never part of `body` |
 | `tickers` | list of strings | watched tickers named in the result, each once |
 | `metadata_titles` | object | the page's titles by name (`<title>`, `og:title`, ...) |
-| `browser_check` | object | `needed`, `reasons` (sentences; emptied once the check has run), `ran`, `milliseconds` (null unless it ran) |
+| `browser_check` | object | `needed`; `reasons` (sentences, emptied once a browser run settles the page); `ran` (the browser rendered the page); `verified` (it found and confirmed the headline); `milliseconds` (null unless it ran) |
 | `flags` | list | see below |
 
 ## Text report

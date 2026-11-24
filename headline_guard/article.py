@@ -148,7 +148,8 @@ class ArticleResult:
             "metadata_titles": dict(self.metadata_titles),
             "browser_check": {
                 "needed": self.needs_browser_check, "reasons": list(self.browser_check_reasons),
-                "ran": self.browser_verified, "milliseconds": self.browser_milliseconds,
+                "ran": self.browser_milliseconds is not None, "verified": self.browser_verified,
+                "milliseconds": self.browser_milliseconds,
             },
             "flags": [flag.to_dict() for flag in self.flags],
         }
