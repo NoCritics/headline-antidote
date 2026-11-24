@@ -22,9 +22,11 @@ dependencies = [
 [project.optional-dependencies]
 # The browser check drives the installed Google Chrome (channel="chrome"); no browser is downloaded.
 browser = ["playwright>=1.64.1"]
+# Validates reports against report_schema.json in the tests.
+test = ["jsonschema>=4.26.0"]
 
 [tool.setuptools]
 packages = ["headline_guard"]
 
 [tool.setuptools.package-data]
-headline_guard = ["unicode_data/*.txt", "unicode_data/manifest.json"]
+headline_guard = ["unicode_data/*.txt", "unicode_data/manifest.json", "report_schema.json"]

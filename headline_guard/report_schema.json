@@ -1,0 +1,1344 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://headline-guard.local/report_schema/1.0.json",
+  "title": "headline_guard report",
+  "description": "What headline_guard returns, as JSON: ArticleResult.to_dict() (report_type article) or GuardResult.to_dict() (report_type text). Text fields are empty strings when there is no text; other keys a report or flag always has use null for no value; optional flag fields are absent when they do not apply, never null. Versioning: schema_version is major.minor. A new field, or a new value of an open list (those with x-known-values), is a minor change; a renamed or removed field, or a new value of a closed list (verdict, severity, certain, field, found_by, action, report_type, browser_check.outcome), is a major change. Consumers must ignore fields they do not know, and branch on severity and action for categories they do not know. Every string taken from the page (flagged_text; in evidence looks_like, decoded_text, css, font_family, added_text, dropped_text; titles, target, the as_written and cleaned texts, and detail, which quotes them) is attacker-controlled: see docs/report_format.md, Untrusted strings.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/article_report"
+    },
+    {
+      "$ref": "#/$defs/text_report"
+    }
+  ],
+  "$defs": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "verdict": {
+      "description": "quarantine when any flag is high, review when any is medium, else pass (enforced by verdict_rule).",
+      "enum": [
+        "pass",
+        "review",
+        "quarantine"
+      ]
+    },
+    "tickers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "snake_case": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "flag_id": {
+      "type": "string",
+      "pattern": "^f[0-9]+$"
+    },
+    "place": {
+      "description": "Where on the page: a tag name (any element a headline_xpath may point at), a title's name, or body.",
+      "type": "string",
+      "x-known-values": [
+        "h1",
+        "h2",
+        "og:title",
+        "title",
+        "twitter:title",
+        "json_ld",
+        "feed_title",
+        "body"
+      ]
+    },
+    "title_name": {
+      "type": "string",
+      "x-known-values": [
+        "og:title",
+        "title",
+        "twitter:title",
+        "json_ld",
+        "feed_title"
+      ]
+    },
+    "verdict_rule": {
+      "description": "The verdict follows from the flags' severities.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "flags": {
+                "contains": {
+                  "required": [
+                    "severity"
+                  ],
+                  "properties": {
+                    "severity": {
+                      "const": "high"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verdict": {
+                "const": "quarantine"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "flags": {
+                "not": {
+                  "contains": {
+                    "required": [
+                      "severity"
+                    ],
+                    "properties": {
+                      "severity": {
+                        "const": "high"
+                      }
+                    }
+                  }
+                },
+                "contains": {
+                  "required": [
+                    "severity"
+                  ],
+                  "properties": {
+                    "severity": {
+                      "const": "medium"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verdict": {
+                "const": "review"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "flags": {
+                "not": {
+                  "contains": {
+                    "required": [
+                      "severity"
+                    ],
+                    "properties": {
+                      "severity": {
+                        "enum": [
+                          "high",
+                          "medium"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verdict": {
+                "const": "pass"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "article_report": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "report_type",
+        "verdict",
+        "headline_as_written",
+        "headline_cleaned",
+        "headline_source",
+        "body_cleaned",
+        "hidden_ending",
+        "tickers",
+        "titles",
+        "flags",
+        "browser_check"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/$defs/verdict_rule"
+        }
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "report_type": {
+          "const": "article"
+        },
+        "verdict": {
+          "$ref": "#/$defs/verdict"
+        },
+        "headline_as_written": {
+          "description": "All of the headline element's text, hidden parts included: what an HTML scraper reads, cut at 2,000 code points (headline_as_written_truncated). Empty when no heading element was used.",
+          "type": "string",
+          "maxLength": 2000
+        },
+        "headline_as_written_truncated": {
+          "description": "True when headline_as_written was cut at 2,000 code points.",
+          "type": "boolean"
+        },
+        "headline_cleaned": {
+          "description": "The headline a reader sees, with hidden text removed and look-alike letters replaced: what to give the model. Empty when no headline was found.",
+          "type": "string"
+        },
+        "headline_source": {
+          "$ref": "#/$defs/headline_source"
+        },
+        "body_cleaned": {
+          "description": "The article text a reader sees, cleaned the same way. Empty when no body was found.",
+          "type": "string"
+        },
+        "hidden_ending": {
+          "description": "Hidden text that is most of the article (a \"Read more\" collapse, a paywall, or a hidden ending), set aside by flags with action set_aside; never part of body_cleaned. Usually empty.",
+          "type": "string"
+        },
+        "tickers": {
+          "description": "Watched tickers named in headline_cleaned or body_cleaned (not in removed text).",
+          "$ref": "#/$defs/tickers"
+        },
+        "titles": {
+          "description": "Every title the guard read from the page or was given, by name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flag",
+            "properties": {
+              "field": {
+                "enum": [
+                  "headline",
+                  "body",
+                  "metadata",
+                  "page"
+                ]
+              },
+              "start": false,
+              "end": false
+            }
+          }
+        },
+        "browser_check": {
+          "$ref": "#/$defs/browser_check"
+        }
+      }
+    },
+    "text_report": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "report_type",
+        "verdict",
+        "text_as_written",
+        "text_cleaned",
+        "tickers",
+        "flags"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/$defs/verdict_rule"
+        }
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "report_type": {
+          "const": "text"
+        },
+        "verdict": {
+          "$ref": "#/$defs/verdict"
+        },
+        "text_as_written": {
+          "type": "string"
+        },
+        "text_cleaned": {
+          "type": "string"
+        },
+        "tickers": {
+          "description": "Watched tickers named in text_cleaned.",
+          "$ref": "#/$defs/tickers"
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flag",
+            "properties": {
+              "field": {
+                "const": null
+              },
+              "start": {
+                "description": "Offset of flagged_text in text_as_written, in Unicode code points (not UTF-16 or UTF-8 units: they differ for characters outside the Basic Multilingual Plane, such as tag characters).",
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "description": "Exclusive end offset in text_as_written, in code points.",
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "dependentRequired": {
+              "start": [
+                "end"
+              ],
+              "end": [
+                "start"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "headline_source": {
+      "type": "object",
+      "required": [
+        "from",
+        "matched",
+        "browser"
+      ],
+      "properties": {
+        "from": {
+          "description": "The element or title the headline text was taken from; null when none was found or the page was not read.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/place"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "matched": {
+          "description": "The title that confirms the heading is the headline; null when unconfirmed or when the text came from a title.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/title_name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "browser": {
+          "description": "rendered_text: taken from Chrome's rendering; all_words_shown: Chrome showed every word of the static headline; null: no browser check.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/snake_case",
+              "x-known-values": [
+                "rendered_text",
+                "all_words_shown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "browser_check": {
+      "type": "object",
+      "required": [
+        "needed",
+        "ran",
+        "milliseconds",
+        "reasons",
+        "outcome"
+      ],
+      "properties": {
+        "needed": {
+          "description": "True while a browser check is still outstanding: there are reasons and no conclusive run has settled them. False after a conclusive run, even though reasons are kept.",
+          "type": "boolean"
+        },
+        "ran": {
+          "type": "boolean"
+        },
+        "milliseconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reasons": {
+          "description": "Why a static reading could not settle the page. Kept after the browser has run, as a record.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/browser_reason"
+          }
+        },
+        "outcome": {
+          "description": "What the browser's rendering showed, for each part it compares with the static reading. differs: the browser shows different text (hidden words, script-added words, a replaced heading; the flags say what); matches: the same text, so suspicions on that part are cleared; inconclusive: too little was shown to compare; null: that part was not compared, or the check did not run.",
+          "type": "object",
+          "required": [
+            "headline",
+            "body"
+          ],
+          "properties": {
+            "headline": {
+              "enum": [
+                "differs",
+                "matches",
+                "inconclusive",
+                null
+              ]
+            },
+            "body": {
+              "enum": [
+                "differs",
+                "matches",
+                "inconclusive",
+                null
+              ]
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "ran": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "milliseconds": {
+            "const": null
+          },
+          "outcome": {
+            "properties": {
+              "headline": {
+                "const": null
+              },
+              "body": {
+                "const": null
+              }
+            }
+          }
+        }
+      }
+    },
+    "browser_reason": {
+      "type": "object",
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "description": "Where a reason means the same as a flag category, it uses the same string.",
+          "$ref": "#/$defs/snake_case",
+          "x-known-values": [
+            "svg_off_drawing",
+            "headline_adds_words",
+            "embedded_font",
+            "script_in_headline",
+            "event_handler_in_headline",
+            "script_changes_headline",
+            "script_changes_headline_tag",
+            "script_changes_body",
+            "body_text_not_in_page_copy",
+            "hidden_text_in_article",
+            "page_too_complex_to_read"
+          ]
+        },
+        "flag": {
+          "description": "The id of the flag raised for the same finding, if any.",
+          "$ref": "#/$defs/flag_id"
+        },
+        "target": {
+          "description": "For display only: the id, class or tag a script looks up, or the title or text the page was compared with. Page-controlled; cut at 500 code points.",
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "character": {
+      "type": "object",
+      "required": [
+        "code_point",
+        "name"
+      ],
+      "properties": {
+        "code_point": {
+          "type": "string",
+          "pattern": "^U\\+(?:[0-9A-F]{4,5}|10[0-9A-F]{4})$"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "flag": {
+      "type": "object",
+      "required": [
+        "id",
+        "category",
+        "severity",
+        "certain",
+        "field",
+        "found_by",
+        "action",
+        "detail",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "description": "Unique within one report only, for confirms links.",
+          "$ref": "#/$defs/flag_id"
+        },
+        "category": {
+          "$ref": "#/$defs/snake_case",
+          "x-known-values": [
+            "hidden_tag_characters",
+            "invisible_character",
+            "bidi_control",
+            "compatibility_lookalike",
+            "excessive_combining_marks",
+            "possible_watchlist_lookalike",
+            "watchlist_homoglyph",
+            "accented_watchlist_name",
+            "mixed_script_word",
+            "whole_script_lookalike",
+            "hidden_html_text",
+            "html_comment_text",
+            "reordered_text",
+            "css_generated_text",
+            "script_generated_text",
+            "embedded_font",
+            "headline_adds_words",
+            "headline_unconfirmed",
+            "headline_from_metadata",
+            "headline_not_found",
+            "headline_not_found_in_browser",
+            "scraped_text_differs",
+            "hidden_text_in_article",
+            "most_of_article_hidden",
+            "body_text_not_in_page_copy",
+            "article_body_not_found",
+            "text_behind_preview_window",
+            "page_too_complex_to_read",
+            "browser_check_incomplete",
+            "browser_check_inconclusive",
+            "suspicion_cleared"
+          ]
+        },
+        "severity": {
+          "description": "How bad the finding is, not how sure the guard is (see certain).",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "certain": {
+          "description": "false when the guard suspects but has not confirmed the finding (a guessed page background, words no title has, CSS it cannot evaluate); the detail sentence then says \"possibly\".",
+          "type": "boolean"
+        },
+        "field": {
+          "description": "Which part of the result the flag affects: headline, body, metadata (a title not used as the headline) or page (the page as a whole); null in a text report.",
+          "enum": [
+            "headline",
+            "body",
+            "metadata",
+            "page",
+            null
+          ]
+        },
+        "found_by": {
+          "enum": [
+            "static",
+            "browser"
+          ]
+        },
+        "found_in": {
+          "description": "Where on the page the flagged text sits; absent for whole-page flags and in text reports.",
+          "$ref": "#/$defs/place"
+        },
+        "flagged_text": {
+          "description": "The page text this flag is about, exactly as it appears on the page (raw: it may hold invisible and control characters), cut at 500 code points. Absent when the flag is not about a piece of text.",
+          "type": "string",
+          "maxLength": 500
+        },
+        "action": {
+          "description": "removed: not in the cleaned text; replaced: rewritten as looks_like; set_aside: moved to hidden_ending; none: reported only.",
+          "enum": [
+            "removed",
+            "replaced",
+            "set_aside",
+            "none"
+          ]
+        },
+        "detail": {
+          "description": "One sentence for people, built from the fields above; never parse it. Page text it quotes has invisible and control characters written as visible escapes (backslash-u and the code point), so it is safe to log and display; it is still page text: see Untrusted strings.",
+          "type": "string"
+        },
+        "truncated": {
+          "description": "True when flagged_text or any evidence string was cut at 500 code points.",
+          "type": "boolean"
+        },
+        "confirms": {
+          "description": "The id of a flag in the same report that this one confirms (a browser check confirming a static suspicion).",
+          "$ref": "#/$defs/flag_id"
+        },
+        "tickers": {
+          "description": "The watched tickers of the name this finding imitates or sits inside; a name may map to several (GOOGL, GOOG). Distinct from the report's tickers, which are those named in the cleaned text.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "const": "replaced"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "watchlist_homoglyph"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "tickers"
+            ],
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like",
+                  "characters"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "accented_watchlist_name"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "tickers"
+            ],
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like",
+                  "characters"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "possible_watchlist_lookalike"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "tickers"
+            ],
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like",
+                  "script"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "mixed_script_word"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "script",
+                  "characters"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "whole_script_lookalike"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "script",
+                  "looks_like"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "compatibility_lookalike"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like",
+                  "characters"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "hidden_tag_characters"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "decoded_text",
+                  "characters"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "invisible_character"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "characters"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "bidi_control"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "characters"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "excessive_combining_marks"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "characters",
+                  "mark_count"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "hidden_html_text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "cause"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "hidden_text_in_article"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "cause"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "headline_adds_words"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "compared_with"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "reordered_text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "css"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "embedded_font"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "font_family"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "headline_not_found"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "xpath"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "scraped_text_differs"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "difference"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category",
+              "found_by"
+            ],
+            "properties": {
+              "category": {
+                "const": "most_of_article_hidden"
+              },
+              "found_by": {
+                "const": "static"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "passage_count"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category",
+              "found_by"
+            ],
+            "properties": {
+              "category": {
+                "const": "most_of_article_hidden"
+              },
+              "found_by": {
+                "const": "browser"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "words_shown",
+                  "words_total"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "body_text_not_in_page_copy"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "compared_with",
+                  "passage_count"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "text_behind_preview_window"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "paragraph_count"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "page_too_complex_to_read"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "reader_message"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "browser_check_inconclusive"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "words_shown",
+                  "words_total"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "category"
+            ],
+            "properties": {
+              "category": {
+                "const": "suspicion_cleared"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "cleared_category"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "description": "A fixed core every flag shares, plus evidence for category-specific facts. Known categories require their evidence (allOf below); unknown categories pass with any evidence."
+    },
+    "evidence": {
+      "description": "Category-specific facts, documented per category in docs/report_format.md. Always present; {} when a category has none.",
+      "type": "object",
+      "properties": {
+        "compared_with": {
+          "description": "The references the flagged text was compared with: titles, the feed's or JSON-LD article text.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "x-known-values": [
+              "og:title",
+              "title",
+              "twitter:title",
+              "json_ld",
+              "feed_title",
+              "feed_body",
+              "json_ld_body"
+            ]
+          }
+        },
+        "looks_like": {
+          "description": "What the flagged text imitates or reads as; required whenever action is replaced.",
+          "type": "string",
+          "maxLength": 500
+        },
+        "watched_name": {
+          "description": "The watched company name the flagged characters sit inside.",
+          "type": "string"
+        },
+        "script": {
+          "description": "The Unicode script of the flagged word, e.g. Cyrillic or Latin.",
+          "type": "string"
+        },
+        "characters": {
+          "description": "The Unicode characters involved, each listed once.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/character"
+          }
+        },
+        "decoded_text": {
+          "description": "What invisible tag characters spell to a model.",
+          "type": "string",
+          "maxLength": 500
+        },
+        "font_family": {
+          "description": "The embedded font the headline is drawn with.",
+          "type": "string",
+          "maxLength": 500
+        },
+        "xpath": {
+          "description": "The headline_xpath the caller gave.",
+          "type": "string"
+        },
+        "cause": {
+          "description": "How the text was hidden. A static reading names the method; a browser sees only that text is not shown (not_shown_in_browser), except for SVG text placed off its drawing, which it reports as svg_off_drawing.",
+          "$ref": "#/$defs/snake_case",
+          "x-known-values": [
+            "display_none",
+            "content_visibility_hidden",
+            "visibility_hidden",
+            "transparent",
+            "blurred",
+            "tiny_font",
+            "letters_stacked",
+            "same_color_as_background",
+            "clipped",
+            "scaled_to_zero",
+            "off_screen",
+            "screen_reader_only",
+            "covered",
+            "behind_background",
+            "closed_details",
+            "not_rendered_element",
+            "hidden_attribute",
+            "hidden_input",
+            "svg_not_drawn",
+            "svg_not_painted",
+            "svg_off_drawing",
+            "unknown",
+            "not_shown_in_browser"
+          ]
+        },
+        "css": {
+          "description": "The CSS or markup that hides it, as evidence; absent when none applies.",
+          "type": "string",
+          "maxLength": 500
+        },
+        "on_enclosing_element": {
+          "description": "True when the hiding is on an element around the flagged text, not on its own element.",
+          "type": "boolean"
+        },
+        "kicker": {
+          "description": "headline_adds_words: the words are a label in their own element before the headline.",
+          "type": "boolean"
+        },
+        "conditions_unchecked": {
+          "description": "css_generated_text: CSS may add other text here under conditions that were not checked.",
+          "type": "boolean"
+        },
+        "difference": {
+          "description": "scraped_text_differs: what differs between the scraper's text and the visible text.",
+          "$ref": "#/$defs/snake_case",
+          "x-known-values": [
+            "added",
+            "dropped",
+            "added_and_dropped",
+            "same_words"
+          ]
+        },
+        "added_text": {
+          "description": "scraped_text_differs: runs of words the scraper's text has and the visible text lacks.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "dropped_text": {
+          "description": "scraped_text_differs: runs of visible words the scraper's text lacks.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "passage_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "paragraph_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mark_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "words_shown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "words_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reader_message": {
+          "description": "page_too_complex_to_read: the reader's own explanation; free text, never a stack trace or a path.",
+          "type": "string"
+        },
+        "cleared_category": {
+          "description": "suspicion_cleared: the category of the static suspicion a browser cleared.",
+          "$ref": "#/$defs/snake_case"
+        }
+      }
+    }
+  }
+}
