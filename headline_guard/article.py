@@ -141,12 +141,6 @@ class ArticleResult:
 
     def to_dict(self):
         """The article report: plain JSON types, matching report_schema.json (docs/report_format.md)."""
-        flags = []
-        for flag in self.flags:
-            flags.append({
-                "category": flag.kind, "severity": flag.severity, "field": flag.field,
-                "flagged_text": flag.original, "detail": flag.detail,
-            })
         return {
             "schema_version": REPORT_SCHEMA_VERSION, "report_type": "article", "verdict": self.verdict,
             "headline": self.headline, "headline_source": self.headline_source, "body": self.body,
@@ -156,7 +150,7 @@ class ArticleResult:
                 "needed": self.needs_browser_check, "reasons": list(self.browser_check_reasons),
                 "ran": self.browser_verified, "milliseconds": self.browser_milliseconds,
             },
-            "flags": flags,
+            "flags": [flag.to_dict() for flag in self.flags],
         }
 
 

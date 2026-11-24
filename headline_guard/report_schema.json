@@ -183,11 +183,7 @@
           }
         }
       },
-      "allOf": [
-        {
-          "$ref": "#/$defs/verdict_rule"
-        }
-      ]
+      "$ref": "#/$defs/verdict_rule"
     },
     "text_report": {
       "type": "object",
@@ -246,36 +242,31 @@
                 "minimum": 0
               }
             },
-            "anyOf": [
-              {
-                "properties": {
-                  "start": {
-                    "type": "null"
-                  },
-                  "end": {
-                    "type": "null"
-                  }
-                }
-              },
-              {
-                "properties": {
-                  "start": {
-                    "type": "integer"
-                  },
-                  "end": {
-                    "type": "integer"
-                  }
+            "if": {
+              "properties": {
+                "start": {
+                  "type": "null"
                 }
               }
-            ]
+            },
+            "then": {
+              "properties": {
+                "end": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "end": {
+                  "type": "integer"
+                }
+              }
+            }
           }
         }
       },
-      "allOf": [
-        {
-          "$ref": "#/$defs/verdict_rule"
-        }
-      ]
+      "$ref": "#/$defs/verdict_rule"
     },
     "verdict_rule": {
       "description": "quarantine if any flag is high, review if any is medium, otherwise pass.",

@@ -119,17 +119,13 @@ class ReportTests(unittest.TestCase):
                 self.assertLessEqual(flag["end"], len(report["text_as_written"]))
                 self.assertEqual(report["text_as_written"][flag["start"]:flag["end"]], flag["flagged_text"])
 
+    @unittest.skipIf(importlib.util.find_spec("trafilatura") is None, "trafilatura not installed")
     def test_schema_rejects_offsets_in_an_article_flag(self):
-        report = {
-            "schema_version": "1.0", "report_type": "article", "verdict": "pass", "headline": "",
-            "headline_source": "", "body": "", "hidden_ending": "", "tickers": [], "metadata_titles": {},
-            "browser_check": {"needed": False, "reasons": [], "ran": False, "milliseconds": None},
-            "flags": [{"category": "x", "severity": "low", "field": "body", "flagged_text": "",
-                       "detail": "", "start": 0, "end": 1}],
-        }
-        self.assertFalse(self.validator.is_valid(report))
-        del report["flags"][0]["start"], report["flags"][0]["end"]
+        page = build_page(headline_html=HEADLINE.replace("Tesla", HOMOGLYPH_TESLA))
+        report = GUARD.extract_article(page).to_dict()
         self.assertTrue(self.validator.is_valid(report))
+        report["flags"][0].update(start=0, end=5)
+        self.assertFalse(self.validator.is_valid(report))
 
 
 if __name__ == "__main__":

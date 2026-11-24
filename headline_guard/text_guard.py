@@ -97,6 +97,11 @@ class Flag:
     # For article extraction: which output the flag belongs to ("headline", "body", "metadata", "page").
     field: str | None = None
 
+    def to_dict(self):
+        """The flag as it appears in a report (report_schema.json), without offsets."""
+        return {"category": self.kind, "severity": self.severity, "field": self.field,
+                "flagged_text": self.original, "detail": self.detail}
+
 
 def _html_comment_flag(fragment):
     return Flag(
@@ -159,16 +164,11 @@ class GuardResult:
 
     def to_dict(self):
         """The text report: plain JSON types, matching report_schema.json (docs/report_format.md)."""
-        flags = []
-        for flag in self.flags:
-            flags.append({
-                "category": flag.kind, "severity": flag.severity, "field": None,
-                "flagged_text": flag.original, "detail": flag.detail, "start": flag.start, "end": flag.end,
-            })
         return {
             "schema_version": REPORT_SCHEMA_VERSION, "report_type": "text", "verdict": self.verdict,
             "text_as_written": self.original_text, "text_cleaned": self.clean_text,
-            "tickers": self.tickers, "flags": flags,
+            "tickers": self.tickers,
+            "flags": [{**flag.to_dict(), "start": flag.start, "end": flag.end} for flag in self.flags],
         }
 
 
