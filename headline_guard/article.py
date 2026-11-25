@@ -578,7 +578,10 @@ class _ArticleExtraction:
                   and _leading_label_words(headline_element) == list(unexplained)
                   and list(inserted[:len(unexplained)]) == list(unexplained))
         severity = MEDIUM if meaningful and not kicker else LOW
-        self.flags.append(Flag("headline_adds_words", severity, None, None, " ".join(unexplained), {}, "headline"))
+        evidence = {"compared_with": label}
+        if kicker:
+            evidence["kicker"] = True
+        self.flags.append(Flag("headline_adds_words", severity, None, None, " ".join(unexplained), evidence, "headline"))
         # Even one ordinary word could be hidden ("surge <span>fraud</span>"): let a browser settle it.
         self._add_browser_reason(f"the heading adds words to the {label}")
         if not meaningful:
@@ -771,10 +774,10 @@ class _ArticleExtraction:
         feed's full text). Subheadings and captions often differ too, so this only asks for
         a browser check and never changes the verdict."""
         reference = self.feed_body
-        reference_label = "feed's article text"
+        reference_label, compared_with = "feed's article text", "feed article text"
         if not reference:
             reference = _first_json_ld_string(self.root, "articleBody")
-            reference_label = "page's JSON-LD articleBody"
+            reference_label, compared_with = "page's JSON-LD articleBody", "JSON-LD articleBody"
         if not reference or not body_text:
             return
         coverage, runs = _missing_runs(reference, body_text)
@@ -784,7 +787,10 @@ class _ArticleExtraction:
         runs = _runs_not_in_descriptions(runs, _page_descriptions(self.root))
         if not runs:
             return
-        self.flags.append(Flag("body_text_not_in_page_copy", LOW, None, None, " / ".join(runs)[:500], {}, "body"))
+        self.flags.append(Flag(
+            "body_text_not_in_page_copy", LOW, None, None, " / ".join(runs)[:500], {"compared_with": compared_with},
+            "body",
+        ))
         self._add_browser_reason(f"body passages missing from the {reference_label}")
 
     # ---- body -------------------------------------------------------------
@@ -833,7 +839,9 @@ class _ArticleExtraction:
                 continue
             if _compact(fragment_text) not in body_compact:
                 continue
-            self.flags.append(Flag("possibly_hidden_text", LOW, None, None, fragment_text[:500], {}, "body"))
+            self.flags.append(Flag(
+                "possibly_hidden_text", LOW, None, None, fragment_text[:500], hiding_evidence(fragment), "body",
+            ))
             self._add_browser_reason("body text whose color may match the page background")
             return
 
@@ -907,7 +915,9 @@ class _ArticleExtraction:
                     # Low: the text is removed, so the model never sees it, and real pages hide
                     # their own text all the time (paywall and print notices, collapsed bios).
                     # The flag still tells the caller the page carried hidden text.
-                    self.flags.append(Flag("hidden_text_in_article", LOW, None, None, fragment.text[:500], {}, "body"))
+                    self.flags.append(Flag(
+                        "hidden_text_in_article", LOW, None, None, fragment.text[:500], hiding_evidence(fragment), "body",
+                    ))
                     if not short_label:
                         hidden_passages.append((unpruned_compact.find(fragment_compact), fragment_compact,
                                                 fragment_full_text, len(self.flags) - 1))
