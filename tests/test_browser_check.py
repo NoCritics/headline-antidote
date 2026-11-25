@@ -619,6 +619,12 @@ class BrowserCheckTests(unittest.TestCase):
         self.assertIsNotNone(verified.browser_milliseconds)
         self.assertIn("possibly_hidden_text", [flag.kind for flag in verified.flags])
 
+    def test_a_page_that_removes_its_body_is_checked_without_crashing(self):
+        article, verified = self.check(page(f'{HEADLINE}<span id="p"> {PAYLOAD}</span>',
+                                            body_extra="<script>document.body.remove();</script>"))
+        self.assertTrue(article.needs_browser_check)
+        self.assertIsNotNone(verified.browser_milliseconds)
+
     def test_plain_white_body_text_the_browser_judges_is_reported_hidden(self):
         article, verified = self.check(page(HEADLINE, article_extra=(
             '<p style="color:#fff">Insiders say the company is preparing mass layoffs and a profit warning '
