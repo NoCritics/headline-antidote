@@ -103,7 +103,7 @@ class InvisibleCharacterTests(unittest.TestCase):
         self.assertEqual(result.verdict, "quarantine")
         self.assertEqual(result.clean_text, "Apple beats estimates")
         self.assertEqual(result.flags[0].kind, "hidden_tag_characters")
-        self.assertIn("losses and layoffs", result.flags[0].detail)
+        self.assertEqual(result.flags[0].evidence, {"decoded_text": " losses and layoffs"})
 
     def test_bidi_override_in_latin_headline(self):
         result = GUARD.analyze("Tesla ‮egrus‬ shares")
@@ -179,7 +179,7 @@ class EvasionOfLanguageExemptionTests(unittest.TestCase):
         )
         result = GUARD.analyze(headline)
         self.assertEqual(result.verdict, "quarantine")
-        self.assertIn("lossesandlayoffs", result.flags[0].detail)
+        self.assertEqual(result.flags[0].evidence, {"decoded_text": "lossesandlayoffs"})
 
     def test_accent_added_to_watched_name(self):
         result = GUARD.analyze("Tésla soars")

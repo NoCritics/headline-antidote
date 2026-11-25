@@ -17,57 +17,57 @@ def hidden_text_flags(result):
 
 
 class HiddenTextTests(unittest.TestCase):
-    def assert_hidden_text_caught(self, html, expected_reason_fragment):
+    def assert_hidden_text_caught(self, html, cause, css=None):
         result = GUARD.analyze_html(html)
         self.assertEqual(result.clean_text, VISIBLE_HEADLINE)
         self.assertEqual(result.verdict, "quarantine")
         flags = hidden_text_flags(result)
         self.assertEqual(len(flags), 1, result.flags)
         self.assertEqual(flags[0].original, "losses and layoffs")
-        self.assertIn(expected_reason_fragment, flags[0].detail)
+        self.assertEqual(flags[0].evidence, {"cause": cause} if css is None else {"cause": cause, "css": css})
 
     def test_paper_display_none(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<span style="display:none"> losses and layoffs</span></h1>',
-            "display:none",
+            "display_none", "display:none",
         )
 
     def test_paper_zero_font_size(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<span style="font-size: 0pt"> losses and layoffs</span></h1>',
-            "font-size",
+            "tiny_font", "font-size:0pt",
         )
 
     def test_text_color_matches_background(self):
         self.assert_hidden_text_caught(
             f'<h1 style="background-color:#fff">{VISIBLE_HEADLINE}'
             f'<span style="color: white"> losses and layoffs</span></h1>',
-            "nearly matches its background",
+            "same_color_as_background", "color:white",
         )
 
     def test_near_background_color(self):
         self.assert_hidden_text_caught(
             f'<h1 style="background:#ffffff">{VISIBLE_HEADLINE}'
             f'<span style="color:#fefefe">losses and layoffs</span></h1>',
-            "nearly matches its background",
+            "same_color_as_background", "color:#fefefe",
         )
 
     def test_tiny_font_size(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<span style="font-size:1px">losses and layoffs</span></h1>',
-            "font-size:1px",
+            "tiny_font", "font-size:1px",
         )
 
     def test_near_zero_opacity(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<span style="opacity:0.01">losses and layoffs</span></h1>',
-            "opacity",
+            "transparent", "opacity:0.01",
         )
 
     def test_near_transparent_rgba_text(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<span style="color:rgba(0,0,0,0.02)">losses and layoffs</span></h1>',
-            "transparent",
+            "transparent", "color:rgba(0,0,0,0.02)",
         )
 
     def test_white_text_without_declared_background_is_medium(self):
@@ -79,50 +79,51 @@ class HiddenTextTests(unittest.TestCase):
         self.assertEqual(result.verdict, "review")
         flags = hidden_text_flags(result)
         self.assertEqual(len(flags), 1)
-        self.assertIn("guess", flags[0].detail)
+        self.assertEqual(flags[0].severity, "medium")
+        self.assertEqual(flags[0].evidence, {"cause": "same_color_as_background", "css": "color:#fff"})
 
     def test_visibility_hidden_with_important(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<b style="visibility: hidden !important">losses and layoffs</b></h1>',
-            "visibility:hidden",
+            "visibility_hidden", "visibility:hidden",
         )
 
     def test_zero_opacity(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<span style="opacity:0">losses and layoffs</span></h1>',
-            "opacity",
+            "transparent", "opacity:0",
         )
 
     def test_off_screen_position(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<span style="position:absolute;left:-9999px">losses and layoffs</span></h1>',
-            "off-screen",
+            "off_screen", "left:-9999px",
         )
 
     def test_hidden_attribute(self):
         self.assert_hidden_text_caught(
             f"<h1>{VISIBLE_HEADLINE}<span hidden>losses and layoffs</span></h1>",
-            "hidden attribute",
+            "hidden_attribute",
         )
 
     def test_class_rule_in_style_block(self):
         self.assert_hidden_text_caught(
             "<style>.note { display: none }</style>"
             f'<h1>{VISIBLE_HEADLINE}<span class="note">losses and layoffs</span></h1>',
-            "display:none",
+            "display_none", "display:none",
         )
 
     def test_screen_reader_only_clip_pattern(self):
         self.assert_hidden_text_caught(
             f'<h1>{VISIBLE_HEADLINE}<span style="position:absolute;width:1px;height:1px;'
             f'overflow:hidden;clip:rect(0,0,0,0)">losses and layoffs</span></h1>',
-            "clip",
+            "clipped", "clip:rect(0,0,0,0)",
         )
 
     def test_noscript_content(self):
         self.assert_hidden_text_caught(
             f"<h1>{VISIBLE_HEADLINE}<noscript>losses and layoffs</noscript></h1>",
-            "noscript",
+            "not_rendered_element",
         )
 
     def test_comment_is_reported_as_medium(self):
@@ -134,6 +135,73 @@ class HiddenTextTests(unittest.TestCase):
         result = GUARD.analyze_html("<h1><a href='/x'>Теsla</a> shares surge</h1>")
         self.assertEqual(result.clean_text, "Tesla shares surge")
         self.assertEqual(result.verdict, "quarantine")
+
+
+HIDING_CAUSES = (
+    # (html around the payload, cause, css); every hiding method in the spec's Causes table.
+    ('<span style="display:none">{p}</span>', "display_none", "display:none"),
+    ('<span style="content-visibility:hidden">{p}</span>', "content_visibility_hidden", "content-visibility:hidden"),
+    ('<span style="visibility:collapse">{p}</span>', "visibility_hidden", "visibility:collapse"),
+    ('<span style="opacity:0">{p}</span>', "transparent", "opacity:0"),
+    ('<span style="filter:opacity(0)">{p}</span>', "transparent", "filter:opacity(0)"),
+    ('<span style="color:rgb(0 0 0 / 0)">{p}</span>', "transparent", "color:rgb(0 0 0 / 0)"),
+    ('<span style="filter:blur(20px)">{p}</span>', "blurred", "filter:blur(20px)"),
+    ('<span style="font-size:0">{p}</span>', "tiny_font", "font-size:0"),
+    ('<span style="font:0/0 a">{p}</span>', "tiny_font", "font:0/0 a"),
+    ('<span style="letter-spacing:-1em">{p}</span>', "letters_stacked", "letter-spacing:-1em"),
+    ('<span style="color:#fff;background:#fff">{p}</span>', "same_color_as_background", "color:#fff"),
+    ('<span style="clip:rect(0 0 0 0)">{p}</span>', "clipped", "clip:rect(0 0 0 0)"),
+    ('<span style="clip-path:inset(50%)">{p}</span>', "clipped", "clip-path:inset(50%)"),
+    ('<span style="display:inline-block;line-height:0;overflow:hidden">{p}</span>', "clipped",
+     "line-height:0; overflow:hidden"),
+    ('<span style="width:0;overflow:hidden">{p}</span>', "clipped", "width:0; overflow:hidden"),
+    ('<span style="transform:scale(0)">{p}</span>', "scaled_to_zero", "transform:scale(0)"),
+    ('<span style="scale:0">{p}</span>', "scaled_to_zero", "scale:0"),
+    ('<span style="position:absolute;left:-9999px">{p}</span>', "off_screen", "left:-9999px"),
+    ('<span style="display:inline-block;transform:translateX(-9999px)">{p}</span>', "off_screen",
+     "transform:translatex(-9999px)"),
+    ('<span style="display:inline-block;translate:-9999px">{p}</span>', "off_screen", "translate:-9999px"),
+    ('<span style="text-indent:-9999px">{p}</span>', "off_screen", "text-indent:-9999px"),
+    ('<span style="display:inline-block;width:1px;height:1px;overflow:hidden">{p}</span>', "screen_reader_only",
+     "width:1px; overflow:hidden"),
+    ('<span style="position:relative">{p}<i style="position:absolute;inset:0;background:#fff"></i></span>',
+     "covered", None),
+    ('<span style="background:#fff"><span style="position:relative;z-index:-1">{p}</span></span>',
+     "behind_background", "z-index:-1"),
+    ('<details><summary></summary>{p}</details>', "closed_details", None),
+    ('<template>{p}</template>', "not_rendered_element", None),
+    ('<span hidden>{p}</span>', "hidden_attribute", None),
+    ('<svg><title>{p}</title></svg>', "svg_not_drawn", None),
+    ('<svg width="0" height="50"><text x="0" y="20">{p}</text></svg>', "svg_not_drawn", None),
+    ('<svg width="300" height="50"><text x="0" y="20" fill="none">{p}</text></svg>', "svg_not_painted", None),
+    ('<svg width="300" height="50"><text x="10" y="0">{p}</text></svg>', "svg_off_drawing", None),
+    # An enclosing element's cause, and its rule, belong to the text inside it.
+    ('<div style="display:none"><span>{p}</span></div>', "display_none", "display:none"),
+)
+
+
+class HidingCauseTests(unittest.TestCase):
+    """Each hiding method reports its cause and, when a CSS rule hides the text, the rule."""
+
+    def test_each_method_names_its_cause_and_rule(self):
+        for template, cause, css in HIDING_CAUSES:
+            with self.subTest(template=template):
+                html = f"<h1>{VISIBLE_HEADLINE}{template.format(p=' losses and layoffs')}</h1>"
+                flags = hidden_text_flags(GUARD.analyze_html(html))
+                self.assertEqual(len(flags), 1, html)
+                self.assertEqual(flags[0].evidence, {"cause": cause} if css is None else {"cause": cause, "css": css})
+
+    def test_an_enclosing_element_gives_its_cause_to_a_whole_headline(self):
+        html = '<html><body><div style="display:none"><h1>Apple slumps</h1></div></body></html>'
+        [flag] = hidden_text_flags(GUARD.analyze_html(html, headline_xpath="//h1"))
+        self.assertEqual(flag.evidence, {"cause": "display_none", "css": "display:none"})
+
+    def test_css_this_reader_cannot_evaluate_is_its_own_cause(self):
+        # Too many @supports rules for the reader to try each combination.
+        rules = " ".join(f"@supports (x{number}: 1) {{ .k {{ display: block }} }}" for number in range(12))
+        html = f'<style>{rules}</style><h1>{VISIBLE_HEADLINE}<span class="k"> losses and layoffs</span></h1>'
+        flags = hidden_text_flags(GUARD.analyze_html(html))
+        self.assertEqual([flag.evidence for flag in flags], [{"cause": "css_not_evaluated"}])
 
 
 ARTICLE_PAGE = (
@@ -190,7 +258,7 @@ class ScrapedTextComparisonTests(unittest.TestCase):
         flags = self.scraper_flags(result)
         self.assertEqual(len(flags), 1)
         self.assertEqual(flags[0].severity, "high")
-        self.assertIn("losses and layoffs", flags[0].detail)
+        self.assertEqual(flags[0].evidence, {"added_text": "losses and layoffs"})
 
     def test_browser_dropping_text_the_guard_thought_visible_is_medium(self):
         # A browser that hid the span through a rule the guard cannot parse.
@@ -198,6 +266,7 @@ class ScrapedTextComparisonTests(unittest.TestCase):
         flags = self.scraper_flags(result)
         self.assertEqual(len(flags), 1)
         self.assertEqual(flags[0].severity, "medium")
+        self.assertEqual(flags[0].evidence, {"dropped_text": "losses and layoffs"})
         self.assertEqual(result.verdict, "review")
 
 

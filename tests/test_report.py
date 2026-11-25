@@ -1,5 +1,6 @@
-"""The JSON report: to_dict() output, checked against the published schema."""
+"""The JSON report: to_dict() output, checked against the published schema and docs/report_format.md."""
 
+import copy
 import dataclasses
 import importlib.resources
 import importlib.util
@@ -11,18 +12,100 @@ from tests.test_article import HEADLINE, build_page
 
 GUARD = HeadlineGuard(PAPER_WATCHLIST)
 HOMOGLYPH_TESLA = "Т" + "esla"  # Cyrillic capital Te
+CYRILLIC_TE = {"code_point": "U+0422", "name": "CYRILLIC CAPITAL LETTER TE"}
+ZERO_WIDTH_SPACE = chr(0x200B)
+RIGHT_TO_LEFT_OVERRIDE = chr(0x202E)
+LEFT_TO_RIGHT_OVERRIDE = chr(0x202D)
+FULL_WIDTH_BUY = "".join(chr(0xFF21 + ord(letter) - ord("A")) for letter in "BUY")
+STACKED_MARKS = chr(0x0301) + chr(0x0302) + chr(0x0303)
+HAS_TRAFILATURA = importlib.util.find_spec("trafilatura") is not None
+HAS_JSONSCHEMA = importlib.util.find_spec("jsonschema") is not None
+
+# docs/report_format.md, "Categories": category -> (severities, required evidence keys, optional ones).
+SPEC_CATEGORIES = {
+    "watchlist_homoglyph": ({"high"}, {"looks_like", "tickers", "characters"}, set()),
+    "accented_watchlist_name": ({"medium"}, {"looks_like", "tickers", "characters"}, set()),
+    "possible_watchlist_lookalike": ({"low"}, {"looks_like", "tickers"}, set()),
+    "mixed_script_word": ({"high", "medium"}, {"characters"}, set()),
+    "whole_script_lookalike": ({"medium"}, {"looks_like"}, set()),
+    "compatibility_lookalike": ({"low", "medium", "high"}, {"characters", "looks_like"},
+                                {"inside_name", "tickers"}),
+    "hidden_tag_characters": ({"high"}, {"decoded_text"}, set()),
+    "invisible_character": ({"low", "medium", "high"}, {"characters"}, {"inside_name", "tickers"}),
+    "bidi_control": ({"medium", "high"}, {"characters"}, {"inside_name", "tickers"}),
+    "excessive_combining_marks": ({"medium", "high"}, {"characters"}, {"inside_name", "tickers"}),
+    "hidden_html_text": ({"high", "medium"}, {"cause"}, {"css"}),
+    "headline_adds_words": ({"medium", "low"}, {"compared_with"}, {"kicker"}),
+    "script_generated_text": ({"medium"}, set(), set()),
+    "css_generated_text": ({"medium"}, set(), set()),
+    "html_comment_text": ({"medium"}, set(), set()),
+    "reordered_text": ({"high", "medium"}, {"css"}, set()),
+    "embedded_font": ({"medium"}, set(), set()),
+    "headline_not_found_in_browser": ({"high"}, set(), set()),
+    "headline_unconfirmed": ({"low"}, set(), set()),
+    "headline_from_metadata": ({"low"}, set(), set()),
+    "headline_not_found": ({"medium"}, set(), set()),
+    "scraper_text_differs": ({"high", "medium"}, set(), {"added_text", "dropped_text"}),
+    "hidden_text_in_article": ({"low"}, {"cause"}, {"css"}),
+    "possibly_hidden_text": ({"low"}, {"cause", "css"}, set()),
+    "most_of_article_hidden": ({"medium"}, set(), set()),
+    "body_text_not_in_page_copy": ({"low"}, {"compared_with"}, set()),
+    "text_behind_preview_window": ({"low"}, set(), set()),
+    "article_body_not_found": ({"low"}, set(), set()),
+    "page_too_complex_to_read": ({"medium"}, {"message"}, set()),
+    "browser_check_incomplete": ({"low"}, set(), set()),
+    "browser_check_inconclusive": ({"medium"}, {"words_shown", "words_total"}, set()),
+}
+CHARACTER_CATEGORIES = {
+    "watchlist_homoglyph", "accented_watchlist_name", "possible_watchlist_lookalike", "mixed_script_word",
+    "whole_script_lookalike", "compatibility_lookalike", "hidden_tag_characters", "invisible_character",
+    "bidi_control", "excessive_combining_marks",
+}
+RAISED_INSIDE_NAMES = {"compatibility_lookalike", "invisible_character", "bidi_control", "excessive_combining_marks"}
+
+
+def load_schema():
+    schema_text = importlib.resources.files("headline_guard").joinpath("report_schema.json").read_text(
+        encoding="utf-8")
+    return json.loads(schema_text)
 
 
 def load_validator():
     import jsonschema
 
-    schema_text = importlib.resources.files("headline_guard").joinpath("report_schema.json").read_text(
-        encoding="utf-8")
-    return jsonschema.Draft202012Validator(json.loads(schema_text))
+    return jsonschema.Draft202012Validator(load_schema())
 
 
-@unittest.skipIf(importlib.util.find_spec("jsonschema") is None, "jsonschema not installed (the [test] extra)")
-class ReportTests(unittest.TestCase):
+def known_causes():
+    return set(load_schema()["$defs"]["evidence"]["properties"]["cause"]["x-known-values"])
+
+
+def assert_follows_the_spec(test, report):
+    """What the schema leaves open: known categories only, each with only the evidence keys the spec lists."""
+    known = known_causes()
+    for flag in report["flags"]:
+        category, evidence = flag["category"], flag["evidence"]
+        test.assertIn(category, SPEC_CATEGORIES, flag)
+        severities, required, optional = SPEC_CATEGORIES[category]
+        test.assertIn(flag["severity"], severities, flag)
+        allowed = required | optional | ({"found_in"} if flag["field"] == "metadata" else set())
+        test.assertLessEqual(set(evidence), allowed, flag)
+        test.assertGreaterEqual(set(evidence), required, flag)
+        if "cause" in evidence:
+            test.assertIn(evidence["cause"], known, flag)
+        if category in RAISED_INSIDE_NAMES:
+            test.assertEqual(flag["severity"] == "high", "inside_name" in evidence, flag)
+        if flag["field"] == "metadata":
+            test.assertIn("found_in", evidence, flag)
+        for character in evidence.get("characters", []):
+            test.assertEqual(set(character), {"code_point", "name"}, flag)
+
+
+def flags_of(report, category):
+    return [flag for flag in report["flags"] if flag["category"] == category]
+
+
+class ReportCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.validator = load_validator()
@@ -31,7 +114,11 @@ class ReportTests(unittest.TestCase):
         errors = [error.message for error in self.validator.iter_errors(report)]
         self.assertEqual(errors, [], json.dumps(report, ensure_ascii=False, indent=1))
         json.dumps(report)  # plain JSON types only
+        assert_follows_the_spec(self, report)
 
+
+@unittest.skipUnless(HAS_JSONSCHEMA, "jsonschema not installed (the [test] extra)")
+class ReportTests(ReportCase):
     def test_text_report_holds_the_answers(self):
         report = GUARD.analyze(f"{HOMOGLYPH_TESLA} shares surge").to_dict()
         self.assert_valid(report)
@@ -46,7 +133,9 @@ class ReportTests(unittest.TestCase):
         self.assertIsNone(flag["field"])
         self.assertEqual(flag["flagged_text"], HOMOGLYPH_TESLA)
         self.assertEqual((flag["start"], flag["end"]), (0, 5))
-        self.assertTrue(flag["detail"])
+        self.assertEqual(flag["evidence"],
+                         {"looks_like": "Tesla", "tickers": ["TSLA"], "characters": [CYRILLIC_TE]})
+        self.assertNotIn("detail", flag)
 
     def test_offsets_count_code_points(self):
         tag_characters = "".join(chr(0xE0000 + ord(letter)) for letter in "buy")
@@ -54,6 +143,7 @@ class ReportTests(unittest.TestCase):
         self.assert_valid(report)
         [flag] = report["flags"]
         self.assertEqual((flag["start"], flag["end"]), (5, 8))
+        self.assertEqual(flag["evidence"], {"decoded_text": "buy"})
 
     def test_html_text_report_flags_have_no_offsets(self):
         result = GUARD.analyze_html('<h1>Tesla shares <span style="display:none">plunge</span> surge</h1>')
@@ -63,8 +153,9 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(flag["category"], "hidden_html_text")
         self.assertEqual(flag["flagged_text"], "plunge")
         self.assertEqual((flag["start"], flag["end"]), (None, None))
+        self.assertEqual(flag["evidence"], {"cause": "display_none", "css": "display:none"})
 
-    @unittest.skipIf(importlib.util.find_spec("trafilatura") is None, "trafilatura not installed")
+    @unittest.skipUnless(HAS_TRAFILATURA, "trafilatura not installed")
     def test_article_report_holds_the_answers(self):
         page = build_page(headline_html=HEADLINE.replace("Tesla", HOMOGLYPH_TESLA))
         report = GUARD.extract_article(page).to_dict()
@@ -82,7 +173,7 @@ class ReportTests(unittest.TestCase):
         for flag in report["flags"]:
             self.assertNotIn("start", flag)
 
-    @unittest.skipIf(importlib.util.find_spec("trafilatura") is None, "trafilatura not installed")
+    @unittest.skipUnless(HAS_TRAFILATURA, "trafilatura not installed")
     def test_article_report_records_browser_reasons(self):
         page = build_page(headline_html=f"{HEADLINE}<script>document.title='x'</script>")
         report = GUARD.extract_article(page).to_dict()
@@ -90,7 +181,7 @@ class ReportTests(unittest.TestCase):
         self.assertTrue(report["browser_check"]["needed"])
         self.assertEqual(len(report["browser_check"]["reasons"]), 1)
 
-    @unittest.skipIf(importlib.util.find_spec("trafilatura") is None, "trafilatura not installed")
+    @unittest.skipUnless(HAS_TRAFILATURA, "trafilatura not installed")
     def test_a_browser_run_that_confirms_nothing_still_ran(self):
         # As browser_check.py returns a page the browser rendered but could not settle (a consent
         # wall) or whose headline it did not find: a render time, browser_verified left False.
@@ -123,9 +214,8 @@ class ReportTests(unittest.TestCase):
         self.assertTrue(self.validator.is_valid(report))
 
     def test_offsets_lie_inside_the_text(self):
-        zero_width_space, right_to_left_override = "\u200b", "\u202e"
-        for text in (f"{HOMOGLYPH_TESLA} shares surge", f"Tes{zero_width_space}la shares{right_to_left_override} surge",
-                     "\uff34\uff45\uff53\uff4c\uff41 rally"):  # the last is full-width "Tesla"
+        for text in (f"{HOMOGLYPH_TESLA} shares surge", f"Tes{ZERO_WIDTH_SPACE}la shares{RIGHT_TO_LEFT_OVERRIDE} surge",
+                     FULL_WIDTH_BUY + " rally"):
             report = GUARD.analyze(text).to_dict()
             self.assertTrue(report["flags"], text)
             for flag in report["flags"]:
@@ -134,13 +224,225 @@ class ReportTests(unittest.TestCase):
                 self.assertLessEqual(flag["end"], len(report["text_as_written"]))
                 self.assertEqual(report["text_as_written"][flag["start"]:flag["end"]], flag["flagged_text"])
 
-    @unittest.skipIf(importlib.util.find_spec("trafilatura") is None, "trafilatura not installed")
+    @unittest.skipUnless(HAS_TRAFILATURA, "trafilatura not installed")
     def test_schema_rejects_offsets_in_an_article_flag(self):
         page = build_page(headline_html=HEADLINE.replace("Tesla", HOMOGLYPH_TESLA))
         report = GUARD.extract_article(page).to_dict()
         self.assertTrue(self.validator.is_valid(report))
         report["flags"][0].update(start=0, end=5)
         self.assertFalse(self.validator.is_valid(report))
+
+
+@unittest.skipUnless(HAS_JSONSCHEMA, "jsonschema not installed (the [test] extra)")
+class TextEvidenceTests(ReportCase):
+    """The evidence each character check gives, from docs/report_format.md."""
+
+    def only_flag(self, text, category):
+        report = GUARD.analyze(text).to_dict()
+        self.assert_valid(report)
+        [flag] = flags_of(report, category)
+        return flag
+
+    def test_ascii_look_alikes_list_the_ascii_stand_ins(self):
+        flag = self.only_flag("TesIa shares surge", "watchlist_homoglyph")
+        self.assertEqual(flag["evidence"], {
+            "looks_like": "Tesla", "tickers": ["TSLA"],
+            "characters": [{"code_point": "U+0049", "name": "LATIN CAPITAL LETTER I"}]})
+
+    def test_ascii_look_alikes_of_a_different_length_list_what_was_swapped(self):
+        # Latin "rn" reads as "m".
+        flag = self.only_flag("rnicrosoft shares surge", "watchlist_homoglyph")
+        self.assertEqual(flag["evidence"]["looks_like"], "microsoft")
+        self.assertEqual([item["code_point"] for item in flag["evidence"]["characters"]], ["U+0072", "U+006E"])
+
+    def test_added_accents(self):
+        flag = self.only_flag("Tésla soars", "accented_watchlist_name")
+        self.assertEqual(flag["evidence"], {
+            "looks_like": "Tesla", "tickers": ["TSLA"],
+            "characters": [{"code_point": "U+0301", "name": "COMBINING ACUTE ACCENT"}]})
+
+    def test_a_native_word_that_resembles_a_name(self):
+        flag = self.only_flag("Головна МЕТА компанії — вийти на ринок ЄС", "possible_watchlist_lookalike")
+        self.assertEqual(flag["evidence"], {"looks_like": "META", "tickers": ["META"]})
+
+    def test_mixed_script_word(self):
+        flag = self.only_flag("hеllo world", "mixed_script_word")  # Cyrillic ie
+        self.assertEqual(flag["evidence"], {
+            "characters": [{"code_point": "U+0435", "name": "CYRILLIC SMALL LETTER IE"}]})
+
+    def test_whole_script_look_alike(self):
+        flag = self.only_flag("the сор arrested today", "whole_script_lookalike")  # Cyrillic
+        self.assertEqual(flag["evidence"], {"looks_like": "cop"})
+
+    def test_adjacent_compatibility_letters_merge_into_one_flag(self):
+        flag = self.only_flag(FULL_WIDTH_BUY + " now", "compatibility_lookalike")
+        self.assertEqual(flag["severity"], "medium")
+        self.assertEqual(flag["evidence"]["looks_like"], "BUY")
+        self.assertEqual([item["code_point"] for item in flag["evidence"]["characters"]],
+                         ["U+FF22", "U+FF35", "U+FF39"])
+        self.assertEqual(flag["evidence"]["characters"][0]["name"], "FULLWIDTH LATIN CAPITAL LETTER B")
+
+    def test_a_character_outside_the_basic_plane_has_a_five_digit_code_point(self):
+        flag = self.only_flag(chr(0x1D401) + "uy now", "compatibility_lookalike")  # mathematical bold B
+        self.assertEqual(flag["evidence"]["characters"][0]["code_point"], "U+1D401")
+
+    def test_invisible_character_in_an_ordinary_word(self):
+        flag = self.only_flag(f"hel{ZERO_WIDTH_SPACE}lo world", "invisible_character")
+        self.assertEqual(flag["severity"], "medium")
+        self.assertEqual(flag["evidence"], {"characters": [{"code_point": "U+200B", "name": "ZERO WIDTH SPACE"}]})
+
+    def test_invisible_character_inside_a_watched_name(self):
+        flag = self.only_flag(f"Tes{ZERO_WIDTH_SPACE}la shares surge", "invisible_character")
+        self.assertEqual(flag["severity"], "high")
+        self.assertEqual(flag["evidence"], {
+            "characters": [{"code_point": "U+200B", "name": "ZERO WIDTH SPACE"}],
+            "inside_name": "Tesla", "tickers": ["TSLA"]})
+
+    def test_bidi_control_and_adjacent_controls_merge(self):
+        flag = self.only_flag(f"Tesla{RIGHT_TO_LEFT_OVERRIDE}{LEFT_TO_RIGHT_OVERRIDE} x", "bidi_control")
+        self.assertEqual(flag["severity"], "medium")
+        self.assertEqual(flag["evidence"], {"characters": [
+            {"code_point": "U+202E", "name": "RIGHT-TO-LEFT OVERRIDE"},
+            {"code_point": "U+202D", "name": "LEFT-TO-RIGHT OVERRIDE"}]})
+
+    def test_bidi_control_inside_a_watched_name(self):
+        flag = self.only_flag(f"Tes{RIGHT_TO_LEFT_OVERRIDE}la x", "bidi_control")
+        self.assertEqual(flag["evidence"]["inside_name"], "Tesla")
+        self.assertEqual(flag["evidence"]["tickers"], ["TSLA"])
+
+    def test_stacked_marks(self):
+        flag = self.only_flag(f"e{STACKED_MARKS} x", "excessive_combining_marks")
+        self.assertEqual(flag["severity"], "medium")
+        self.assertEqual([item["code_point"] for item in flag["evidence"]["characters"]],
+                         ["U+0301", "U+0302", "U+0303"])
+        self.assertNotIn("inside_name", flag["evidence"])
+
+    def test_stacked_marks_inside_a_watched_name(self):
+        flag = self.only_flag(f"T{STACKED_MARKS}esla x", "excessive_combining_marks")
+        self.assertEqual(flag["severity"], "high")
+        self.assertEqual((flag["evidence"]["inside_name"], flag["evidence"]["tickers"]), ("Tesla", ["TSLA"]))
+
+
+@unittest.skipUnless(HAS_JSONSCHEMA, "jsonschema not installed (the [test] extra)")
+class HtmlEvidenceTests(ReportCase):
+    def test_reordered_text_names_its_rule(self):
+        html = '<h1>Tesla shares <span style="unicode-bidi:bidi-override;direction:rtl">surge fast</span></h1>'
+        report = GUARD.analyze_html(html).to_dict()
+        self.assert_valid(report)
+        [flag] = flags_of(report, "reordered_text")
+        self.assertEqual(flag["evidence"], {"css": "unicode-bidi:bidi-override"})
+
+    def test_scraper_text_that_adds_and_drops_words(self):
+        page = '<h1>Apple beats <span style="display:none">estimates</span> today</h1>'
+        report = GUARD.analyze_html(page, "//h1", scraped_text="Apple beats estimates tomorrow").to_dict()
+        self.assert_valid(report)
+        [flag] = flags_of(report, "scraper_text_differs")
+        self.assertEqual(flag["evidence"], {"added_text": "estimates tomorrow", "dropped_text": "today"})
+
+    def test_scraper_text_that_only_adds_words(self):
+        report = GUARD.analyze_html("<h1>Apple beats estimates</h1>", "//h1",
+                                    scraped_text="Apple beats estimates losses").to_dict()
+        self.assert_valid(report)
+        [flag] = flags_of(report, "scraper_text_differs")
+        self.assertEqual(flag["evidence"], {"added_text": "losses"})
+
+    def test_a_page_too_complex_to_read_gives_the_readers_message(self):
+        report = GUARD.analyze_html("<div>" * 600 + "x").to_dict()
+        self.assert_valid(report)
+        [flag] = flags_of(report, "page_too_complex_to_read")
+        self.assertTrue(flag["evidence"]["message"])
+        self.assertEqual(set(flag["evidence"]), {"message"})
+
+    def test_a_missing_headline_element_has_no_evidence(self):
+        report = GUARD.analyze_html("<p>No headline</p>", headline_xpath="//h1").to_dict()
+        self.assert_valid(report)
+        [flag] = flags_of(report, "headline_not_found")
+        self.assertEqual(flag["evidence"], {})
+
+    def test_an_html_comment_has_no_evidence(self):
+        report = GUARD.analyze_html("<h1>Apple beats estimates<!-- losses --></h1>").to_dict()
+        self.assert_valid(report)
+        [flag] = flags_of(report, "html_comment_text")
+        self.assertEqual(flag["evidence"], {})
+
+    @unittest.skipUnless(HAS_TRAFILATURA, "trafilatura not installed")
+    def test_a_metadata_flag_says_which_title_it_was_found_in(self):
+        page = build_page(og_title=HEADLINE.replace("Tesla", HOMOGLYPH_TESLA) + " | Example News")
+        report = GUARD.extract_article(page).to_dict()
+        self.assert_valid(report)
+        [flag] = [flag for flag in report["flags"] if flag["field"] == "metadata"]
+        self.assertEqual(flag["category"], "watchlist_homoglyph")
+        self.assertEqual(flag["evidence"], {
+            "looks_like": "Tesla", "tickers": ["TSLA"], "characters": [CYRILLIC_TE], "found_in": "og:title"})
+
+
+@unittest.skipUnless(HAS_JSONSCHEMA, "jsonschema not installed (the [test] extra)")
+class SchemaRuleTests(ReportCase):
+    """One negative case for each family of rules the schema states."""
+
+    def homoglyph_report(self):
+        return GUARD.analyze(f"{HOMOGLYPH_TESLA} shares surge").to_dict()
+
+    def assert_rejected_after(self, report, change):
+        self.assertTrue(self.validator.is_valid(report), "the report is valid before the change")
+        broken = copy.deepcopy(report)
+        change(broken)
+        self.assertFalse(self.validator.is_valid(broken), json.dumps(broken, ensure_ascii=False))
+
+    def test_evidence_the_category_requires_is_required(self):
+        self.assert_rejected_after(self.homoglyph_report(), lambda report: report["flags"][0]["evidence"].pop("characters"))
+
+    def test_a_category_takes_only_its_severities(self):
+        self.assert_rejected_after(self.homoglyph_report(), lambda report: report["flags"][0].update(severity="low"))
+
+    def test_a_flag_needs_its_evidence_object(self):
+        self.assert_rejected_after(self.homoglyph_report(), lambda report: report["flags"][0].pop("evidence"))
+
+    def test_a_character_code_point_is_upper_case_hex_of_four_digits_or_more(self):
+        def lower_case(report):
+            report["flags"][0]["evidence"]["characters"][0]["code_point"] = "U+042a"
+
+        def too_short(report):
+            report["flags"][0]["evidence"]["characters"][0]["code_point"] = "U+42"
+
+        self.assert_rejected_after(self.homoglyph_report(), lower_case)
+        self.assert_rejected_after(self.homoglyph_report(), too_short)
+
+    def test_a_name_inside_needs_its_tickers(self):
+        report = GUARD.analyze(f"Tes{ZERO_WIDTH_SPACE}la shares surge").to_dict()
+        self.assert_rejected_after(report, lambda broken: broken["flags"][0]["evidence"].pop("tickers"))
+
+    def test_words_shown_needs_words_total(self):
+        report = {"schema_version": "1.0", "report_type": "text", "verdict": "review", "text_as_written": "x",
+                  "text_cleaned": "x", "tickers": [],
+                  "flags": [{"category": "browser_check_inconclusive", "severity": "medium", "field": None,
+                             "flagged_text": "", "evidence": {"words_shown": 1, "words_total": 9},
+                             "start": None, "end": None}]}
+        self.assert_rejected_after(report, lambda broken: broken["flags"][0]["evidence"].pop("words_total"))
+
+    @unittest.skipUnless(HAS_TRAFILATURA, "trafilatura not installed")
+    def test_a_metadata_character_flag_needs_found_in(self):
+        page = build_page(og_title=HEADLINE.replace("Tesla", HOMOGLYPH_TESLA) + " | Example News")
+        report = GUARD.extract_article(page).to_dict()
+        [index] = [number for number, flag in enumerate(report["flags"]) if flag["field"] == "metadata"]
+        self.assert_rejected_after(report, lambda broken: broken["flags"][index]["evidence"].pop("found_in"))
+
+    def test_a_cause_the_spec_does_not_list_still_fits_the_schema_but_the_spec_check_rejects_it(self):
+        report = GUARD.analyze_html('<h1>Tesla <span style="display:none">plunge</span></h1>').to_dict()
+        report["flags"][0]["evidence"]["cause"] = "made_up_cause"
+        self.assertTrue(self.validator.is_valid(report))  # the schema keeps the list open for newer versions
+        with self.assertRaises(AssertionError):
+            assert_follows_the_spec(self, report)
+
+    def test_the_spec_check_rejects_an_unknown_category_and_a_stray_evidence_key(self):
+        report = self.homoglyph_report()
+        report["flags"][0]["evidence"]["detail"] = "a sentence"
+        with self.assertRaises(AssertionError):
+            assert_follows_the_spec(self, report)
+        report = self.homoglyph_report()
+        report["flags"][0]["category"] = "invented_category"
+        with self.assertRaises(AssertionError):
+            assert_follows_the_spec(self, report)
 
 
 if __name__ == "__main__":
