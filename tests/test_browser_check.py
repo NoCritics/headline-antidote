@@ -157,7 +157,8 @@ class RenderedPageEvidenceTests(unittest.TestCase):
 
         body_text = self.CHEAP_BODY_WORDS if body_text is None else body_text
         return RenderedPage(headline_text, f"{headline_text or ''}\n{body_text}", options.get("clipped_text", ""),
-                            5.0, options.get("complete", True), options.get("note", ""))
+                            5.0, options.get("complete", True), options.get("note", ""),
+                            **{name: options[name] for name in ("color_unchecked_text",) if name in options})
 
     def compare(self, article, rendered):
         from headline_guard.browser_check import compare_with_rendered_page
@@ -252,6 +253,18 @@ class RenderedPageEvidenceTests(unittest.TestCase):
         verified = self.compare(article, self.render(HEADLINE, shown))
         self.assertEqual(self.flags_of(verified, "possibly_hidden_text"), [])
         self.assertEqual(self.flags_of(verified, "hidden_text_in_article"), [])
+        self.assertIn("layoffs", verified.body)
+
+    @unittest.skipUnless(importlib.util.find_spec("tinycss2") is not None, "tinycss2 not installed")
+    def test_white_text_the_browser_shows_without_judging_its_color_keeps_the_guess(self):
+        # The browser skips its color test for text with a shadow, painted by a gradient or over an
+        # image; showing such text proves nothing about whether readers can see it.
+        article = GUARD.extract_article(self.hidden_paragraph_page("color:#fff"))
+        suspected = ("Insiders say the company is preparing mass layoffs and a profit warning that will "
+                     "shock investors next week.")
+        verified = self.compare(article, self.render(HEADLINE, self.CHEAP_BODY_WORDS + "\n" + suspected,
+                                                     color_unchecked_text=suspected))
+        self.assertEqual(len(self.flags_of(verified, "possibly_hidden_text")), 1)
         self.assertIn("layoffs", verified.body)
 
     @unittest.skipUnless(importlib.util.find_spec("tinycss2") is not None, "tinycss2 not installed")
@@ -595,6 +608,24 @@ class BrowserCheckTests(unittest.TestCase):
         self.assertEqual(verified.verdict, "quarantine")
         self.assertEqual(verified.headline, HEADLINE)
         self.assertTrue(verified.browser_verified)
+
+    def test_a_text_shadow_does_not_clear_white_body_text(self):
+        # White on an undeclared (white) background, with a shadow that makes Chrome's check skip the
+        # color test: the suspicion must survive the render.
+        article, verified = self.check(page(HEADLINE, article_extra=(
+            '<p style="color:#fff; text-shadow:0 0 0 transparent">Insiders say the company is preparing '
+            "mass layoffs and a profit warning that will shock investors next week.</p>")))
+        self.assertIn("possibly_hidden_text", [flag.kind for flag in article.flags])
+        self.assertIsNotNone(verified.browser_milliseconds)
+        self.assertIn("possibly_hidden_text", [flag.kind for flag in verified.flags])
+
+    def test_plain_white_body_text_the_browser_judges_is_reported_hidden(self):
+        article, verified = self.check(page(HEADLINE, article_extra=(
+            '<p style="color:#fff">Insiders say the company is preparing mass layoffs and a profit warning '
+            "that will shock investors next week.</p>")))
+        kinds = [flag.kind for flag in verified.flags]
+        self.assertNotIn("possibly_hidden_text", kinds)
+        self.assertIn("hidden_text_in_article", kinds)
 
     def test_class_added_by_javascript(self):
         article, verified = self.check(page(
