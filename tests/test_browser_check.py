@@ -242,7 +242,8 @@ class RenderedPageEvidenceTests(unittest.TestCase):
         verified = self.compare(article, self.render(HEADLINE))
         self.assertEqual(self.flags_of(verified, "possibly_hidden_text"), [])
         [flag] = self.flags_of(verified, "hidden_text_in_article")
-        self.assertEqual(flag.evidence, {"cause": "script_or_overlay"})
+        # The browser confirms the static reading's guess, so the guess's cause and rule stand.
+        self.assertEqual(flag.evidence, {"cause": "same_color_as_background", "css": "color:#fff"})
         self.assertNotIn("layoffs", verified.body)
 
     @unittest.skipUnless(importlib.util.find_spec("tinycss2") is not None, "tinycss2 not installed")
