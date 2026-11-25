@@ -450,6 +450,12 @@ CHROME_DECIDED_CASES += (
     (".x{display:attr(data-hide type(<custom-ident>))}", "", True),
     ("@function --f(){result:0} .x{opacity:--f()}", "", True),
     (".x{--o:if(else:0);opacity:var(--o)}", "", True),
+    # Chrome 158 substitutes inherit() in a value that also holds var(); this reader cannot.
+    (":root{--x:0} .x{opacity:var(--a, inherit(--x))}", "", True),
+    (":root{--x:0} .x{opacity:inherit(--x, var(--y))}", "", True),
+    (":root{--x:hidden} .x{visibility:var(--a, inherit(--x))}", "", True),
+    # Without var() Chrome 158 drops it, so the earlier declaration holds.
+    (":root{--x:1} .x{opacity:0;opacity:inherit(--x)}", "", True),
     # env() as Chrome gives it at the browser check's desktop viewport: safe-area and keyboard
     # insets are 0px; other names (titlebar-area-*, an index, any other case) take the fallback,
     # and with none the declaration is unset.

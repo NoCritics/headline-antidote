@@ -1,7 +1,7 @@
 """headline_guard.css_validity: whether Chrome keeps a declaration of a hiding property or of a
 custom property.
 
-The expected constants in CHROME_CASES were read from Chrome 157: VALID when a standards-mode
+The expected constants in CHROME_CASES were read from Chrome 157 (the inherit() rows from Chrome 158): VALID when a standards-mode
 style sheet applies the value after another one, QUIRKS_ONLY when only a quirks-mode (no doctype)
 style sheet does, INVALID otherwise. CUSTOM_PROPERTY_CASES were read the same way for --o, in a
 style attribute and in standards and quirks style sheets, which agreed on every row. ChromeAgreementTests
@@ -66,7 +66,11 @@ CHROME_CASES = [
     ("opacity", "attr('x')", INVALID),
     ("opacity", "attr(x, !)", INVALID),
     ("opacity", "if()", INVALID),
-    ("opacity", "var(--y) inherit(--x)", INVALID),
+    # Since Chrome 158 inherit() alone is an unknown function; next to var() it is kept.
+    ("opacity", "inherit(--x)", INVALID),
+    ("opacity", "var(--y) inherit(--x)", VALID),
+    ("opacity", "inherit(--x, var(--y))", VALID),
+    ("opacity", "var(--a, inherit(--x))", VALID),
     ("opacity", nested("calc(", "var(--x)", ")", 150), VALID),
     ("opacity", "if(style(--x: 1): 1; else: 0)", VALID),
     ("opacity", "attr(x type(<number>))", VALID),
@@ -654,10 +658,11 @@ CUSTOM_PROPERTY_CASES = [
     ('--foo(,,1)', INVALID),
     ('--foo(var(x))', INVALID),
     ('--foo(--bar(!))', INVALID),
-    # inherit() is rejected anywhere
-    ('inherit(--x)', INVALID),
-    ('1 inherit(--x)', INVALID),
-    ('var(--a, inherit(--x))', INVALID),
+    # Since Chrome 158 a custom property keeps inherit() as written.
+    ('inherit(--x)', VALID),
+    ('1 inherit(--x)', VALID),
+    ('var(--a, inherit(--x))', VALID),
+    ('inherit()', VALID),
 ]
 
 # Chrome's quirks-mode and standards-mode checks set each value after one of these and compare.
