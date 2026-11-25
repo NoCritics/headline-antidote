@@ -1,0 +1,52 @@
+# Builds the package on every push to master; publishes it to PyPI when a GitHub release is
+# published, through PyPI Trusted Publishing (no token stored anywhere).
+# Actions are pinned to commits; the comment names the release each commit is.
+name: Publish to PyPI
+
+on:
+  push:
+    branches: [master]
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build==1.6.1
+      - run: python -m build
+      - name: Install the wheel and read a headline
+        run: |
+          python -m pip install dist/*.whl
+          cd /tmp
+          python -c "from headline_antidote import HeadlineAntidote; result = HeadlineAntidote({'TSLA': ['Tesla']}).analyze('Тesla shares surge'); print(result.verdict, result.clean_text); assert result.verdict == 'quarantine'"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/headline-antidote
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3

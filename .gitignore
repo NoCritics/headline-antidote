@@ -10,3 +10,5 @@ real_world_test/data_2026-11-09/*
 build/
 dist/
 *.egg-info/
+# Claude Code settings and skills for this workstation.
+.claude/
