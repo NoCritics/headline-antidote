@@ -8,6 +8,13 @@ version = "0.1.0"
 description = "Checks that the news headline an LLM reads is the text a human reader sees: homoglyphs, hidden HTML text, invisible characters."
 readme = "README.md"
 requires-python = ">=3.11"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
+    "Topic :: Text Processing :: Markup :: HTML",
+]
 # The parsers and the CSS cascade are pinned to the versions the tests were run against: a new
 # lexbor or cascade release can change what counts as visible. selectolax 1.0.2 carries the
 # patched lexbor; cssselect2 0.10.1 fixes CVE-2026-55073.
@@ -18,6 +25,10 @@ dependencies = [
     "cssselect2==0.10.1",
     "trafilatura>=2.3.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/NoCritics/headline-antidote"
+Issues = "https://github.com/NoCritics/headline-antidote/issues"
 
 [project.optional-dependencies]
 # The browser check drives the installed Google Chrome (channel="chrome"); no browser is downloaded.
