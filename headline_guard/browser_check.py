@@ -6,11 +6,14 @@ same HTML in Chrome (browser_visibility.BrowserVerifier) and compares:
 
 * headline words the static reading kept but the browser hides (a script, an element
   drawn over them): flagged high, and the model gets the browser's headline;
-* headline words the static reading feared were hidden but the browser shows: the
-  doubt is cleared, and the model gets the full heading back;
+* headline words the static reading feared were hidden (headline_adds_words) but the
+  browser shows: the doubt is cleared, and the model gets the full heading back. The
+  browser's answer always replaces that suspicion: words it hides become one hidden_html_text
+  flag, and only the words it hides are flagged;
 * no rendered heading matching the static one (a script removed or rewrote it): flagged
   high, and the page is not marked verified;
-* body text the browser hides: removed from the body. Live pages hide plenty of
+* body text the browser hides: removed from the body (this includes text the static reading
+  only suspected, possibly_hidden_text, which a conclusive render always settles). Live pages hide plenty of
   harmless text with scripts (collapsed boxes, promotions, labels), so removed passages
   are flagged low, as in the static reading. When most of the body is hidden as one block
   running to its end (a paywall script, or a hidden ending), it goes to hidden_ending with
@@ -161,18 +164,18 @@ def _compare_headline(guard, article, rendered, flags):
     still_hidden = _missing_words(settled_words, added_words)
     shown_settled = len(still_hidden) < len(settled_words)
     added_words = _missing_words(added_words, settled_words)
-    kept_flags = []
-    for flag in flags:
-        if id(flag) not in settled_ids:  # by identity: a flag with the same text may be a sure one
-            kept_flags.append(flag)
-    flags = kept_flags
+    # The suspicion that words no title has were hidden is settled either way: the words the
+    # browser hides become hidden_html_text, and the words it shows are cleared.
+    suspected_adds_words = any(flag.kind == "headline_adds_words" for flag in flags)
+    # By identity: a flag with the same text as a settled one may be a sure one.
+    flags = [flag for flag in flags if id(flag) not in settled_ids and flag.kind != "headline_adds_words"]
     if still_hidden:
         flags.append(Flag(
-            "hidden_html_text", HIGH, None, None, " ".join(still_hidden), {}, "headline",
+            "hidden_html_text", HIGH, None, None, " ".join(still_hidden), {"cause": "svg_off_drawing"}, "headline",
         ))
     if hidden_words:
         flags.append(Flag(
-            "hidden_html_text", HIGH, None, None, " ".join(hidden_words), {}, "headline",
+            "hidden_html_text", HIGH, None, None, " ".join(hidden_words), {"cause": "script_or_overlay"}, "headline",
         ))
         headline = guard.analyze(rendered.headline_text).clean_text
         headline_source += "; as shown in a browser"
@@ -180,25 +183,16 @@ def _compare_headline(guard, article, rendered, flags):
         # A browser's text gives the letters in source order, so it can't confirm words shown to
         # readers reversed: the static reading's headline stands.
         pass
-    else:
+    elif suspected_adds_words:
         # Every word is visible: the fear that the heading's extra words were hidden is cleared.
-        kept_flags = []
-        cleared = False
-        for flag in flags:
-            if flag.kind == "headline_adds_words":
-                cleared = True
-                continue
-            kept_flags.append(flag)
-        flags = kept_flags
-        if cleared:
-            headline = guard.analyze(article.heading_text).clean_text
-            headline_source = headline_source.replace("; words no title has were left out", "")
-            headline_source += "; every word confirmed visible in a browser"
+        headline = guard.analyze(article.heading_text).clean_text
+        headline_source = headline_source.replace("; words no title has were left out", "")
+        headline_source += "; every word confirmed visible in a browser"
     if shown_settled and not hidden_words and not _has_reordered_headline(flags):
         headline = guard.analyze(rendered.headline_text).clean_text
         headline_source += "; as shown in a browser"
     if added_words:
-        flags.append(Flag("scraper_text_differs", MEDIUM, None, None, rendered.headline_text, {}, "headline"))
+        flags.append(Flag("script_generated_text", MEDIUM, None, None, " ".join(added_words), {}, "headline"))
     return headline, headline_source, flags
 
 
@@ -229,8 +223,8 @@ def _remove_hidden_runs(paragraphs, flags):
         removed_passages.append(" ".join(removed_parts))
         # Low, as in the static reading: removed, so the model never sees it.
         flags.append(Flag(
-            "hidden_text_in_article", LOW, None, None, " … ".join(removed_parts)[:500], {},
-            "body",
+            "hidden_text_in_article", LOW, None, None, " … ".join(removed_parts)[:500],
+            {"cause": "script_or_overlay"}, "body",
         ))
         if remaining:
             kept_paragraphs.append(remaining)
@@ -268,10 +262,13 @@ def compare_with_rendered_page(guard, article, rendered):
         # of the body, whose payload would otherwise pass in the static body that stands.
         flags.append(Flag(
             "browser_check_inconclusive", MEDIUM, None, None, rendered.note,
-            {}, "page",
+            {"words_shown": shown_words, "words_total": body_words}, "page",
         ))
         return replace(article, flags=flags, browser_milliseconds=rendered.milliseconds)
 
+    # The render compares the whole body, so it settles text only suspected to be hidden: if the
+    # browser hides it, it is removed below with a flag of its own; if it shows it, the guess is wrong.
+    flags = [flag for flag in flags if flag.kind != "possibly_hidden_text"]
     headline, headline_source, flags = _compare_headline(guard, article, rendered, flags)
     # The check settles the page only when it found the headline it was sent to confirm.
     headline_confirmed = rendered.headline_text is not None or not article.heading_text

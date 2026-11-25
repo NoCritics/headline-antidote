@@ -623,7 +623,9 @@ def article_reports():
     kicker = f'<span class="topline">Handel mit Wertpapieren</span> <span>{gaps.HEADLINE}</span>'
     json_ld = ('<script type="application/ld+json">{"@type": "NewsArticle", "headline": "' + gaps.HEADLINE + '", '
                '"articleBody": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order '
-               'a breakup of the company, a ruling analysts said removes a major overhang."}</script>')
+               'a breakup of the company, a ruling analysts said removes a major overhang. The decision lifted other '
+               'large technology stocks as investors bet that regulators would struggle to force structural remedies '
+               'on the sector."}</script>')
     pages = {
         "homoglyph in an og:title": build_page(og_title=HEADLINE.replace("Tesla", HOMOGLYPH_TESLA) + " | News"),
         "headline words a script may hide": gaps.article_page(

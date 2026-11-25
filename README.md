@@ -72,7 +72,7 @@ result = guard.analyze_html(page.content(), "//h1", scraped_text=visible, render
 result.verdict      # "pass" | "review" | "quarantine"
 result.clean_text   # "Tesla shares surge", what to give the model if you trade on it at all
 result.tickers      # ["TSLA"]
-result.flags        # [Flag(kind="watchlist_homoglyph", severity="high", start=0, end=5, ...)]
+result.flags        # [Flag(kind="watchlist_homoglyph", severity="high", start=0, end=5, evidence={"looks_like": "Tesla", ...}, ...)]
 ```
 
 The guard decides nothing about trading. A suggested policy:
@@ -404,7 +404,7 @@ Bugs and false alarms found this way, each fixed with a test:
 | Flag | Severity | Example |
 |---|---|---|
 | `watchlist_homoglyph` | high | "Теsla", "nvіdіа", "$ТSLA", "TesIa" (I for l) |
-| `hidden_tag_characters` | high | invisible U+E00xx characters that models read as ASCII (decoded into the flag) |
+| `hidden_tag_characters` | high | invisible U+E00xx characters that models read as ASCII (decoded into the flag's `evidence`) |
 | `hidden_html_text` | high | `display:none`, font smaller than 2px or 1.5pt, opacity or alpha below 0.1, text with contrast below 1.5:1 against its declared background, off-screen, `clip`, `hidden`, `<noscript>`, `.class` rules in `<style>` |
 | `hidden_html_text` | medium | near-white text with no declared background (assumed white, because the real one is usually in an external stylesheet) |
 | `mixed_script_word` | high | "ѕurge" (Cyrillic ѕ in a Latin word) |
@@ -415,7 +415,8 @@ Bugs and false alarms found this way, each fixed with a test:
 | `bidi_control` | medium | direction overrides in a headline without right-to-left text |
 | `excessive_combining_marks` | medium | more than two marks stacked on one Latin, Greek or Cyrillic letter |
 | `html_comment_text` | medium | text inside `<!-- -->`, which some scrapers pass on |
-| `scraper_text_differs` | high / medium | the scraper's output contains words a reader can't see (high), or is missing visible words (medium) |
+| `scraper_text_differs` | high / medium | the scraper's output contains words a reader can't see (high, `evidence.added_text`), or is missing visible words (medium, `evidence.dropped_text`) |
+| `script_generated_text` | medium | words a browser shows in the headline that the page's HTML doesn't contain (added by a script): readers see them, the model never does |
 | `headline_not_found` | medium | `headline_xpath` matched nothing |
 | `page_too_complex_to_read` | medium | more than 20,000 `<` in the page (too many to parse quickly), or nesting that may pass Chrome's depth limit; it is not read statically, and the browser check is asked for |
 | `hidden_text_in_article` | low | hidden body text a standard extractor would pass to the model, or that a browser hides (removed, so the model never sees it) |
