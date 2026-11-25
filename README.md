@@ -21,12 +21,14 @@ NFKC normalization and the Unicode confusables data already exist. This project 
 
 ## Install
 
-Python 3.11 or later. From this folder:
+Python 3.11 or later.
 
 ```powershell
-pip install .              # the guard, the static reader and the article extractor
-pip install ".[browser]"   # also Playwright, for the browser check (it drives the installed Chrome)
+pip install headline-antidote              # the guard, the static reader and the article extractor
+pip install "headline-antidote[browser]"   # also Playwright, for the browser check (it drives the installed Chrome)
 ```
+
+From a checkout of this repository, `pip install .` (or `".[browser]"`) does the same.
 
 selectolax, tinycss2 and cssselect2 are pinned to the versions the tests ran against, because a new
 release of the HTML parser or the CSS cascade can change what counts as visible.
@@ -80,6 +82,39 @@ The guard decides nothing about trading. A suggested policy:
 - `quarantine`: don't let this headline move the signal, and alert.
 - `review`: reduce its weight or require another source to confirm it.
 - `pass`: use it normally.
+
+## JSON report
+
+Every result turns into plain dicts that `json.dumps` takes as they are, for logs, queues or the next
+stage of a pipeline:
+
+```python
+import json
+report = article.to_dict()    # extract_article / verify_article_in_browser; result.to_dict() for analyze / analyze_html
+print(json.dumps(report, indent=2, ensure_ascii=False))
+```
+
+`guard.analyze_html('<h1>Tesla shares <span style="font-size:0">plunge</span> surge</h1>', "//h1").to_dict()` gives:
+
+```json
+{"schema_version": "1.0", "report_type": "text", "verdict": "quarantine",
+ "text_as_written": "Tesla shares surge", "text_cleaned": "Tesla shares surge", "tickers": ["TSLA"],
+ "flags": [{"category": "hidden_html_text", "severity": "high", "field": null, "flagged_text": "plunge",
+            "evidence": {"cause": "tiny_font", "css": "font-size:0"}, "start": null, "end": null}]}
+```
+
+Each flag names its category, severity and field, the text it is about, and the evidence: what the
+text looks like, which characters, which CSS hid it and why. An article report also carries the body,
+the metadata titles and what the browser check did. The JSON Schema (draft 2020-12) ships in the package:
+
+```python
+import importlib.resources
+schema = json.loads(importlib.resources.files("headline_antidote").joinpath("report_schema.json").read_text("utf-8"))
+```
+
+Every field, flag category, evidence key and cause is described in [docs/report_format.md](docs/report_format.md).
+The strings in a report come from a page an attacker may control: give the model only `headline` and
+`body` (or `text_cleaned`) after checking `verdict`, and never pass the report itself to an LLM.
 
 ## Where to put it: beside the scraper, not after it
 
@@ -480,8 +515,11 @@ Tools for this, in [real_world_test](real_world_test):
 ## Running the tests
 
 ```
+pip install ".[browser,test]"   # Playwright for the Chrome tests, jsonschema for the report tests
 python -X utf8 -m unittest discover -s tests -t .
 ```
+
+Without them, the tests that need Chrome or jsonschema are skipped.
 
 The tests cover the paper's attacks, their variants, and attacks shaped to slip through the language exemptions. They also include **39 real headlines** in English, Russian, Ukrainian, Serbian (both alphabets), Bulgarian, Greek, Persian, Arabic, Hebrew, Hindi, Japanese, Chinese, Korean, Spanish and German, plus emoji. Each of these must pass with no flags and come out unchanged.
 
@@ -511,3 +549,7 @@ The tests cover the paper's attacks, their variants, and attacks shaped to slip 
 - **Language is judged per headline** by its dominant script. Very short headlines that mix languages can be misjudged.
 - **Character categories:** Python 3.11's `unicodedata` is Unicode 14. Characters added since then are treated as non-letters.
 - **Out of scope:** a rogue editor writing a genuinely negative but visible headline. That needs safeguards in the trading layer: cap any one headline's effect on the daily score, use medians rather than means, and require confirmation from more than one source.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE).
