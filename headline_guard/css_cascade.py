@@ -387,10 +387,11 @@ _ENVIRONMENT_VALUES = {
 }
 # A value with more env() than this counts as one too long to check (real values have one or two).
 MAXIMUM_ENVIRONMENT_REFERENCES = 100
-# Functions Chrome evaluates and this reader cannot: a hiding value still using one once var()
-# and env() are substituted counts as unreadable, which hides the element (attr() in content
-# only gives text).
-_UNEVALUATED_FUNCTION = re.compile(r"(?<![\w-])(?:if|attr|--[\w-]+)\(", re.IGNORECASE)
+# Functions Chrome evaluates and this reader cannot: a hiding value using one, as written or once
+# var() and env() are substituted, counts as unreadable, which hides the element (attr() in
+# content only gives text). Chrome 158 leaves an inherit() that came from a custom property as
+# written, so that one is a false alarm.
+_UNEVALUATED_FUNCTION = re.compile(r"(?<![\w-])(?:if|attr|inherit|--[\w-]+)\(", re.IGNORECASE)
 
 
 def _uses_unevaluated_function(name, value):
@@ -1700,6 +1701,9 @@ class CascadeRules:
         """The value of a name declaration with its var() and env() resolved; "" when invalid
         (Chrome then treats it as unset). Raises _TooManyCombinations when it is too long to
         resolve or uses a function this reader cannot evaluate."""
+        # Checked before var(): Chrome may never read a var() in a branch or fallback it skips.
+        if _uses_unevaluated_function(name, value):
+            raise _TooManyCombinations()
         resolved = self._resolve_text(element, value)
         if resolved is _OVER_BUDGET:
             raise _TooManyCombinations()

@@ -19,8 +19,8 @@ UNKNOWN = "unknown"           # this module cannot tell
 _SEVERITY = {VALID: 0, QUIRKS_ONLY: 1, UNKNOWN: 2, INVALID: 3}
 
 _CSS_WIDE_KEYWORDS = frozenset({"inherit", "initial", "unset", "revert", "revert-layer", "revert-rule"})
-# inherit() is listed because Chrome 157 rejects any value holding it, even next to var().
-_SUBSTITUTION_FUNCTIONS = frozenset({"var", "env", "attr", "if", "inherit"})
+# Not inherit(): since Chrome 158 it is an unknown function, kept only in a value that holds var().
+_SUBSTITUTION_FUNCTIONS = frozenset({"var", "env", "attr", "if"})
 _BLOCK_TYPES = frozenset({"() block", "[] block", "{} block"})
 # tinycss2 reports a string or url() cut off by the end of the input as an error; Chrome accepts both.
 _HARMLESS_ERRORS = frozenset({"eof-in-string", "eof-in-url"})
@@ -311,12 +311,8 @@ def _custom_function_verdict(arguments):
     return VALID
 
 
-def _inherit_verdict(arguments):
-    return INVALID
-
-
 _SUBSTITUTION_VERDICTS = {
-    "var": _var_verdict, "env": _env_verdict, "attr": _attr_verdict, "if": _if_verdict, "inherit": _inherit_verdict,
+    "var": _var_verdict, "env": _env_verdict, "attr": _attr_verdict, "if": _if_verdict,
 }
 
 
