@@ -19,12 +19,13 @@ import re
 import sys
 import unicodedata
 from dataclasses import dataclass, replace
+from typing import NamedTuple
 
 from lxml import etree
 
 from .css_hiding import (
     CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_CONTRAST, MINIMUM_VISIBLE_OPACITY, OPAQUE_ALPHA, colors_in,
-    contrast_ratio, declared_background_color, filter_hiding_reason, any_offset_is_off_screen,
+    contrast_ratio, declared_background_color, filter_hiding, any_offset_is_off_screen,
     font_shorthand_is_unreadable, font_size_is_unreadable, is_covering_overlay, is_off_screen_offset,
     letters_collapsed, line_height_collapsed, opacity_is_invisible, scale_is_zero, translation_is_off_screen,
     z_index_is_negative,
@@ -88,6 +89,15 @@ SVG_NON_RENDERING_TAGS = SVG_DEFINITION_TAGS | SVG_PAINT_SERVER_TAGS | {
 }
 
 
+class Hiding(NamedTuple):
+    """Why text is hidden: the reason in words (read by gate scripts), how severe it is, the cause
+    (a name from docs/report_format.md, "Causes") and the CSS rule when a rule hides it."""
+    reason: str
+    severity: str  # "high", or "medium" when hiding depends on a guess
+    cause: str
+    css: str = None
+
+
 @dataclass
 class HiddenFragment:
     text: str
@@ -99,6 +109,26 @@ class HiddenFragment:
     text_of: tuple = None
     # Whether a browser's rendering decides it (SVG text placed outside its drawing).
     settled_by_rendering: bool = False
+    # The cause of hiding (every hidden element has one) and the CSS rule, when a rule hides or
+    # reorders the text (reordered text has one).
+    cause: str = None
+    css: str = None
+
+    def __post_init__(self):
+        if self.kind == "hidden_element" and self.cause is None:
+            raise ValueError(f"hidden text without a cause: {self.reason}")
+        if self.kind == "reordered_text" and self.css is None:
+            raise ValueError(f"reordered text without a rule: {self.reason}")
+
+    @classmethod
+    def hidden(cls, text, hiding, element=None, text_of=None, settled_by_rendering=False):
+        return cls(text, hiding.reason, "hidden_element", hiding.severity, element, text_of,
+                   settled_by_rendering, hiding.cause, hiding.css)
+
+
+CLOSED_DETAILS_HIDING = Hiding("inside a closed <details>", HIGH, "closed_details")
+COVERED_BY_OVERLAY_HIDING = Hiding("covered by an opaque overlay drawn over it", HIGH, "covered")
+SVG_TEXT_OUTSIDE_TEXT_HIDING = Hiding("SVG text outside <text>", HIGH, "svg_not_drawn")
 
 
 def _parse_declarations(style_text):
@@ -129,18 +159,19 @@ def _text_painted_another_way(declarations):
 
 
 def _text_color(declarations):
-    """(parsed color, declared value) of the color glyphs are filled with, or (None, None)."""
+    """(parsed color, the property that declares it, its declared value) for the color glyphs are
+    filled with, or (None, None, None)."""
     fill = declarations.get("-webkit-text-fill-color")
     if fill and fill not in ("currentcolor", "inherit", "initial", "unset", "revert"):
         parsed = parse_color(fill)
         if parsed is not None:
-            return parsed, fill
+            return parsed, "-webkit-text-fill-color", fill
     color = declarations.get("color")
-    return parse_color(color), color
+    return parse_color(color), "color", color
 
 
-def _hiding_reason_from_declarations(declarations, background_color, background_lookup=None, painted_by_fill=False):
-    """Returns (reason, severity) when the declarations hide text, otherwise None.
+def _hiding_from_declarations(declarations, background_color, background_lookup=None, painted_by_fill=False):
+    """Returns a Hiding when the declarations hide text, otherwise None.
 
     background_lookup: when the rules can compute an element's real background from the
     stylesheets, it is asked only here, for elements whose text color matters.
@@ -148,78 +179,92 @@ def _hiding_reason_from_declarations(declarations, background_color, background_
     (see _svg_paint_hiding).
     """
     if declarations.get("display") == "none":
-        return ("display:none", HIGH)
+        return Hiding("display:none", HIGH, "display_none", "display:none")
     if declarations.get("content-visibility") == "hidden":
-        return ("content-visibility:hidden", HIGH)
+        return Hiding("content-visibility:hidden", HIGH, "content_visibility_hidden", "content-visibility:hidden")
     if declarations.get("visibility") in ("hidden", "collapse"):
-        return ("visibility:" + declarations["visibility"], HIGH)
+        rule = "visibility:" + declarations["visibility"]
+        return Hiding(rule, HIGH, "visibility_hidden", rule)
     if "opacity" in declarations and opacity_is_invisible(declarations["opacity"]):
-        return (f"opacity:{declarations['opacity']}", HIGH)
-    filter_reason = filter_hiding_reason(declarations.get("filter"))
-    if filter_reason is not None:
-        return (filter_reason, HIGH)
+        rule = f"opacity:{declarations['opacity']}"
+        return Hiding(rule, HIGH, "transparent", rule)
+    filter_cause_and_rule = filter_hiding(declarations.get("filter"))
+    if filter_cause_and_rule is not None:
+        cause, rule = filter_cause_and_rule
+        return Hiding(rule, HIGH, cause, rule)
     if "font-size" in declarations and font_size_is_unreadable(declarations["font-size"]):
-        return ("font-size:" + declarations["font-size"], HIGH)
+        rule = "font-size:" + declarations["font-size"]
+        return Hiding(rule, HIGH, "tiny_font", rule)
     if "font" in declarations and font_shorthand_is_unreadable(declarations["font"]):
-        return ("font:" + declarations["font"], HIGH)
+        rule = "font:" + declarations["font"]
+        return Hiding(rule, HIGH, "tiny_font", rule)
     if letters_collapsed(declarations.get("letter-spacing")):
-        return ("letter-spacing:" + declarations["letter-spacing"] + " draws the letters on top of each other", HIGH)
+        rule = "letter-spacing:" + declarations["letter-spacing"]
+        return Hiding(rule + " draws the letters on top of each other", HIGH, "letters_stacked", rule)
 
-    text_color, declared_color = (None, None) if painted_by_fill else _text_color(declarations)
+    text_color, color_property, declared_color = (None, None, None) if painted_by_fill else _text_color(declarations)
     if text_color is not None and not _text_painted_another_way(declarations):
+        color_rule = f"{color_property}:{declared_color}"
         if text_color[3] < MINIMUM_VISIBLE_OPACITY:
-            return ("transparent text color", HIGH)
+            return Hiding("transparent text color", HIGH, "transparent", color_rule)
         if background_lookup is not None:
             background_color = background_lookup()
         if background_color is not None:
             if contrast_ratio(text_color, background_color) < MINIMUM_VISIBLE_CONTRAST:
-                return (f"text color {declared_color} nearly matches its background", HIGH)
+                return Hiding(f"text color {declared_color} nearly matches its background", HIGH,
+                              "same_color_as_background", color_rule)
         elif contrast_ratio(text_color, ASSUMED_PAGE_BACKGROUND) < MINIMUM_VISIBLE_CONTRAST:
-            return (
+            return Hiding(
                 f"text color {declared_color} is invisible on a white page "
                 "(page background not declared here, so this is a guess)",
-                MEDIUM,
+                MEDIUM, "same_color_as_background", color_rule,
             )
 
     clip = declarations.get("clip", "").replace(" ", "").replace("px", "")
     if clip.startswith("rect(0,0,0,0") or clip.startswith("rect(0000"):
-        return ("clip:rect(0 0 0 0)", HIGH)
+        return Hiding("clip:rect(0 0 0 0)", HIGH, "clipped", "clip:" + declarations["clip"])
     clip_path = declarations.get("clip-path", "").replace(" ", "")
     if clip_path.startswith("inset(50%") or clip_path.startswith("circle(0"):
-        return ("clip-path", HIGH)
+        return Hiding("clip-path", HIGH, "clipped", "clip-path:" + declarations["clip-path"])
     transform = declarations.get("transform", "").replace(" ", "")
     if re.search(r"scale[xy]?\(0(\.0*)?[,)]", transform):
-        return ("transform:scale(0)", HIGH)
+        return Hiding("transform:scale(0)", HIGH, "scaled_to_zero", "transform:" + declarations["transform"])
     if scale_is_zero(declarations.get("scale", "")):
-        return ("scale:0", HIGH)
+        return Hiding("scale:0", HIGH, "scaled_to_zero", "scale:" + declarations["scale"])
     if translation_is_off_screen(declarations.get("transform"), declarations.get("translate")):
-        return ("moved off-screen by a transform", HIGH)
+        moving_property = "transform" if translation_is_off_screen(declarations.get("transform"), None) else "translate"
+        return Hiding("moved off-screen by a transform", HIGH, "off_screen",
+                      f"{moving_property}:{declarations[moving_property]}")
 
     overflow_words = []
     for overflow_property in ("overflow", "overflow-x", "overflow-y"):
         for word in declarations.get(overflow_property, "").split():
             overflow_words.append(word)
     if "hidden" in overflow_words or "clip" in overflow_words:
+        clipping = "overflow:hidden" if "hidden" in overflow_words else "overflow:clip"
         for size_property in ("width", "height", "max-width", "max-height"):
             if size_property in declarations:
                 pixels = length_in_pixels(declarations[size_property])
                 if pixels is not None and pixels <= CLIPPED_BOX_MAXIMUM_PIXELS:
                     reason = f"{size_property}:{declarations[size_property]} with overflow:hidden"
+                    rule = f"{size_property}:{declarations[size_property]}; {clipping}"
                     if pixels > 0:
                         # The usual "visually hidden" pattern for labels read only by screen readers.
-                        reason = f"{SCREEN_READER_ONLY_REASON} ({reason})"
-                    return (reason, HIGH)
+                        return Hiding(f"{SCREEN_READER_ONLY_REASON} ({reason})", HIGH, "screen_reader_only", rule)
+                    return Hiding(reason, HIGH, "clipped", rule)
         line_height = declarations.get("line-height")
         if line_height is not None and "height" not in declarations and "min-height" not in declarations:
             if line_height_collapsed(line_height):
-                return (f"line-height:{line_height} with overflow:hidden", HIGH)
+                return Hiding(f"line-height:{line_height} with overflow:hidden", HIGH, "clipped",
+                              f"line-height:{line_height}; {clipping}")
     if declarations.get("position") in ("absolute", "fixed"):
         for offset_property in ("left", "top", "right", "bottom", "margin-left", "margin-top", "inset"):
             offset_value = declarations.get(offset_property, "")
             if any_offset_is_off_screen(offset_value):
-                return (f"positioned off-screen ({offset_property}:{offset_value})", HIGH)
+                return Hiding(f"positioned off-screen ({offset_property}:{offset_value})", HIGH, "off_screen",
+                              f"{offset_property}:{offset_value}")
     if is_off_screen_offset(declarations.get("text-indent", "")):
-        return ("text-indent off-screen", HIGH)
+        return Hiding("text-indent off-screen", HIGH, "off_screen", "text-indent:" + declarations["text-indent"])
     return None
 
 
@@ -261,7 +306,7 @@ def _covering_pseudo_element(element, rules):
         if declarations.get("content", "normal") in ("none", "normal"):
             continue
         if is_covering_overlay(declarations):
-            return f"covered by its own ::{pseudo_name} overlay"
+            return Hiding(f"covered by its own ::{pseudo_name} overlay", HIGH, "covered")
     return None
 
 
@@ -319,7 +364,8 @@ def _drawn_behind_background(element, declarations, rules):
             return None
         background = declared_background_color(ancestor_declarations)
         if background is not None and background[3] >= OPAQUE_ALPHA:
-            return f"drawn behind an enclosing background (z-index:{declarations['z-index']})"
+            return Hiding(f"drawn behind an enclosing background (z-index:{declarations['z-index']})", HIGH,
+                          "behind_background", f"z-index:{declarations['z-index']}")
     return None
 
 
@@ -390,7 +436,7 @@ def _svg_attribute_hides(name, value, element):
         return _ZERO_SCALE.search(value) is not None
     if name == "clip-path":
         return value.replace(" ", "").startswith(("inset(50%", "circle(0"))
-    return filter_hiding_reason(value) is not None
+    return filter_hiding(value) is not None
 
 
 def _is_valid_css_value(name, value):
@@ -455,12 +501,12 @@ def _svg_presentation_hints(element, tag):
     return hints
 
 
-def _svg_size_reason(tag, declarations):
+def _svg_size_hiding(tag, declarations):
     """Why an <svg> or <foreignObject> paints nothing because of its size, or None."""
     if tag == "svg":
         for name in ("width", "height"):
             if _svg_size(declarations.get(name)) == "zero":
-                return f"zero-size <svg> ({name}:{declarations[name]})"
+                return Hiding(f"zero-size <svg> ({name}:{declarations[name]})", HIGH, "svg_not_drawn")
         return None
     overflow_words = declarations.get("overflow", "").split()
     overflow_x = declarations.get("overflow-x") or (overflow_words[0] if overflow_words else "")
@@ -469,7 +515,7 @@ def _svg_size_reason(tag, declarations):
         return None
     for name in ("width", "height"):
         if _svg_size(declarations.get(name)) != "positive":
-            return f"SVG <foreignObject> with no {name}, which clips its content away"
+            return Hiding(f"SVG <foreignObject> with no {name}, which clips its content away", HIGH, "svg_not_drawn")
     return None
 
 
@@ -591,13 +637,14 @@ def _is_closed_details(element, tag):
     return tag == "details" and element.get("open") is None
 
 
-def _reordering_reason(element, tag, declarations):
-    """Right-to-left override of left-to-right letters: the reader sees them in reverse order."""
+def _reordering(element, tag, declarations):
+    """(reason, rule) for a right-to-left override of left-to-right letters, which the reader sees
+    in reverse order; None when there is none."""
     if tag == "bdo":
         direction = (element.get("dir") or "").lower()
         if direction != "rtl":
             return None
-        reason = '<bdo dir="rtl">'
+        reason = rule = '<bdo dir="rtl">'
     elif declarations.get("unicode-bidi") in ("bidi-override", "isolate-override"):
         direction = declarations.get("direction") or (element.get("dir") or "").lower()
         if not direction:
@@ -607,7 +654,8 @@ def _reordering_reason(element, tag, declarations):
                     break
         if direction != "rtl":
             return None
-        reason = "unicode-bidi:" + declarations["unicode-bidi"] + " with direction:rtl"
+        rule = "unicode-bidi:" + declarations["unicode-bidi"]
+        reason = rule + " with direction:rtl"
     else:
         return None
     left_to_right_letters = 0
@@ -616,7 +664,7 @@ def _reordering_reason(element, tag, declarations):
             left_to_right_letters += 1
     if left_to_right_letters < MINIMUM_REORDERED_LETTERS:
         return None
-    return reason
+    return reason, rule
 
 
 class _StylesheetRules:
@@ -666,23 +714,23 @@ def _background_lookup(rules, element):
 
 
 def _element_hiding(element, tag, rules, inherited_background, svg_place):
-    """((reason, severity) or None, background, declarations or None, SVG place of its children) for
+    """(a Hiding or None, background, declarations or None, SVG place of its children) for
     one element in svg_place: why it is hidden, the background its children inherit, its declarations
     (None when markup alone hides it), and where its children sit in an SVG."""
     children_place, svg_reason = _svg_place(svg_place, element, tag)
     if svg_reason is not None:
-        return (svg_reason, HIGH), inherited_background, None, None
+        return Hiding(svg_reason, HIGH, "svg_not_drawn"), inherited_background, None, None
     if tag in HIDDEN_CONTENT_TAGS:
-        return (f"inside <{tag}>", HIGH), inherited_background, None, None
+        return Hiding(f"inside <{tag}>", HIGH, "not_rendered_element"), inherited_background, None, None
     if element.get("hidden") is not None:
-        return ("hidden attribute", HIGH), inherited_background, None, None
+        return Hiding("hidden attribute", HIGH, "hidden_attribute"), inherited_background, None, None
     if tag == "input" and (element.get("type") or "").lower() == "hidden":
-        return ("hidden input", HIGH), inherited_background, None, None
+        return Hiding("hidden input", HIGH, "hidden_input"), inherited_background, None, None
     declarations = _declarations_with_hints(rules, element, tag)
     if tag == "svg" or (tag == "foreignobject" and svg_place is not None):
-        size_reason = _svg_size_reason(tag, declarations)
-        if size_reason is not None:
-            return (size_reason, HIGH), inherited_background, declarations, None
+        size_hiding = _svg_size_hiding(tag, declarations)
+        if size_hiding is not None:
+            return size_hiding, inherited_background, declarations, None
     if tag == "foreignobject" and svg_place is not None and "color" not in declarations:
         color_hiding = _foreign_object_color_hiding(element, rules, inherited_background)
         if color_hiding is not None:
@@ -690,18 +738,16 @@ def _element_hiding(element, tag, rules, inherited_background, svg_place):
     own_background = declared_background_color(declarations)
     if own_background is not None:
         inherited_background = own_background
-    hiding = _hiding_reason_from_declarations(
+    hiding = _hiding_from_declarations(
         declarations, inherited_background, _background_lookup(rules, element),
         _is_painted_by_fill(tag, svg_place is not None or tag == "svg"),
     )
     if hiding is None:
-        behind = _drawn_behind_background(element, declarations, rules)
-        if behind is not None:
-            hiding = (behind, HIGH)
+        hiding = _drawn_behind_background(element, declarations, rules)
     if hiding is None:
-        pseudo_reason = _covering_pseudo_element(element, rules)
-        if pseudo_reason is not None and _has_positioned_container(element, rules):
-            hiding = (pseudo_reason, HIGH)
+        pseudo_overlay = _covering_pseudo_element(element, rules)
+        if pseudo_overlay is not None and _has_positioned_container(element, rules):
+            hiding = pseudo_overlay
     if hiding is None:
         hiding = _hiding_under_undecided_rules(element, tag, rules)
     if hiding is None and tag == "text" and children_place is not None and children_place.in_text:
@@ -726,10 +772,10 @@ def _hiding_under_undecided_rules(element, tag, rules):
         return None
     alternatives = rules.declaration_alternatives(element)
     if alternatives is None:
-        return ("CSS this reader cannot evaluate: too many rules under conditions it cannot answer "
-                "(@supports, @container, @scope), a value too long to resolve, or if(), attr() or a "
-                "custom function",
-                HIGH)
+        return Hiding("CSS this reader cannot evaluate: too many rules under conditions it cannot answer "
+                      "(@supports, @container, @scope), a value too long to resolve, or if(), attr() or a "
+                      "custom function",
+                      HIGH, "css_not_evaluated")
     hints = _presentational_hints(element, tag)
     sized_svg_element = tag == "svg" or (tag == "foreignobject" and _is_svg_element(element, tag))
     worlds = _rule_worlds(rules, element)
@@ -747,33 +793,29 @@ def _hiding_under_undecided_rules(element, tag, rules):
             if own_background is not None or parent is None:
                 return own_background
             return rules.background_for(parent)
-        hiding = _hiding_reason_from_declarations(alternative, None, lookup, painted_by_fill)
+        hiding = _hiding_from_declarations(alternative, None, lookup, painted_by_fill)
         if hiding is None and sized_svg_element:
-            size_reason = _svg_size_reason(tag, alternative)
-            if size_reason is not None:
-                hiding = (size_reason, HIGH)
+            hiding = _svg_size_hiding(tag, alternative)
         if hiding is None:
-            behind = _drawn_behind_background(element, alternative, rules)
-            if behind is not None:
-                hiding = (behind, HIGH)
+            hiding = _drawn_behind_background(element, alternative, rules)
         if hiding is not None:
             return hiding
     for world_rules in worlds[1:]:
         declarations = _declarations_with_hints(world_rules, element, tag)
-        hiding = _hiding_reason_from_declarations(
+        hiding = _hiding_from_declarations(
             declarations, None, _background_lookup(world_rules, element), painted_by_fill)
         if hiding is not None:
             return hiding
         if sized_svg_element:
-            size_reason = _svg_size_reason(tag, declarations)
-            if size_reason is not None:
-                return (size_reason, HIGH)
+            size_hiding = _svg_size_hiding(tag, declarations)
+            if size_hiding is not None:
+                return size_hiding
         behind = _drawn_behind_background(element, declarations, world_rules)
         if behind is not None:
-            return (behind, HIGH)
-        pseudo_reason = _covering_pseudo_element(element, world_rules)
-        if pseudo_reason is not None and _has_positioned_container(element, world_rules):
-            return (pseudo_reason, HIGH)
+            return behind
+        pseudo_overlay = _covering_pseudo_element(element, world_rules)
+        if pseudo_overlay is not None and _has_positioned_container(element, world_rules):
+            return pseudo_overlay
     return None
 
 
@@ -801,14 +843,14 @@ def _ancestor_state(element, rules):
             ancestor, ancestor_tag, rules, inherited_background, svg_place
         )
         if hiding is not None:
-            return inherited_background, (f"an enclosing element is hidden ({hiding[0]})", hiding[1]), None
+            return inherited_background, hiding._replace(reason=f"an enclosing element is hidden ({hiding.reason})"), None
         child_on_path = path[position + 1]
         if _is_closed_details(ancestor, ancestor_tag):
             child_tag = child_on_path.tag.lower() if isinstance(child_on_path.tag, str) else ""
             if child_tag != "summary":
-                return inherited_background, ("inside a closed <details>", HIGH), None
+                return inherited_background, CLOSED_DETAILS_HIDING, None
         if _overlay_over_content(ancestor, rules, skip_child=child_on_path) is not None:
-            return inherited_background, ("covered by an opaque overlay drawn over it", HIGH), None
+            return inherited_background, COVERED_BY_OVERLAY_HIDING, None
     return inherited_background, None, svg_place
 
 
@@ -833,28 +875,28 @@ def _text_outside_code(element):
     return "".join(parts)
 
 
-def _hide_loose_content(element, keep_child, reason, hidden_fragments):
+def _hide_loose_content(element, keep_child, hiding, hidden_fragments):
     """Records element's own text, tails and children (except keep_child) as hidden."""
     if element.text and element.text.strip():
-        hidden_fragments.append(HiddenFragment(
-            _collapse_whitespace(element.text), reason, "hidden_element", HIGH, None, (element, "text"),
+        hidden_fragments.append(HiddenFragment.hidden(
+            _collapse_whitespace(element.text), hiding, text_of=(element, "text"),
         ))
     for child in element:
         if child is not keep_child and isinstance(child.tag, str):
             child_text = _collapse_whitespace(_text_outside_code(child))
             if child_text:
-                hidden_fragments.append(HiddenFragment(child_text, reason, "hidden_element", HIGH, child))
+                hidden_fragments.append(HiddenFragment.hidden(child_text, hiding, child))
         if child.tail and child.tail.strip():
-            hidden_fragments.append(HiddenFragment(
-                _collapse_whitespace(child.tail), reason, "hidden_element", HIGH, None, (child, "tail"),
+            hidden_fragments.append(HiddenFragment.hidden(
+                _collapse_whitespace(child.tail), hiding, text_of=(child, "tail"),
             ))
 
 
-def _record_undrawn_svg_text(text, owner, hidden_fragments, hiding=("SVG text outside <text>", HIGH),
+def _record_undrawn_svg_text(text, owner, hidden_fragments, hiding=SVG_TEXT_OUTSIDE_TEXT_HIDING,
                              settled_by_rendering=False):
     if text and text.strip():
-        hidden_fragments.append(HiddenFragment(
-            _collapse_whitespace(text), hiding[0], "hidden_element", hiding[1], None, owner, settled_by_rendering,
+        hidden_fragments.append(HiddenFragment.hidden(
+            _collapse_whitespace(text), hiding, text_of=owner, settled_by_rendering=settled_by_rendering,
         ))
 
 
@@ -1158,9 +1200,10 @@ def _paint_hiding_in(rules, element, inherited_background):
     maybe_shown = [color for color in maybe if color[3] >= MINIMUM_VISIBLE_OPACITY]
     paint_values = f"fill:{paint['fill']}, stroke:{paint['stroke']}"
     if not shown and maybe_shown:
-        return f"SVG text painted only by gradient stops that may lie outside it ({paint_values})", MEDIUM
+        return Hiding(f"SVG text painted only by gradient stops that may lie outside it ({paint_values})", MEDIUM,
+                      "svg_not_painted")
     if not shown:
-        return f"SVG text painted with no visible fill or stroke ({paint_values})", HIGH
+        return Hiding(f"SVG text painted with no visible fill or stroke ({paint_values})", HIGH, "svg_not_painted")
     background = rules.background_for(element) if hasattr(rules, "background_for") else inherited_background
     reference = background if background is not None else ASSUMED_PAGE_BACKGROUND
     for color in shown:
@@ -1170,11 +1213,11 @@ def _paint_hiding_in(rules, element, inherited_background):
     if (background is None or _drawing_has_shapes(rules, element)
             or any(contrast_ratio(color, reference) >= MINIMUM_VISIBLE_CONTRAST for color in maybe_shown)):
         severity = MEDIUM  # the background is a guess, the text may lie on a shape, or a maybe-stop shows it
-    return (f"SVG text fill {paint['fill']} nearly matches the background", severity)
+    return Hiding(f"SVG text fill {paint['fill']} nearly matches the background", severity, "svg_not_painted")
 
 
 def _svg_paint_hiding(element, rules, inherited_background):
-    """(reason, severity) when neither fill nor stroke shows element's own text, or None; with and
+    """A Hiding when neither fill nor stroke shows element's own text, or None; with and
     without the undecided CSS blocks (see _rule_worlds), as Chrome may apply either."""
     hiding = _paint_hiding_in(rules, element, inherited_background)
     other_rules = getattr(rules, "without_undecided_blocks", None)
@@ -1366,7 +1409,7 @@ def _clips_its_content(svg, worlds):
 
 
 def _svg_text_position_hiding(element, rules):
-    """(reason, MEDIUM) when a <text> is placed wholly outside the <svg> that clips it, or None.
+    """A MEDIUM Hiding when a <text> is placed wholly outside the <svg> that clips it, or None.
     Only the plain cases: no viewBox, nested <svg> or <foreignObject>, nothing that moves or turns
     the text, and no <tspan> or <textPath> with a place of its own; the browser check reads the rest."""
     css_mentions = getattr(rules, "svg_css_mentions", frozenset(("placing", "far")))
@@ -1399,8 +1442,8 @@ def _svg_text_position_hiding(element, rules):
     if x is None or y is None or not _clips_its_content(svg, worlds):
         return None
     if y <= 0:
-        return (f"SVG text placed above its drawing (y={element.get('y', 'not set')}: its letters sit "
-                "above the top edge)", MEDIUM)
+        return Hiding(f"SVG text placed above its drawing (y={element.get('y', 'not set')}: its letters sit "
+                      "above the top edge)", MEDIUM, "svg_off_drawing")
     if "far" in css_mentions:
         return None
     sizes = _known_svg_size(svg, worlds)
@@ -1413,8 +1456,8 @@ def _svg_text_position_hiding(element, rules):
     if font_pixels is None or font_pixels >= FAR_OUTSIDE_DRAWING_PIXELS / 2:
         return None
     if far_below:
-        return (f"SVG text placed far below its drawing (y={element.get('y')})", MEDIUM)
-    return (f"SVG text placed far right of its drawing (x={element.get('x')})", MEDIUM)
+        return Hiding(f"SVG text placed far below its drawing (y={element.get('y')})", MEDIUM, "svg_off_drawing")
+    return Hiding(f"SVG text placed far right of its drawing (x={element.get('x')})", MEDIUM, "svg_off_drawing")
 
 
 def _foreign_object_color_hiding(element, rules, inherited_background):
@@ -1425,10 +1468,9 @@ def _foreign_object_color_hiding(element, rules, inherited_background):
         worlds.append(rules.without_undecided_blocks)
     for world in worlds:
         color = _svg_paint(world, element)["color"]
-        hiding = _hiding_reason_from_declarations({"color": color}, inherited_background,
-                                                  _background_lookup(world, element))
+        hiding = _hiding_from_declarations({"color": color}, inherited_background, _background_lookup(world, element))
         if hiding is not None:
-            return (f"{hiding[0]} (the color the <foreignObject> inherits)", hiding[1])
+            return hiding._replace(reason=f"{hiding.reason} (the color the <foreignObject> inherits)")
     return None
 
 
@@ -1443,16 +1485,15 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
     if hiding is not None:
         hidden_text = _collapse_whitespace(_text_outside_code(element))
         if hidden_text:
-            hidden_fragments.append(
-                HiddenFragment(hidden_text, hiding[0], "hidden_element", hiding[1], element)
-            )
+            hidden_fragments.append(HiddenFragment.hidden(hidden_text, hiding, element))
         return
 
-    reordering = _reordering_reason(element, tag, declarations)
+    reordering = _reordering(element, tag, declarations)
     if reordering is not None:
+        reason, rule = reordering
         hidden_fragments.append(HiddenFragment(
             _collapse_whitespace(element.text_content()),
-            f"shown to readers in reverse order ({reordering})", "reordered_text", HIGH, element,
+            f"shown to readers in reverse order ({reason})", "reordered_text", HIGH, element, css=rule,
         ))
 
     # SVG text outside <text> is not drawn, and each <text> is set apart from what is around it.
@@ -1475,7 +1516,7 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
             if isinstance(child.tag, str) and child.tag.lower() == "summary":
                 summary = child
                 break
-        _hide_loose_content(element, summary, "inside a closed <details>", hidden_fragments)
+        _hide_loose_content(element, summary, CLOSED_DETAILS_HIDING, hidden_fragments)
         if summary is not None:
             _visit(summary, inherited_background, rules, visible_parts, hidden_fragments, children_place)
         visible_parts.append(" ")
@@ -1483,7 +1524,7 @@ def _visit(element, inherited_background, rules, visible_parts, hidden_fragments
 
     overlay = _overlay_over_content(element, rules)
     if overlay is not None:
-        _hide_loose_content(element, overlay, "covered by an opaque overlay drawn over it", hidden_fragments)
+        _hide_loose_content(element, overlay, COVERED_BY_OVERLAY_HIDING, hidden_fragments)
         _visit(overlay, inherited_background, rules, visible_parts, hidden_fragments, children_place)
         visible_parts.append(" ")
         return
@@ -1590,9 +1631,7 @@ def visible_text_of_element(element, rules):
         hidden_fragments = []
         hidden_text = _collapse_whitespace(_text_outside_code(element))
         if hidden_text:
-            hidden_fragments.append(
-                HiddenFragment(hidden_text, ancestor_hiding[0], "hidden_element", ancestor_hiding[1], element)
-            )
+            hidden_fragments.append(HiddenFragment.hidden(hidden_text, ancestor_hiding, element))
         return "", hidden_fragments
     visible_parts = []
     hidden_fragments = []

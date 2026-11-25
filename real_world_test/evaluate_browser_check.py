@@ -9,6 +9,7 @@ directory). Chrome is restarted every RESTART_PAGES pages, so memory held by thi
 scripts doesn't build up over a long run.
 """
 
+import json
 import time
 import warnings
 
@@ -64,7 +65,7 @@ def main():
                 if (flag.kind, flag.original) not in previous_flags:
                     new_flag_lines.append(
                         f"- {page_entry['file']} {page_entry['source']} [{flag.field}] `{flag.kind}` "
-                        f"({flag.severity}): {flag.original[:100]!r}: {flag.detail[:140]}"
+                        f"({flag.severity}): {flag.original[:100]!r}: {json.dumps(flag.evidence, ensure_ascii=False)[:140]}"
                     )
             rows.append((page_entry, article, verified))
             print(f"{page_entry['file']} {page_entry['source']}: {article.verdict} -> {verified.verdict} "

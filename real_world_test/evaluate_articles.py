@@ -9,6 +9,7 @@ Writes article_report.md (in real_world_test/ for the baseline set, else in the 
 A fourth mode also passes the feed's full item text, for feeds that carry one.
 """
 
+import json
 import time
 import warnings
 
@@ -114,7 +115,7 @@ def main():
             mode_summary["verdicts"][article.verdict] = mode_summary["verdicts"].get(article.verdict, 0) + 1
             for flag in article.flags:
                 line = (f"- {page_entry['file']} {page_entry['source']} [{flag.field}] `{flag.kind}` "
-                        f"({flag.severity}): {one_line(flag.original, 90)!r}: {one_line(flag.detail, 150)}")
+                        f"({flag.severity}): {one_line(flag.original, 90)!r}: {one_line(json.dumps(flag.evidence, ensure_ascii=False), 150)}")
                 flag_lines[mode_name].append(line)
                 group_key = (page_entry["source"], flag.kind, flag.severity)
                 group = flag_groups[mode_name].setdefault(group_key, {"count": 0, "pages": set(), "examples": []})

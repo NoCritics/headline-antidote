@@ -42,7 +42,7 @@ import tinycss2
 from tinycss2.serializer import BAD_PAIRS, serialize_identifier
 
 from .css_hiding import (
-    CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_OPACITY, declared_background_color, filter_hiding_reason,
+    CLIPPED_BOX_MAXIMUM_PIXELS, MINIMUM_VISIBLE_OPACITY, declared_background_color, filter_hiding,
     any_offset_is_off_screen, font_shorthand_is_unreadable, font_size_is_unreadable, is_covering_overlay,
     letters_collapsed, line_height_collapsed, opacity_is_invisible, relative_luminance,
     scale_is_zero, translation_is_off_screen, z_index_is_negative,
@@ -494,7 +494,7 @@ def _could_hide(name, value):
     if name == "opacity":
         return opacity_is_invisible(value)
     if name == "filter":
-        return filter_hiding_reason(value) is not None
+        return filter_hiding(value) is not None
     if name == "font-size":
         return font_size_is_unreadable(value)
     if name == "font":

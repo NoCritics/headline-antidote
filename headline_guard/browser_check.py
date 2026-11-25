@@ -145,12 +145,7 @@ def _compare_headline(guard, article, rendered, flags):
     if rendered.headline_text is None:
         # No rendered heading shares even half its words with the static one: a script removed or
         # rewrote it, so readers see another headline (or none) than the one the model would get.
-        flags.append(Flag(
-            "headline_not_found_in_browser", HIGH, None, None, article.heading_text,
-            "in a browser no heading on the page matches this headline (a script removed or replaced it); "
-            "readers do not see the headline the model would get",
-            "headline",
-        ))
+        flags.append(Flag("headline_not_found_in_browser", HIGH, None, None, article.heading_text, {}, "headline"))
         return headline, headline_source, flags
     static_words = _comparison_words(article.heading_text)
     rendered_words = _comparison_words(rendered.headline_text)
@@ -173,17 +168,11 @@ def _compare_headline(guard, article, rendered, flags):
     flags = kept_flags
     if still_hidden:
         flags.append(Flag(
-            "hidden_html_text", HIGH, None, None, " ".join(still_hidden),
-            "in a browser too these headline words are not shown (SVG text placed outside its drawing); "
-            "HTML-based scrapers would pass them on",
-            "headline",
+            "hidden_html_text", HIGH, None, None, " ".join(still_hidden), {}, "headline",
         ))
     if hidden_words:
         flags.append(Flag(
-            "hidden_html_text", HIGH, None, None, " ".join(hidden_words),
-            "in a browser the headline shows without these words (hidden by a script or an element "
-            "drawn over them); HTML-based scrapers would pass them on",
-            "headline",
+            "hidden_html_text", HIGH, None, None, " ".join(hidden_words), {}, "headline",
         ))
         headline = guard.analyze(rendered.headline_text).clean_text
         headline_source += "; as shown in a browser"
@@ -209,12 +198,7 @@ def _compare_headline(guard, article, rendered, flags):
         headline = guard.analyze(rendered.headline_text).clean_text
         headline_source += "; as shown in a browser"
     if added_words:
-        flags.append(Flag(
-            "scraper_text_differs", MEDIUM, None, None, rendered.headline_text,
-            f"the browser shows headline words missing from the page's HTML (added by a script): "
-            f"{' '.join(added_words)!r}",
-            "headline",
-        ))
+        flags.append(Flag("scraper_text_differs", MEDIUM, None, None, rendered.headline_text, {}, "headline"))
     return headline, headline_source, flags
 
 
@@ -245,8 +229,7 @@ def _remove_hidden_runs(paragraphs, flags):
         removed_passages.append(" ".join(removed_parts))
         # Low, as in the static reading: removed, so the model never sees it.
         flags.append(Flag(
-            "hidden_text_in_article", LOW, None, None, " … ".join(removed_parts)[:500],
-            "a browser hides this from readers (a script or an element drawn over it); removed from the body",
+            "hidden_text_in_article", LOW, None, None, " … ".join(removed_parts)[:500], {},
             "body",
         ))
         if remaining:
@@ -260,10 +243,7 @@ def compare_with_rendered_page(guard, article, rendered):
     for flag in article.flags:
         flags.append(flag)
     if not rendered.complete:
-        flags.append(Flag(
-            "browser_check_incomplete", LOW, None, None, rendered.note,
-            "the page did not finish loading in the browser; the check used what had rendered", "page",
-        ))
+        flags.append(Flag("browser_check_incomplete", LOW, None, None, rendered.note, {}, "page"))
     visible = _text_index(rendered.page_text)
     clipped = _text_index(rendered.clipped_text)
     paragraphs = []
@@ -288,10 +268,7 @@ def compare_with_rendered_page(guard, article, rendered):
         # of the body, whose payload would otherwise pass in the static body that stands.
         flags.append(Flag(
             "browser_check_inconclusive", MEDIUM, None, None, rendered.note,
-            f"the browser showed {shown_words} of the body's {body_words} words (a consent wall, a redirect, "
-            "a script error, or a script hiding the body); nothing was concluded, the static result stands"
-            + (", and the reason for the check is unresolved" if article.needs_browser_check else ""),
-            "page",
+            {}, "page",
         ))
         return replace(article, flags=flags, browser_milliseconds=rendered.milliseconds)
 
@@ -314,13 +291,7 @@ def compare_with_rendered_page(guard, article, rendered):
             set_aside.append(article.hidden_ending)
         for passage in removed_passages:
             set_aside.append(passage)
-        flags.append(Flag(
-            "most_of_article_hidden", MEDIUM, None, None, "",
-            f"a browser hides the last {hidden_words} of the body's {body_words} words from readers (usually a "
-            "paywall, but it could be a hidden ending): the body is incomplete; the hidden text is in "
-            "hidden_ending, not in the body",
-            "body",
-        ))
+        flags.append(Flag("most_of_article_hidden", MEDIUM, None, None, "", {}, "body"))
         return replace(
             article, headline=headline, headline_source=headline_source, body=body,
             hidden_ending="\n".join(set_aside), flags=flags, browser_check_reasons=remaining_reasons,
@@ -329,12 +300,7 @@ def compare_with_rendered_page(guard, article, rendered):
 
     body, clipped_paragraphs, _ = _remove_hidden_runs(paragraphs, flags)
     if clipped_paragraphs:
-        flags.append(Flag(
-            "text_behind_preview_window", LOW, None, None, "",
-            f"{clipped_paragraphs} paragraph(s) are cut off by a preview window in the browser (a metered "
-            "paywall or a collapsed section); this is the publisher's text, kept in the body",
-            "body",
-        ))
+        flags.append(Flag("text_behind_preview_window", LOW, None, None, "", {}, "body"))
     return replace(
         article, headline=headline, headline_source=headline_source, body=body, flags=flags,
         browser_check_reasons=remaining_reasons, browser_verified=headline_confirmed,

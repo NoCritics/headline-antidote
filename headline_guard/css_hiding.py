@@ -149,18 +149,19 @@ def translation_is_off_screen(transform_value, translate_value):
     return False
 
 
-def filter_hiding_reason(filter_value):
+def filter_hiding(filter_value):
+    """(cause, rule) when the filter hides text: ("transparent", "filter:opacity(0)") or ("blurred", ...)."""
     if not filter_value or filter_value == "none":
         return None
     for function_name, argument in re.findall(r"([a-z-]+)\(([^()]*)\)", filter_value):
         if function_name == "opacity":
             amount = plain_number(argument.strip())
             if amount is not None and amount < MINIMUM_VISIBLE_OPACITY:
-                return f"filter:opacity({argument.strip()})"
+                return "transparent", f"filter:opacity({argument.strip()})"
         elif function_name == "blur":
             radius = length_in_pixels(argument.strip())
             if radius is not None and radius >= UNREADABLE_BLUR_PIXELS:
-                return f"filter:blur({argument.strip()})"
+                return "blurred", f"filter:blur({argument.strip()})"
     return None
 
 

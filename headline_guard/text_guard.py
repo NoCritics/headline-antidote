@@ -13,6 +13,7 @@ policy made for trading pipelines:
 All flag offsets point into the text that was passed to analyze().
 """
 
+import copy
 import difflib
 import unicodedata
 from dataclasses import dataclass
@@ -93,28 +94,30 @@ class Flag:
     start: int | None
     end: int | None
     original: str
-    detail: str
+    # The facts of this finding that no other field holds (docs/report_format.md, "Evidence keys").
+    evidence: dict
     # For article extraction: which output the flag belongs to ("headline", "body", "metadata", "page").
     field: str | None = None
 
     def to_dict(self):
         """The flag as it appears in a report (report_schema.json), without offsets."""
         return {"category": self.kind, "severity": self.severity, "field": self.field,
-                "flagged_text": self.original, "detail": self.detail}
+                "flagged_text": self.original, "evidence": copy.deepcopy(self.evidence)}
 
 
 def _html_comment_flag(fragment):
-    return Flag(
-        "html_comment_text", MEDIUM, None, None, fragment.text,
-        "text inside an HTML comment; some scrapers pass it on to the model",
-    )
+    return Flag("html_comment_text", MEDIUM, None, None, fragment.text, {})
+
+
+def hiding_evidence(fragment):
+    """The cause of a hidden fragment, and the CSS rule when one hides it."""
+    if fragment.css is None:
+        return {"cause": fragment.cause}
+    return {"cause": fragment.cause, "css": fragment.css}
 
 
 def _hidden_fragment_flag(fragment, severity):
-    return Flag(
-        "hidden_html_text", severity, None, None, fragment.text,
-        f"text a reader cannot see ({fragment.reason}) but a scraper would pass on",
-    )
+    return Flag("hidden_html_text", severity, None, None, fragment.text, hiding_evidence(fragment))
 
 
 # The version of report_schema.json that to_dict() output follows.
@@ -196,12 +199,23 @@ def _is_variation_selector(character):
     return 0x180B <= code_point <= 0x180F
 
 
-def _describe_characters(characters):
-    descriptions = []
-    for character in characters:
-        name = unicodedata.name(character, "UNNAMED")
-        descriptions.append(f"U+{ord(character):04X} {name}")
-    return ", ".join(descriptions)
+def _swapped_characters(window, spelling):
+    """The characters of window that stand in for the spelling's letters, each once: the other
+    script's letters, or the ASCII ones ("I" for "l"; "rn" for "m", which differs in length)."""
+    swapped = []
+    matcher = difflib.SequenceMatcher(a=spelling, b=window, autojunk=False)
+    for operation, _, _, window_start, window_end in matcher.get_opcodes():
+        if operation == "equal":
+            continue
+        for character in window[window_start:window_end]:
+            if character not in swapped:
+                swapped.append(character)
+    return swapped
+
+
+def _character_evidence(characters):
+    return [{"code_point": f"U+{ord(character):04X}", "name": unicodedata.name(character, "UNNAMED")}
+            for character in characters]
 
 
 class HeadlineGuard:
@@ -314,14 +328,11 @@ class HeadlineGuard:
             visible_text, hidden_fragments = extract_visible_text(html, headline_xpath, stylesheets)
         except PageTooComplex as error:
             result = self.analyze("")
-            result.flags.append(Flag("page_too_complex_to_read", MEDIUM, None, None, "", str(error)))
+            result.flags.append(Flag("page_too_complex_to_read", MEDIUM, None, None, "", {"message": str(error)}))
             return result
         if visible_text is None:
             result = self.analyze("")
-            result.flags.append(Flag(
-                "headline_not_found", MEDIUM, None, None, "",
-                f"no element matches {headline_xpath!r}",
-            ))
+            result.flags.append(Flag("headline_not_found", MEDIUM, None, None, "", {}))
             return result
         if rendered_by_browser:
             if scraped_text is None:
@@ -359,9 +370,7 @@ class HeadlineGuard:
         added_words, dropped_words = _word_differences(parser_visible_text, browser_visible_text)
         if dropped_words:
             result.flags.append(Flag(
-                "hidden_html_text", HIGH, None, None, " ".join(dropped_words),
-                "text the rendered page hides from readers (CSS or JavaScript this parser cannot "
-                "evaluate) but HTML-based scrapers would pass on",
+                "hidden_html_text", HIGH, None, None, " ".join(dropped_words), {"cause": "script_or_overlay"},
             ))
         unexplained_words = list(added_words)
         for fragment in hidden_fragments:
@@ -369,21 +378,14 @@ class HeadlineGuard:
                 if word in unexplained_words:
                     unexplained_words.remove(word)
         if unexplained_words:
-            result.flags.append(Flag(
-                "scraper_text_differs", MEDIUM, None, None, browser_visible_text,
-                f"the browser shows text missing from the page's HTML: {' '.join(unexplained_words)!r}",
-            ))
+            result.flags.append(Flag("script_generated_text", MEDIUM, None, None, " ".join(unexplained_words), {}))
         return result
 
 
 def reordered_text_flag(fragment, severity=None, field=None):
     """Readers see these letters in reverse order, so the page's text is not what they read."""
-    return Flag(
-        "reordered_text", severity or fragment.severity, None, None, fragment.text,
-        f"{fragment.reason}; the model would read the letters in the page's order, the reader "
-        "in reverse, so the two see different words",
-        field,
-    )
+    return Flag("reordered_text", severity or fragment.severity, None, None, fragment.text,
+                {"css": fragment.css}, field)
 
 
 def _severity_for_added_words(added_words, hidden_fragments):
@@ -424,19 +426,16 @@ def _compare_with_scraped_text(visible_text, scraped_text, hidden_fragments):
     added_words, dropped_words = _word_differences(visible_text, scraped_text)
     if not added_words and not dropped_words:
         # Same words, different characters inside them, for example a stripped zero-width space.
-        return Flag(
-            "scraper_text_differs", MEDIUM, None, None, scraped_text,
-            "the scraper's text differs from the visible text at the character level",
-        )
-    details = []
+        return Flag("scraper_text_differs", MEDIUM, None, None, scraped_text, {})
+    evidence = {}
     if added_words:
-        details.append(f"the scraper adds text a reader cannot see: {' '.join(added_words)!r}")
+        evidence["added_text"] = " ".join(added_words)
     if dropped_words:
-        details.append(f"the scraper drops visible text: {' '.join(dropped_words)!r}")
+        evidence["dropped_text"] = " ".join(dropped_words)
     severity = MEDIUM
     if added_words:
         severity = _severity_for_added_words(added_words, hidden_fragments)
-    return Flag("scraper_text_differs", severity, None, None, scraped_text, "; ".join(details))
+    return Flag("scraper_text_differs", severity, None, None, scraped_text, evidence)
 
 
 def _compact(text):
@@ -519,7 +518,7 @@ class _HeadlineAnalysis:
 
     # ---- flags -------------------------------------------------------------
 
-    def _add_flag(self, kind, severity, start, end, detail):
+    def _add_flag(self, kind, severity, start, end, evidence):
         """Adds a flag, merging it into the previous one when they are adjacent and alike."""
         if self.flags:
             previous = self.flags[-1]
@@ -527,9 +526,10 @@ class _HeadlineAnalysis:
                     and previous.end == start and kind != "watchlist_homoglyph"):
                 previous.end = end
                 previous.original = self.text[previous.start:end]
-                previous.detail = previous.detail + "; " + detail
+                for key, value in evidence.items():
+                    previous.evidence[key] += value  # characters extend; looks_like and decoded_text continue
                 return
-        self.flags.append(Flag(kind, severity, start, end, self.text[start:end], detail))
+        self.flags.append(Flag(kind, severity, start, end, self.text[start:end], evidence))
 
     def _keep(self, character, origin):
         self.kept_characters.append(character)
@@ -560,10 +560,8 @@ class _HeadlineAnalysis:
                         tag_code_point = ord(tag_character)
                         if 0xE0020 <= tag_code_point <= 0xE007E:
                             decoded_characters.append(chr(tag_code_point - TAG_FIRST))
-                    self._add_flag(
-                        "hidden_tag_characters", HIGH, index, run_end,
-                        f"invisible Unicode tag characters that models read as {''.join(decoded_characters)!r}",
-                    )
+                    self._add_flag("hidden_tag_characters", HIGH, index, run_end,
+                                   {"decoded_text": "".join(decoded_characters)})
                 index = run_end
                 continue
 
@@ -573,7 +571,7 @@ class _HeadlineAnalysis:
                     self._keep(character, index)
                 elif judgement != "drop":
                     kind, severity = judgement
-                    self._add_flag(kind, severity, index, index + 1, _describe_characters(character))
+                    self._add_flag(kind, severity, index, index + 1, {"characters": _character_evidence(character)})
                 index += 1
                 continue
 
@@ -581,10 +579,8 @@ class _HeadlineAnalysis:
             if normalized != character:
                 severity = self._compatibility_severity(character, normalized)
                 if severity is not None:
-                    self._add_flag(
-                        "compatibility_lookalike", severity, index, index + 1,
-                        f"{_describe_characters(character)} folded to {normalized!r}",
-                    )
+                    self._add_flag("compatibility_lookalike", severity, index, index + 1,
+                                   {"characters": _character_evidence(character), "looks_like": normalized})
                 elif not 0xFF00 <= code_point <= 0xFFEF:
                     # Legitimate compatibility characters ("CO₂", "1º", "™") stay as written:
                     # the text is only changed where a flag says why. Full-width and
@@ -699,10 +695,8 @@ class _HeadlineAnalysis:
                 marks = []
                 for mark_character, _ in mark_run:
                     marks.append(mark_character)
-                self._add_flag(
-                    "excessive_combining_marks", MEDIUM, mark_run[0][1], mark_run[-1][1] + 1,
-                    f"{len(mark_run)} stacked marks removed: {_describe_characters(marks)}",
-                )
+                self._add_flag("excessive_combining_marks", MEDIUM, mark_run[0][1], mark_run[-1][1] + 1,
+                               {"characters": _character_evidence(marks)})
             else:
                 for mark_character, mark_origin in mark_run:
                     filtered_characters.append(mark_character)
@@ -802,24 +796,14 @@ class _HeadlineAnalysis:
                     window_scripts.add(script)
         if len(window_scripts) == 1 and "Latin" not in window_scripts and self.dominant_script in window_scripts:
             # For example "МЕТА" (Ukrainian and Russian for "goal") inside a Cyrillic headline.
-            self._add_flag(
-                "possible_watchlist_lookalike", LOW, original_start, original_end,
-                f"native {self.dominant_script} word that looks like {spelling!r} ({ticker})",
-            )
+            self._add_flag("possible_watchlist_lookalike", LOW, original_start, original_end,
+                           {"looks_like": spelling, "tickers": [ticker]})
             return True
 
-        suspicious_characters = []
-        for character in window_key:
-            if not character.isascii() and character not in suspicious_characters:
-                suspicious_characters.append(character)
-        if suspicious_characters:
-            substitutes = _describe_characters(suspicious_characters)
-        else:
-            substitutes = "ASCII look-alikes such as I for l or 1 for l"
-        self._add_flag(
-            "watchlist_homoglyph", HIGH, original_start, original_end,
-            f"looks like {spelling!r} ({ticker}) but uses {substitutes}",
-        )
+        self._add_flag("watchlist_homoglyph", HIGH, original_start, original_end, {
+            "looks_like": spelling, "tickers": [ticker],
+            "characters": _character_evidence(_swapped_characters(window_key, spelling)),
+        })
         self.entities.append(EntityMention(ticker, spelling, original_start, original_end, True))
         self.span_replacements[kept_start] = (kept_end, spelling)
         return True
@@ -849,10 +833,9 @@ class _HeadlineAnalysis:
         kept_end = self.words[last_word_number][1]
         original_start, original_end = self._original_span(kept_start, kept_end)
         self._mark_words_checked(first_word_number, last_word_number)
-        self._add_flag(
-            "accented_watchlist_name", MEDIUM, original_start, original_end,
-            f"looks like {spelling!r} ({ticker}) with added marks: {_describe_characters(added_marks)}",
-        )
+        self._add_flag("accented_watchlist_name", MEDIUM, original_start, original_end, {
+            "looks_like": spelling, "tickers": [ticker], "characters": _character_evidence(added_marks),
+        })
         self.entities.append(EntityMention(ticker, spelling, original_start, original_end, True))
         self.span_replacements[kept_start] = (kept_end, spelling)
         return True
@@ -885,7 +868,7 @@ class _HeadlineAnalysis:
             elif len(word_scripts) == 1 and letter_count >= 2:
                 only_script = next(iter(word_scripts))
                 if only_script != "Latin" and self.dominant_script == "Latin":
-                    self._check_whole_script_lookalike(word_start, word_end, only_script)
+                    self._check_whole_script_lookalike(word_start, word_end)
 
     @staticmethod
     def _is_allowed_script_combination(word_scripts):
@@ -917,12 +900,10 @@ class _HeadlineAnalysis:
             if majority_script == "Latin" and lookalike is not None:
                 self.character_replacements[position] = lookalike
         original_start, original_end = self._original_span(word_start, word_end)
-        self._add_flag(
-            "mixed_script_word", HIGH if confusable_minority else MEDIUM, original_start, original_end,
-            f"{majority_script} word containing {_describe_characters(minority_characters)}",
-        )
+        self._add_flag("mixed_script_word", HIGH if confusable_minority else MEDIUM, original_start, original_end,
+                       {"characters": _character_evidence(minority_characters)})
 
-    def _check_whole_script_lookalike(self, word_start, word_end, word_script):
+    def _check_whole_script_lookalike(self, word_start, word_end):
         """A word written entirely in, say, Cyrillic letters that all look Latin, inside a Latin headline."""
         replacements = {}
         for position in range(word_start, word_end):
@@ -938,10 +919,8 @@ class _HeadlineAnalysis:
         lookalike_word = []
         for position in range(word_start, word_end):
             lookalike_word.append(replacements.get(position, self.kept_characters[position]))
-        self._add_flag(
-            "whole_script_lookalike", MEDIUM, original_start, original_end,
-            f"{word_script} word that reads as {''.join(lookalike_word)!r} inside a Latin headline",
-        )
+        self._add_flag("whole_script_lookalike", MEDIUM, original_start, original_end,
+                       {"looks_like": "".join(lookalike_word)})
 
     # ---- finishing ---------------------------------------------------------
 
@@ -952,7 +931,8 @@ class _HeadlineAnalysis:
             for entity in self.entities:
                 if entity.start < flag.end and flag.start < entity.end:
                     flag.severity = HIGH
-                    flag.detail = flag.detail + f" (inside watched name {entity.canonical_spelling!r})"
+                    flag.evidence["inside_name"] = entity.canonical_spelling
+                    flag.evidence["tickers"] = [entity.ticker]
                     break
 
     def _build_clean_text(self):

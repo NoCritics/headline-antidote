@@ -43,7 +43,7 @@ def describe_flags(result):
     for flag in result.flags:
         descriptions.append({
             "kind": flag.kind, "severity": flag.severity,
-            "original": flag.original[:120], "detail": flag.detail[:300],
+            "original": flag.original[:120], "evidence": flag.evidence,
         })
     return descriptions
 
@@ -214,12 +214,12 @@ def write_report(feed_results, page_results):
     for entry in feed_results["flagged"]:
         for flag in entry["flags"]:
             lines.append(f"- feed title, {entry['source']}: `{flag['kind']}` ({flag['severity']}) "
-                         f"in {entry['title']!r}: {flag['detail']}")
+                         f"in {entry['title']!r}: {flag['evidence']}")
     for record in page_results:
         for mode_key in ("html_mode", "browser_live", "browser_prefetched"):
             for flag in record.get(mode_key, {}).get("flags", []):
                 lines.append(f"- {record['file']} {record['source']} [{mode_key}]: `{flag['kind']}` "
-                             f"({flag['severity']}) {flag['original']!r}: {flag['detail']}")
+                             f"({flag['severity']}) {flag['original']!r}: {flag['evidence']}")
     lines.append("")
     lines.append("## Pages without a usable headline")
     lines.append("")

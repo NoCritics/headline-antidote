@@ -35,8 +35,10 @@ from dataclasses import dataclass, field
 
 from .css_values import quoted_strings
 from .html_tree import PageTooComplex
-from .html_visibility import SCREEN_READER_ONLY_REASON, parse_document, visible_text_of_element
-from .text_guard import HIGH, LOW, MEDIUM, REPORT_SCHEMA_VERSION, Flag, _compact, reordered_text_flag, verdict_for_flags
+from .html_visibility import parse_document, visible_text_of_element
+from .text_guard import (
+    HIGH, LOW, MEDIUM, REPORT_SCHEMA_VERSION, Flag, _compact, hiding_evidence, reordered_text_flag, verdict_for_flags,
+)
 
 HEADLINE_MATCH_THRESHOLD = 0.6
 SITE_NAME_SEPARATORS = (" | ", " - ", " – ", " — ", " :: ", " · ")
@@ -378,11 +380,11 @@ def _missing_runs(reference_text, body_text):
     return matched_words / len(body_words), runs
 
 
-def _with_field(flags, field_name, detail_prefix=""):
+def _with_field(flags, field_name, found_in=None):
     for flag in flags:
         flag.field = field_name
-        if detail_prefix:
-            flag.detail = detail_prefix + flag.detail
+        if found_in is not None:
+            flag.evidence["found_in"] = found_in
     return flags
 
 
@@ -477,10 +479,7 @@ class _ArticleExtraction:
                 visible_text, hidden_fragments = visible_text_of_element(heading, self.rules)
                 if visible_text:
                     self._flag_hidden_in_headline(hidden_fragments)
-                    self.flags.append(Flag(
-                        "headline_unconfirmed", LOW, None, None, visible_text,
-                        "no metadata or feed title to confirm this <h1> is the headline", "headline",
-                    ))
+                    self.flags.append(Flag("headline_unconfirmed", LOW, None, None, visible_text, {}, "headline"))
                     return visible_text, "first visible <h1> (unconfirmed)", heading
             return "", "none found", None
 
@@ -492,11 +491,7 @@ class _ArticleExtraction:
                     break
             if fallback_label == preferred_label:
                 break
-        self.flags.append(Flag(
-            "headline_from_metadata", LOW, None, None, fallback_text,
-            f"no visible heading matches the page's titles; using the {fallback_label}, "
-            "which is not checked for visibility", "headline",
-        ))
+        self.flags.append(Flag("headline_from_metadata", LOW, None, None, fallback_text, {}, "headline"))
         return fallback_text, fallback_label, None
 
     def _flag_hidden_in_headline(self, hidden_fragments):
@@ -504,14 +499,10 @@ class _ArticleExtraction:
             if fragment.kind == "reordered_text":
                 self.flags.append(reordered_text_flag(fragment, HIGH, "headline"))
             elif fragment.kind == "html_comment":
-                self.flags.append(Flag(
-                    "html_comment_text", MEDIUM, None, None, fragment.text,
-                    "text inside an HTML comment in the headline", "headline",
-                ))
+                self.flags.append(Flag("html_comment_text", MEDIUM, None, None, fragment.text, {}, "headline"))
             else:
                 flag = Flag(
-                    "hidden_html_text", fragment.severity, None, None, fragment.text,
-                    f"hidden text in the headline ({fragment.reason}); a standard scraper would pass it on",
+                    "hidden_html_text", fragment.severity, None, None, fragment.text, hiding_evidence(fragment),
                     "headline",
                 )
                 self.flags.append(flag)
@@ -528,7 +519,7 @@ class _ArticleExtraction:
                 continue
             already_checked.add(compact_title)
             metadata_result = self.guard.analyze(title)
-            self.flags.extend(_with_field(metadata_result.flags, "metadata", f"in the {label}: "))
+            self.flags.extend(_with_field(metadata_result.flags, "metadata", label))
 
     def _titles_to_compare(self, metadata_titles):
         titles = []
@@ -587,13 +578,7 @@ class _ArticleExtraction:
                   and _leading_label_words(headline_element) == list(unexplained)
                   and list(inserted[:len(unexplained)]) == list(unexplained))
         severity = MEDIUM if meaningful and not kicker else LOW
-        detail = (f"the page's heading adds {' '.join(unexplained)!r} to the {label}, and no other title has "
-                  "these words; they may be hidden from readers by a script or an overlay")
-        if kicker:
-            detail += "; they are a label in their own element before the headline (a kicker)"
-        if meaningful:
-            detail += "; the model gets the title's wording"
-        self.flags.append(Flag("headline_adds_words", severity, None, None, " ".join(unexplained), detail, "headline"))
+        self.flags.append(Flag("headline_adds_words", severity, None, None, " ".join(unexplained), {}, "headline"))
         # Even one ordinary word could be hidden ("surge <span>fraud</span>"): let a browser settle it.
         self._add_browser_reason(f"the heading adds words to the {label}")
         if not meaningful:
@@ -622,13 +607,8 @@ class _ArticleExtraction:
                         if letters >= 2 and string.strip() not in generated_parts:
                             generated_parts.append(string.strip())
             if generated_parts or unchecked:
-                detail = ("readers see this text in the headline, added by CSS (::before/::after); "
-                          "scrapers and the model never receive it")
-                if unchecked:
-                    detail += ("; CSS may also add other text here, under more @supports, @container "
-                               "or @scope conditions than were checked")
                 self.flags.append(Flag(
-                    "css_generated_text", MEDIUM, None, None, " ".join(generated_parts), detail, "headline",
+                    "css_generated_text", MEDIUM, None, None, " ".join(generated_parts), {}, "headline",
                 ))
         embedded_families = getattr(self.rules, "data_uri_font_families", None)
         if embedded_families and hasattr(self.rules, "font_family_for"):
@@ -644,12 +624,7 @@ class _ArticleExtraction:
                 family_name = family.strip().strip("'\"").lower()
                 for embedded_family in embedded_families:
                     if family_name == embedded_family or family_name.endswith(" " + embedded_family):
-                        self.flags.append(Flag(
-                            "embedded_font", MEDIUM, None, None, embedded_family,
-                            "the headline is drawn with a font embedded in the page's CSS (a data: URI); "
-                            "such a font can draw other letters than the text contains",
-                            "headline",
-                        ))
+                        self.flags.append(Flag("embedded_font", MEDIUM, None, None, embedded_family, {}, "headline"))
                         self._add_browser_reason("the headline uses a font embedded in the page")
                         return
 
@@ -809,12 +784,7 @@ class _ArticleExtraction:
         runs = _runs_not_in_descriptions(runs, _page_descriptions(self.root))
         if not runs:
             return
-        self.flags.append(Flag(
-            "body_text_not_in_page_copy", LOW, None, None, " / ".join(runs)[:500],
-            f"{len(runs)} passage(s) of the body are missing from the {reference_label}; usually "
-            "subheadings or captions, but text hidden by a script would look the same",
-            "body",
-        ))
+        self.flags.append(Flag("body_text_not_in_page_copy", LOW, None, None, " / ".join(runs)[:500], {}, "body"))
         self._add_browser_reason(f"body passages missing from the {reference_label}")
 
     # ---- body -------------------------------------------------------------
@@ -852,13 +822,7 @@ class _ArticleExtraction:
             if position not in flag_positions:
                 kept_flags.append(flag)
         self.flags = kept_flags
-        self.flags.append(Flag(
-            "most_of_article_hidden", MEDIUM, None, None, "",
-            f"{len(hidden_passages)} passage(s) running to the end of the article, most of its text, are hidden "
-            "from readers (usually a \"Read more\" collapse or a paywall, but it could be a hidden ending): "
-            "the body is incomplete; the hidden text is in hidden_ending, not in the body",
-            "body",
-        ))
+        self.flags.append(Flag("most_of_article_hidden", MEDIUM, None, None, "", {}, "body"))
         self.hidden_ending = "\n".join(set_aside)
 
     def _check_guessed_hiding(self, guessed_fragments, body):
@@ -869,11 +833,7 @@ class _ArticleExtraction:
                 continue
             if _compact(fragment_text) not in body_compact:
                 continue
-            self.flags.append(Flag(
-                "possibly_hidden_text", LOW, None, None, fragment_text[:500],
-                f"may be invisible ({fragment.reason}); kept in the body until a browser check decides",
-                "body",
-            ))
+            self.flags.append(Flag("possibly_hidden_text", LOW, None, None, fragment_text[:500], {}, "body"))
             self._add_browser_reason("body text whose color may match the page background")
             return
 
@@ -923,10 +883,7 @@ class _ArticleExtraction:
 
         body = trafilatura.extract(self.root, **extraction_options) or ""
         if not body.strip():
-            self.flags.append(Flag(
-                "article_body_not_found", LOW, None, None, "",
-                "no article text was found on the page", "body",
-            ))
+            self.flags.append(Flag("article_body_not_found", LOW, None, None, "", {}, "body"))
             return ""
         self._check_scripts_touching_body(body, unpruned_root)
         self._check_guessed_hiding(guessed_fragments, body)
@@ -942,7 +899,7 @@ class _ArticleExtraction:
                 if not fragment_compact or fragment_compact in reported:
                     continue
                 short_label = len(fragment.text.split()) <= MAXIMUM_SCREEN_READER_LABEL_WORDS
-                if fragment.reason.startswith(SCREEN_READER_ONLY_REASON) and short_label:
+                if fragment.cause == "screen_reader_only" and short_label:
                     continue
                 if (fragment_compact in unpruned_compact and fragment_compact not in pruned_compact
                         and _adds_new_text(fragment_full_text, headline_text + "\n" + body, visible_trigrams)):
@@ -950,12 +907,7 @@ class _ArticleExtraction:
                     # Low: the text is removed, so the model never sees it, and real pages hide
                     # their own text all the time (paywall and print notices, collapsed bios).
                     # The flag still tells the caller the page carried hidden text.
-                    self.flags.append(Flag(
-                        "hidden_text_in_article", LOW, None, None, fragment.text[:500],
-                        f"hidden from readers ({fragment.reason}); a standard extractor would pass it "
-                        "to the model; removed from the body",
-                        "body",
-                    ))
+                    self.flags.append(Flag("hidden_text_in_article", LOW, None, None, fragment.text[:500], {}, "body"))
                     if not short_label:
                         hidden_passages.append((unpruned_compact.find(fragment_compact), fragment_compact,
                                                 fragment_full_text, len(self.flags) - 1))
@@ -1026,7 +978,7 @@ def extract_article(guard, html, feed_title=None, stylesheets=None, feed_body=No
     try:
         extraction = _ArticleExtraction(guard, html, feed_title, stylesheets, feed_body)
     except PageTooComplex as error:
-        flag = Flag("page_too_complex_to_read", MEDIUM, None, None, "", str(error), "page")
+        flag = Flag("page_too_complex_to_read", MEDIUM, None, None, "", {"message": str(error)}, "page")
         return ArticleResult("", "none: the page was not read", "", [flag], [], {},
                              ["page too complex to read statically"])
     return extraction.run()
