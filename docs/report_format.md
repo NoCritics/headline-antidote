@@ -135,7 +135,7 @@ the schema rejects others.
 | category | severity | evidence | meaning; what the guard does |
 |---|---|---|---|
 | `hidden_text_in_article` | low | `cause`, [`css`] | body text readers can't see that a standard extractor would pass on; low because most of it is harmless (screen-reader labels, menus); removed |
-| `possibly_hidden_text` | low | `cause`, `css` | body text whose color may match a page background the page doesn't declare; kept until a browser check decides |
+| `possibly_hidden_text` | low | `cause`, `css` | body text whose color may match a page background the page doesn't declare; kept until a browser check decides (a browser that can't judge its color, because of a text shadow, a gradient or an image behind it, leaves the flag standing) |
 | `most_of_article_hidden` | medium | | hidden text running to the end of the body is most of the article: usually a "Read more" collapse or a paywall, but it could be a hidden ending; set aside in `hidden_ending` |
 | `body_text_not_in_page_copy` | low | `compared_with` | passages of the body (`flagged_text`, joined by " / ") missing from the article copy; usually subheadings or captions, but text hidden by a script looks the same; kept |
 | `text_behind_preview_window` | low | | a browser shows body paragraphs cut off by a preview window (a metered paywall or a collapsed section); the publisher's text, kept |

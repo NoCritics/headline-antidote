@@ -268,7 +268,15 @@ def compare_with_rendered_page(guard, article, rendered):
 
     # The render compares the whole body, so it settles text only suspected to be hidden: if the
     # browser hides it, it is removed below with a flag of its own; if it shows it, the guess is wrong.
-    flags = [flag for flag in flags if flag.kind != "possibly_hidden_text"]
+    # Unless the browser skipped its color test there (a shadow, a gradient, an image behind it):
+    # then showing the text proves nothing, and the suspicion stands.
+    color_unchecked_words = set(_comparison_words(rendered.color_unchecked_text))
+    kept_flags = []
+    for flag in flags:
+        if flag.kind == "possibly_hidden_text" and color_unchecked_words.isdisjoint(_comparison_words(flag.original)):
+            continue
+        kept_flags.append(flag)
+    flags = kept_flags
     headline, headline_source, flags = _compare_headline(guard, article, rendered, flags)
     # The check settles the page only when it found the headline it was sent to confirm.
     headline_confirmed = rendered.headline_text is not None or not article.heading_text

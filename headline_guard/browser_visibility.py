@@ -198,8 +198,9 @@ VISIBLE_TEXT_SCRIPT = """
     return sampled > 0 && covered * 2 >= sampled;
   };
 
-  // 0: hidden, 1: visible, 2: cut off by a large clipping box (a preview window).
-  const HIDDEN = 0, VISIBLE = 1, CLIPPED = 2;
+  // 0: hidden, 1: visible, 2: cut off by a large clipping box (a preview window), 3: shown, but its
+  // color was too close to the background to count as seen and was not judged (shadow, gradient, image).
+  const HIDDEN = 0, VISIBLE = 1, CLIPPED = 2, COLOR_UNCHECKED = 3;
   const visibility = (textNode) => {
     const element = textNode.parentElement;
     if (!element) return HIDDEN;
@@ -233,6 +234,9 @@ VISIBLE_TEXT_SCRIPT = """
       if (contrast(textColor, pageBackground) < limits.minimumContrast
           && !backgroundIsImage && !overPicture(textNode, element)) return HIDDEN;
     }
+    const colorUnchecked = Boolean(textColor)
+      && contrast(textColor, background || { r: 255, g: 255, b: 255, a: 1 }) < limits.minimumContrast
+      && (paintedByBackground || hasShadow || backgroundIsImage || overPicture(textNode, element));
 
     const range = document.createRange();
     range.selectNodeContents(textNode);
@@ -262,12 +266,13 @@ VISIBLE_TEXT_SCRIPT = """
       }
     }
     if (limits.checkCovering && isCovered(textNode, element)) return HIDDEN;
-    return VISIBLE;
+    return colorUnchecked ? COLOR_UNCHECKED : VISIBLE;
   };
 
   const startScroll = window.scrollY;
   const parts = [];
   const clippedParts = [];
+  const colorUncheckedParts = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const textNode = walker.currentNode;
@@ -278,15 +283,18 @@ VISIBLE_TEXT_SCRIPT = """
       continue;
     }
     const state = visibility(textNode);
-    if (state === VISIBLE) {
+    if (state === VISIBLE || state === COLOR_UNCHECKED) {
       parts.push(textNode.textContent);
+      if (state === COLOR_UNCHECKED) colorUncheckedParts.push(textNode.textContent);
     } else {
       parts.push(' ');
       if (state === CLIPPED) clippedParts.push(textNode.textContent);
     }
   }
   window.scrollTo(0, startScroll);
-  return limits.withClipped ? { visible: parts.join(''), clipped: clippedParts.join(' ') } : parts.join('');
+  return limits.withClipped
+    ? { visible: parts.join(''), clipped: clippedParts.join(' '), colorUnchecked: colorUncheckedParts.join(' ') }
+    : parts.join('');
 }
 """
 
@@ -349,6 +357,9 @@ class RenderedPage:
     milliseconds: float
     complete: bool          # False when loading timed out; the texts are then what had rendered
     note: str = ""
+    # Text in page_text whose color nearly matches its background but was not judged (a shadow, a
+    # gradient or an image behind it): shown by this check, not proven visible to readers.
+    color_unchecked_text: str = ""
 
 
 class BrowserVerifier:
@@ -441,25 +452,26 @@ class BrowserVerifier:
                 complete = False
                 note = str(error).split("\n")[0]
             page.wait_for_timeout(self.settle_milliseconds)
-            headline_text, page_text, clipped_text, complete, note = self._read(
+            headline_text, page_text, clipped_text, color_unchecked_text, complete, note = self._read(
                 page, headline_xpath, heading_text, complete, note)
             shown_words = len(page_text.split()) + len(clipped_text.split())
             if expected_words and shown_words < RETRY_VISIBLE_SHARE * expected_words:
                 page.wait_for_timeout(RETRY_SETTLE_MILLISECONDS)
-                headline_text, page_text, clipped_text, complete, note = self._read(
+                headline_text, page_text, clipped_text, color_unchecked_text, complete, note = self._read(
                     page, headline_xpath, heading_text, complete, note)
         finally:
             context.close()
         return RenderedPage(headline_text, page_text, clipped_text, (time.perf_counter() - started) * 1000,
-                            complete, note)
+                            complete, note, color_unchecked_text)
 
     def _read(self, page, headline_xpath, heading_text, complete, note):
-        """(headline_text, page_text, clipped_text, complete, note) as the page shows now."""
+        """(headline_text, page_text, clipped_text, color_unchecked_text, complete, note) as the page shows now."""
         from playwright.sync_api import Error as PlaywrightError
 
         headline_text = None
         page_text = ""
         clipped_text = ""
+        color_unchecked_text = ""
         for attempt in range(2):
             try:
                 if heading_text:
@@ -472,6 +484,7 @@ class BrowserVerifier:
                 parts = page.evaluate(BODY_TEXT_SCRIPT, _limits(True, with_clipped=True))
                 page_text = re.sub(r"\s+", " ", parts["visible"]).strip()
                 clipped_text = re.sub(r"\s+", " ", parts["clipped"]).strip()
+                color_unchecked_text = re.sub(r"\s+", " ", parts["colorUnchecked"]).strip()
                 break
             except PlaywrightError as error:
                 message = str(error).split("\n")[0]
@@ -485,4 +498,4 @@ class BrowserVerifier:
                     continue
                 complete = False
                 note = note or message
-        return headline_text, page_text, clipped_text, complete, note
+        return headline_text, page_text, clipped_text, color_unchecked_text, complete, note
