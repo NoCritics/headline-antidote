@@ -3,7 +3,7 @@
 import time
 import unittest
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
 MAXIMUM_AVERAGE_MILLISECONDS = 1.0
 
@@ -21,7 +21,7 @@ SAMPLE_HEADLINES = [
 
 class PerformanceTests(unittest.TestCase):
     def test_average_time_per_headline(self):
-        guard = HeadlineGuard(PAPER_WATCHLIST)
+        guard = HeadlineAntidote(PAPER_WATCHLIST)
         repetitions = 500
         started = time.perf_counter()
         for _ in range(repetitions):

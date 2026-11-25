@@ -15,8 +15,8 @@ import warnings
 
 from lxml import html as lxml_html
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
-from headline_guard.article import HEADLINE_MATCH_THRESHOLD, _title_similarity
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
+from headline_antidote.article import HEADLINE_MATCH_THRESHOLD, _title_similarity
 from scraper_comparison.pages import TEST_PAGES
 
 from .page_data import data_arguments, load_pages, load_stylesheet_entries, load_stylesheets, read_page, report_path
@@ -63,7 +63,7 @@ def feed_text(page_entry):
 def main():
     arguments = data_arguments()
     data_directory = arguments.data_directory
-    guard = HeadlineGuard(PAPER_WATCHLIST)
+    guard = HeadlineAntidote(PAPER_WATCHLIST)
     pages = load_pages(data_directory)
     stylesheet_entries = load_stylesheet_entries(data_directory)
     sites = set()

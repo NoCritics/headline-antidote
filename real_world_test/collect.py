@@ -24,7 +24,7 @@ from lxml import etree
 
 TEST_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 BASELINE_DATA_DIRECTORY = os.path.join(TEST_DIRECTORY, "data")
-USER_AGENT = "headline-guard-research/0.1 (false-alarm testing of a text-visibility checker)"
+USER_AGENT = "headline-antidote-research/0.1 (false-alarm testing of a text-visibility checker)"
 ARTICLES_PER_FEED = 4
 REQUEST_TIMEOUT_SECONDS = 20
 # A feed whose pages keep failing (robots.txt, 401, 403) is given up after this many failed

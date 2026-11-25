@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://headline-guard.local/report_schema/1.0.json",
-  "title": "headline_guard report",
+  "$id": "https://headline-antidote.local/report_schema/1.0.json",
+  "title": "headline_antidote report",
   "description": "The guard's results as JSON; see docs/report_format.md. Every string taken from the page is untrusted.",
   "oneOf": [
     {

@@ -1,4 +1,4 @@
-"""headline_guard.css_validity: whether Chrome keeps a declaration of a hiding property or of a
+"""headline_antidote.css_validity: whether Chrome keeps a declaration of a hiding property or of a
 custom property.
 
 The expected constants in CHROME_CASES were read from Chrome 157 (the inherit() rows from Chrome 158): VALID when a standards-mode
@@ -13,7 +13,7 @@ import unittest
 
 import tinycss2
 
-from headline_guard.css_validity import (INVALID, QUIRKS_ONLY, UNKNOWN, VALID, custom_property_validity,
+from headline_antidote.css_validity import (INVALID, QUIRKS_ONLY, UNKNOWN, VALID, custom_property_validity,
                                          declaration_validity)
 
 

@@ -5,9 +5,9 @@ import importlib.util
 import re
 import unittest
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-GUARD = HeadlineGuard(PAPER_WATCHLIST)
+GUARD = HeadlineAntidote(PAPER_WATCHLIST)
 HEADLINE = "Alphabet shares surge after dodging antitrust breakup bullet"
 PAYLOAD = "losses and layoffs"
 URL = "https://guard-test.invalid/markets/article"
@@ -35,8 +35,8 @@ class RenderedPageComparisonTests(unittest.TestCase):
     def test_long_hidden_ending_is_set_aside_not_kept_in_the_body(self):
         # Review finding 2: hidden text running to the end that is most of the article was kept in
         # the body. It now goes to hidden_ending, which a pipeline uses only by choice.
-        from headline_guard.browser_check import compare_with_rendered_page
-        from headline_guard.browser_visibility import RenderedPage
+        from headline_antidote.browser_check import compare_with_rendered_page
+        from headline_antidote.browser_visibility import RenderedPage
 
         visible_paragraph = ("Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
                              "a breakup of the company, a ruling analysts said removes a major overhang.")
@@ -61,8 +61,8 @@ class RenderedPageComparisonTests(unittest.TestCase):
         # Hole A: a script hiding nearly all of the body made the render "inconclusive", which kept
         # the static body (payload included) with a low flag, so the page passed. A render showing
         # almost none of the article now always sends the page to review.
-        from headline_guard.browser_check import compare_with_rendered_page
-        from headline_guard.browser_visibility import RenderedPage
+        from headline_antidote.browser_check import compare_with_rendered_page
+        from headline_antidote.browser_visibility import RenderedPage
 
         visible_paragraph = ("Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
                              "a breakup of the company, a ruling analysts said removes a major overhang.")
@@ -85,8 +85,8 @@ class RenderedPageComparisonTests(unittest.TestCase):
         comparison with a browser showing rendered_headline."""
         import re
 
-        from headline_guard.browser_check import compare_with_rendered_page
-        from headline_guard.browser_visibility import RenderedPage
+        from headline_antidote.browser_check import compare_with_rendered_page
+        from headline_antidote.browser_visibility import RenderedPage
 
         article = GUARD.extract_article(page(
             f'Alphabet shares surge <svg width="300" height="40"><text x="10">fraud</text></svg>{extra}'
@@ -153,7 +153,7 @@ class RenderedPageEvidenceTests(unittest.TestCase):
     HIDDEN_WORDS_HEADLINE = f'{HEADLINE}<span id="p"> {PAYLOAD}</span>'
 
     def render(self, headline_text, body_text=None, **options):
-        from headline_guard.browser_visibility import RenderedPage
+        from headline_antidote.browser_visibility import RenderedPage
 
         body_text = self.CHEAP_BODY_WORDS if body_text is None else body_text
         return RenderedPage(headline_text, f"{headline_text or ''}\n{body_text}", options.get("clipped_text", ""),
@@ -161,7 +161,7 @@ class RenderedPageEvidenceTests(unittest.TestCase):
                             **{name: options[name] for name in ("color_unchecked_text",) if name in options})
 
     def compare(self, article, rendered):
-        from headline_guard.browser_check import compare_with_rendered_page
+        from headline_antidote.browser_check import compare_with_rendered_page
 
         return compare_with_rendered_page(GUARD, article, rendered)
 
@@ -328,7 +328,7 @@ class MediaFeatureTableTests(unittest.TestCase):
     def setUpClass(cls):
         from playwright.sync_api import sync_playwright
 
-        from headline_guard.browser_visibility import VIEWPORT
+        from headline_antidote.browser_visibility import VIEWPORT
 
         cls.playwright = sync_playwright().start()
         try:
@@ -352,7 +352,7 @@ class MediaFeatureTableTests(unittest.TestCase):
         return self.matches(condition) or self.matches(f"not {condition}")
 
     def test_feature_names(self):
-        from headline_guard.media_queries import DISCRETE_FEATURES, RANGE_FEATURES
+        from headline_antidote.media_queries import DISCRETE_FEATURES, RANGE_FEATURES
 
         for name in self.FEATURE_NAMES:
             with self.subTest(feature=name):
@@ -360,7 +360,7 @@ class MediaFeatureTableTests(unittest.TestCase):
                 self.assertEqual(self.chrome_knows(f"({name})"), in_tables)
 
     def test_discrete_feature_values(self):
-        from headline_guard.media_queries import DISCRETE_FEATURES, media_query_applies
+        from headline_antidote.media_queries import DISCRETE_FEATURES, media_query_applies
 
         all_values = set(self.EXTRA_VALUES)
         for _, known_values in DISCRETE_FEATURES.values():
@@ -383,7 +383,7 @@ class AtRuleChromeTests(unittest.TestCase):
     def test_answers_match_chrome(self):
         from playwright.sync_api import sync_playwright
 
-        from headline_guard.browser_visibility import VIEWPORT
+        from headline_antidote.browser_visibility import VIEWPORT
         from tests.test_css_cascade import CHROME_DECIDED_CASES, at_rule_page
 
         with sync_playwright() as playwright:
@@ -493,7 +493,7 @@ class SvgClippingChromeTests(unittest.TestCase):
     def _read_bodies(self, markups):
         from playwright.sync_api import sync_playwright
 
-        from headline_guard.browser_visibility import BODY_TEXT_SCRIPT, _limits
+        from headline_antidote.browser_visibility import BODY_TEXT_SCRIPT, _limits
 
         with sync_playwright() as playwright:
             try:
@@ -524,7 +524,7 @@ class SvgClippingChromeTests(unittest.TestCase):
 
 def doctype_cases():
     """Page starts covering every doctype rule of document_mode, and the edge cases around them."""
-    from headline_guard import document_mode
+    from headline_antidote import document_mode
 
     # (A leading BOM is left out: set_content keeps it as a character, which a page loaded from
     # bytes never has.)
@@ -561,7 +561,7 @@ class DocumentModeChromeTests(unittest.TestCase):
     def test_modes_match_chrome(self):
         from playwright.sync_api import sync_playwright
 
-        from headline_guard.document_mode import is_quirks_mode
+        from headline_antidote.document_mode import is_quirks_mode
 
         with sync_playwright() as playwright:
             try:
@@ -584,7 +584,7 @@ class BrowserCheckTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from headline_guard.browser_visibility import BrowserVerifier
+        from headline_antidote.browser_visibility import BrowserVerifier
 
         try:
             cls.verifier = BrowserVerifier().start()

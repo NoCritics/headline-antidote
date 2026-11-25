@@ -2,9 +2,9 @@
 
 import unittest
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-GUARD = HeadlineGuard(PAPER_WATCHLIST)
+GUARD = HeadlineAntidote(PAPER_WATCHLIST)
 VISIBLE_HEADLINE = "Alphabet shares surge after dodging antitrust breakup bullet"
 
 

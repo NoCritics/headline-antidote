@@ -5,7 +5,7 @@ from .text_guard import (
     EntityMention,
     Flag,
     GuardResult,
-    HeadlineGuard,
+    HeadlineAntidote,
 )
 from .watchlists import PAPER_WATCHLIST
 
@@ -16,6 +16,6 @@ __all__ = [
     "EntityMention",
     "Flag",
     "GuardResult",
-    "HeadlineGuard",
+    "HeadlineAntidote",
     "PAPER_WATCHLIST",
 ]

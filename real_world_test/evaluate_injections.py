@@ -30,10 +30,10 @@ import warnings
 
 import lxml.html
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
-from headline_guard.article import HEADLINE_MATCH_THRESHOLD, _title_similarity
-from headline_guard.html_visibility import _parse
-from headline_guard.text_guard import LOW, MEDIUM, SEVERITY_RANK
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
+from headline_antidote.article import HEADLINE_MATCH_THRESHOLD, _title_similarity
+from headline_antidote.html_visibility import _parse
+from headline_antidote.text_guard import LOW, MEDIUM, SEVERITY_RANK
 
 from .page_data import TEST_DIRECTORY, load_pages, load_stylesheet_entries, load_stylesheets, read_page, report_path
 
@@ -244,7 +244,7 @@ def empty_results(total_pages, browser):
 def run(arguments, pages):
     """Reads every attack variant of the given pages; returns the results dict."""
     data_directory = arguments.data_directory
-    guard = HeadlineGuard(PAPER_WATCHLIST)
+    guard = HeadlineAntidote(PAPER_WATCHLIST)
     stylesheet_entries = load_stylesheet_entries(data_directory)
     results = empty_results(len(pages), arguments.browser)
     counts = results["counts"]
@@ -311,7 +311,7 @@ def run(arguments, pages):
     results["sites"] = sorted(sites)
 
     if browser_variants:
-        from headline_guard.browser_visibility import BrowserVerifier
+        from headline_antidote.browser_visibility import BrowserVerifier
 
         with BrowserVerifier() as verifier:
             verifier.render("https://guard-test.invalid/", "<html><body><h1>warm up</h1></body></html>")

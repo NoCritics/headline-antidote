@@ -18,8 +18,8 @@ import lxml.html
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
-from headline_guard.browser_visibility import rendered_visible_text
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
+from headline_antidote.browser_visibility import rendered_visible_text
 
 warnings.filterwarnings("ignore")
 
@@ -110,7 +110,7 @@ def browser_check(browser_context, url, html_text, guard, prefetched_html_bytes=
 
 
 def main():
-    guard = HeadlineGuard(PAPER_WATCHLIST)
+    guard = HeadlineAntidote(PAPER_WATCHLIST)
     feed_results = evaluate_feed_titles(guard)
     print(f"text mode: {feed_results['count']} feed titles, {len(feed_results['flagged'])} flagged, "
           f"{feed_results['microseconds_per_title']} us each")

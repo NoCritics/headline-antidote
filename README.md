@@ -1,4 +1,4 @@
-# headline_guard
+# headline_antidote
 
 A guard for the news-headline step of an LLM trading pipeline. It answers one question: **is the text the model will read the same text a human reader sees?**
 
@@ -11,7 +11,7 @@ It is a defence against the attacks in Rizvani, Apruzzese and Laskov, *Adversari
 
 NFKC normalization and the Unicode confusables data already exist. This project reuses them and adds the policy layer that is missing on top:
 
-| | Plain NFKC | Map Cyrillic to Latin | `headline_guard` |
+| | Plain NFKC | Map Cyrillic to Latin | `headline_antidote` |
 |---|---|---|---|
 | Catches "Теsla" | no | yes | yes |
 | Leaves real Russian ("сахар", "орех") alone | yes | **no, corrupts it** | yes |
@@ -34,9 +34,9 @@ release of the HTML parser or the CSS cascade can change what counts as visible.
 ## Usage
 
 ```python
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-guard = HeadlineGuard({"TSLA": ["Tesla"], "GOOGL": ["Alphabet", "Google"]})  # build once
+guard = HeadlineAntidote({"TSLA": ["Tesla"], "GOOGL": ["Alphabet", "Google"]})  # build once
 
 # 0. Recommended for scraped pages: the text your LLM should receive
 article = guard.extract_article(page_html, feed_title=rss_title)  # feed_title is optional
@@ -47,7 +47,7 @@ article.flags      # each with .field: "headline", "body", "metadata" or "page"
 article.hidden_ending  # usually "": hidden text that is most of the article, set aside (see below)
 article.needs_browser_check   # True for the pages a static reading can't settle (15% of 228 real pages)
 # optional, for those pages only: a warm Chrome renders the HTML you already fetched
-#   with BrowserVerifier() as verifier:          # from headline_guard.browser_visibility
+#   with BrowserVerifier() as verifier:          # from headline_antidote.browser_visibility
 #       article = guard.verify_article_in_browser(article, page_html, page_url, verifier)
 # then: your_llm(article.headline, article.body) -> sentiment, unless the verdict says otherwise
 # Give the model only headline and body. hidden_ending is text readers can't see: append it only
@@ -64,7 +64,7 @@ result = guard.analyze_html(
 )
 
 # 3. Browser scraping (recommended where you can afford it)
-from headline_guard.browser_visibility import rendered_visible_text
+from headline_antidote.browser_visibility import rendered_visible_text
 page.goto(url)                                        # Playwright page
 visible = rendered_visible_text(page.locator("h1").first)
 result = guard.analyze_html(page.content(), "//h1", scraped_text=visible, rendered_by_browser=True)
@@ -206,7 +206,7 @@ With `tinycss2` and `cssselect2` installed (pinned: 1.5.1 and 0.10.1; 0.10.1 fix
 - **external stylesheets**, if you pass their CSS text. The guard never fetches anything itself:
 
 ```python
-from headline_guard.html_visibility import linked_stylesheet_urls
+from headline_antidote.html_visibility import linked_stylesheet_urls
 urls = linked_stylesheet_urls(page_html, page_url)   # fetch these once per site and cache them
 guard.prepare_stylesheets([css_text_1, css_text_2])  # optional: compile them now, when fetched
 article = guard.extract_article(page_html, stylesheets=[css_text_1, css_text_2])
@@ -487,7 +487,7 @@ The tests cover the paper's attacks, their variants, and attacks shaped to slip 
 
 ## Data
 
-`headline_guard/unicode_data/` holds three official Unicode files: `confusables.txt` (UTS #39), `Scripts.txt` and `DerivedCoreProperties.txt` (Unicode 18.0). They are parsed as data only. The loader refuses to start if any file's SHA-256 differs from `headline_guard/unicode_data/manifest.json`.
+`headline_antidote/unicode_data/` holds three official Unicode files: `confusables.txt` (UTS #39), `Scripts.txt` and `DerivedCoreProperties.txt` (Unicode 18.0). They are parsed as data only. The loader refuses to start if any file's SHA-256 differs from `headline_antidote/unicode_data/manifest.json`.
 
 ## Known limits
 

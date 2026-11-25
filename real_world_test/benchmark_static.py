@@ -24,8 +24,8 @@ import random
 import time
 import warnings
 
-from headline_guard import HeadlineGuard, css_cascade
-from headline_guard.watchlists import PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, css_cascade
+from headline_antidote.watchlists import PAPER_WATCHLIST
 
 from .page_data import TEST_DIRECTORY, load_pages, load_stylesheet_entries, load_stylesheets, read_page
 
@@ -95,7 +95,7 @@ def main():
     warnings.filterwarnings("ignore")
     data_directory = os.path.join(TEST_DIRECTORY, arguments.data)
     stylesheet_entries = load_stylesheet_entries(data_directory)
-    guard = HeadlineGuard(PAPER_WATCHLIST)
+    guard = HeadlineAntidote(PAPER_WATCHLIST)
     inputs = []
     for page_entry in load_pages(data_directory):
         inputs.append({

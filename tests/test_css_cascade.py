@@ -3,9 +3,9 @@
 import importlib.util
 import unittest
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-GUARD = HeadlineGuard(PAPER_WATCHLIST)
+GUARD = HeadlineAntidote(PAPER_WATCHLIST)
 HEADLINE = "Alphabet shares surge after dodging antitrust breakup bullet"
 CASCADE_AVAILABLE = (
     importlib.util.find_spec("tinycss2") is not None and importlib.util.find_spec("cssselect2") is not None
@@ -120,7 +120,7 @@ class StylesheetCacheTests(unittest.TestCase):
     stylesheets kept apart from the pages' own <style> blocks."""
 
     def setUp(self):
-        from headline_guard import css_cascade
+        from headline_antidote import css_cascade
 
         self.css_cascade = css_cascade
         self.saved_budgets = {}
@@ -238,7 +238,7 @@ class MediaQueryTests(unittest.TestCase):
 
     def test_malformed_queries_are_read_as_chrome_reads_them(self):
         # Each expectation is Chrome's matchMedia answer at the browser check's viewport.
-        from headline_guard.media_queries import media_query_applies
+        from headline_antidote.media_queries import media_query_applies
 
         for query, chrome_answer in (
             ("screen and(min-width: 1px)", False),
@@ -277,7 +277,7 @@ class MediaQueryTests(unittest.TestCase):
                 self.assertEqual(media_query_applies(query), chrome_answer)
 
     def test_deep_nesting_is_evaluated_like_chrome(self):
-        from headline_guard.media_queries import media_query_applies
+        from headline_antidote.media_queries import media_query_applies
 
         for depth in (1000, 20000):
             self.assertTrue(media_query_applies("(" * depth + "min-width: 1px" + ")" * depth))
@@ -640,7 +640,7 @@ class AtRuleTests(unittest.TestCase):
         # read as hidden: each such value may apply or not, independently of the others.
         from unittest import mock
 
-        from headline_guard import css_cascade, css_validity
+        from headline_antidote import css_cascade, css_validity
 
         def clear_caches():
             css_cascade._cached_substituted_validity.cache_clear()
@@ -925,7 +925,7 @@ class DeepNestingTests(unittest.TestCase):
     def test_the_reader_writes_css_back_exactly_as_tinycss2_does(self):
         import tinycss2
 
-        from headline_guard.css_cascade import _serialized
+        from headline_antidote.css_cascade import _serialized
 
         for css in (
             "a/**/b", "a /**/ b", "#x/**/y", "1/**/px", "-/**/a", "@x/**/-", "a/**/-->", "./**/1",

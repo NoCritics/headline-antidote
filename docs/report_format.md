@@ -1,7 +1,7 @@
-# headline_guard report format
+# headline_antidote report format
 
 `ArticleResult.to_dict()` and `GuardResult.to_dict()` return the guard's results as plain JSON-ready
-dicts. The schema is [headline_guard/report_schema.json](../headline_guard/report_schema.json)
+dicts. The schema is [headline_antidote/report_schema.json](../headline_antidote/report_schema.json)
 (JSON Schema draft 2020-12).
 
 ## Versioning

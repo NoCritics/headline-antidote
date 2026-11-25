@@ -5,9 +5,9 @@ This is what separates the guard from "map every Cyrillic letter to Latin".
 
 import unittest
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-GUARD = HeadlineGuard(PAPER_WATCHLIST)
+GUARD = HeadlineAntidote(PAPER_WATCHLIST)
 
 CLEAN_HEADLINES = [
     # English, including accents, possessives, tickers and multi-word names.

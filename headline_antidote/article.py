@@ -15,7 +15,7 @@ Turns a news page into (headline, article body, flags), where:
   text hidden by JavaScript or by an overlay without running either;
 * `browser_check_reasons` lists what this static reading could not rule out (scripts
   touching the headline, body text missing from the page's own copy of the article),
-  so the caller can send only those pages to a browser (HeadlineGuard.verify_article_in_browser).
+  so the caller can send only those pages to a browser (HeadlineAntidote.verify_article_in_browser).
 
 Use it where the page is turned into text, in front of whatever LLM scores it:
 

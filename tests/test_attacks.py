@@ -5,9 +5,9 @@ Homoglyphs are written as \\u escapes so it is clear which letters are not Latin
 
 import unittest
 
-from headline_guard import HIGH, MEDIUM, HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HIGH, MEDIUM, HeadlineAntidote, PAPER_WATCHLIST
 
-GUARD = HeadlineGuard(PAPER_WATCHLIST)
+GUARD = HeadlineAntidote(PAPER_WATCHLIST)
 
 
 def encode_as_tag_characters(text):

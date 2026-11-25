@@ -5,9 +5,9 @@ overlays and stacking order, reordered text, embedded fonts, and text hidden by 
 import importlib.util
 import unittest
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-GUARD = HeadlineGuard(PAPER_WATCHLIST)
+GUARD = HeadlineAntidote(PAPER_WATCHLIST)
 HEADLINE = "Alphabet shares surge after dodging antitrust breakup bullet"
 PAYLOAD = " losses and layoffs"
 CASCADE_AVAILABLE = (

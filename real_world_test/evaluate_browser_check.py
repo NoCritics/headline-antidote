@@ -13,8 +13,8 @@ import json
 import time
 import warnings
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
-from headline_guard.browser_visibility import BrowserVerifier
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
+from headline_antidote.browser_visibility import BrowserVerifier
 
 from .page_data import data_arguments, load_pages, read_page, report_path
 
@@ -32,7 +32,7 @@ def percentile(values, fraction):
 def main():
     arguments = data_arguments(("--same-site", "--triaged-only"))
     data_directory = arguments.data_directory
-    guard = HeadlineGuard(PAPER_WATCHLIST)
+    guard = HeadlineAntidote(PAPER_WATCHLIST)
     pages = load_pages(data_directory)
     rows = []
     render_milliseconds = []

@@ -8,11 +8,11 @@ import json
 import re
 import unittest
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 from tests import test_remaining_gaps as gaps
 from tests.test_article import HEADLINE, build_page
 
-GUARD = HeadlineGuard(PAPER_WATCHLIST)
+GUARD = HeadlineAntidote(PAPER_WATCHLIST)
 HOMOGLYPH_TESLA = "Т" + "esla"  # Cyrillic capital Te
 CYRILLIC_TE = {"code_point": "U+0422", "name": "CYRILLIC CAPITAL LETTER TE"}
 ZERO_WIDTH_SPACE = chr(0x200B)
@@ -67,7 +67,7 @@ RAISED_INSIDE_NAMES = {"compatibility_lookalike", "invisible_character", "bidi_c
 
 
 def load_schema():
-    schema_text = importlib.resources.files("headline_guard").joinpath("report_schema.json").read_text(
+    schema_text = importlib.resources.files("headline_antidote").joinpath("report_schema.json").read_text(
         encoding="utf-8")
     return json.loads(schema_text)
 
@@ -571,8 +571,8 @@ class ArticleEvidenceTests(ReportCase):
 def browser_reports():
     """Article reports after a browser run, from hand-made renders (no Chrome): the way
     tests/test_browser_check.py builds them."""
-    from headline_guard.browser_check import compare_with_rendered_page
-    from headline_guard.browser_visibility import RenderedPage
+    from headline_antidote.browser_check import compare_with_rendered_page
+    from headline_antidote.browser_visibility import RenderedPage
     from tests import test_browser_check as browser_tests
 
     headline, body = browser_tests.HEADLINE, browser_tests.BODY

@@ -8,8 +8,8 @@ never shows reaches the model as visible text. The expected texts are Chrome 157
 import time
 import unittest
 
-from headline_guard.html_tree import MAXIMUM_TAG_OPENINGS, parse_html
-from headline_guard.html_visibility import extract_visible_text
+from headline_antidote.html_tree import MAXIMUM_TAG_OPENINGS, parse_html
+from headline_antidote.html_visibility import extract_visible_text
 
 HEADLINE = "Alphabet shares surge after dodging antitrust breakup bullet"
 ARTICLE = (f"<html><head><title>{HEADLINE}</title></head><body><article><h1>{HEADLINE}</h1>"
@@ -83,10 +83,10 @@ def table_chain_page(units):
 
 
 def flag_kinds(page):
-    from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+    from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
     kinds = []
-    for flag in HeadlineGuard(PAPER_WATCHLIST).analyze_html(page).flags:
+    for flag in HeadlineAntidote(PAPER_WATCHLIST).analyze_html(page).flags:
         kinds.append(flag.kind)
     return kinds
 
@@ -188,9 +188,9 @@ class TooComplexToReadTests(unittest.TestCase):
                 self.assertEqual(flag_kinds(page), ["page_too_complex_to_read"])
 
     def test_a_page_nested_a_hundred_thousand_deep_is_flagged_quickly(self):
-        from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+        from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-        guard = HeadlineGuard(PAPER_WATCHLIST)
+        guard = HeadlineAntidote(PAPER_WATCHLIST)
         start = time.perf_counter()
         result = guard.analyze_html(nested_page(100_000))
         article = guard.extract_article(nested_page(100_000))
@@ -229,9 +229,9 @@ class TooComplexToReadTests(unittest.TestCase):
     def test_css_with_a_number_too_long_to_read_is_flagged(self):
         # tinycss2 converts each integer to a Python int, which refuses more than 4300 digits, so
         # such CSS (in a <style>, a style attribute or an external stylesheet) cannot be read.
-        from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+        from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-        guard = HeadlineGuard(PAPER_WATCHLIST)
+        guard = HeadlineAntidote(PAPER_WATCHLIST)
         digits = "1" * 5000
         pages = (
             (f"<html><head><style>.z{{width:{digits}px}}</style></head><body><h1>x</h1></body></html>", None),

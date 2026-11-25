@@ -1,19 +1,19 @@
-"""The demo pipeline with headline_guard between the download and the LLM.
+"""The demo pipeline with headline_antidote between the download and the LLM.
 Run it while the demo server is up:  python -X utf8 demo/pipeline.py
 """
 import json
 
 import requests
-from headline_guard import HeadlineGuard
-from headline_guard.browser_visibility import BrowserVerifier
-from headline_guard.html_visibility import linked_stylesheet_urls
+from headline_antidote import HeadlineAntidote
+from headline_antidote.browser_visibility import BrowserVerifier
+from headline_antidote.html_visibility import linked_stylesheet_urls
 
 from scraper import BASE_URL, PAGES, scrape
 
 # Built once: the companies you trade, and the names they go by.
 WATCHLIST = {"TSLA": ["Tesla"], "GOOGL": ["Alphabet", "Google"], "NVDA": ["Nvidia"],
              "AAPL": ["Apple"], "MSFT": ["Microsoft"]}
-guard = HeadlineGuard(WATCHLIST)
+guard = HeadlineAntidote(WATCHLIST)
 
 
 def fetch_stylesheets(html, url):

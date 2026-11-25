@@ -20,8 +20,8 @@ import trafilatura
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
-from headline_guard.browser_visibility import rendered_visible_text
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
+from headline_antidote.browser_visibility import rendered_visible_text
 
 from .pages import TEST_PAGES
 
@@ -140,7 +140,7 @@ def outcome(page, survives, verdict):
 
 
 def main():
-    guard = HeadlineGuard(PAPER_WATCHLIST)
+    guard = HeadlineAntidote(PAPER_WATCHLIST)
     rows_by_page = []
     # Per extractor: attacks reaching its text, misses and false alarms per guard placement.
     tallies = {}

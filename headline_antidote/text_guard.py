@@ -1,4 +1,4 @@
-"""Headline guard: decides whether a headline's text is what a human reader sees.
+"""Headline antidote: decides whether a headline's text is what a human reader sees.
 
 It does not invent a new Unicode algorithm. It applies the Unicode standard's own
 building blocks (NFKC, UTS #39 confusables and skeletons, script data) under a
@@ -218,7 +218,7 @@ def _character_evidence(characters):
             for character in characters]
 
 
-class HeadlineGuard:
+class HeadlineAntidote:
     """Build once per watchlist, then call analyze() or analyze_html() per headline.
 
     watchlist maps each ticker to the names it is reported under, for example

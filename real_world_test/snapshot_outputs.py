@@ -18,8 +18,8 @@ import os
 import sys
 import warnings
 
-from headline_guard import HeadlineGuard
-from headline_guard.watchlists import PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote
+from headline_antidote.watchlists import PAPER_WATCHLIST
 
 from .page_data import TEST_DIRECTORY, load_pages, load_stylesheet_entries, load_stylesheets, read_page
 
@@ -47,7 +47,7 @@ def article_record(article):
 
 
 def snapshot(data_names):
-    guard = HeadlineGuard(PAPER_WATCHLIST)
+    guard = HeadlineAntidote(PAPER_WATCHLIST)
     records = {}
     for data_name in data_names:
         data_directory = os.path.join(TEST_DIRECTORY, data_name)

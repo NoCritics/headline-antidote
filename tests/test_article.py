@@ -3,9 +3,9 @@
 import importlib.util
 import unittest
 
-from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 
-GUARD = HeadlineGuard(PAPER_WATCHLIST)
+GUARD = HeadlineAntidote(PAPER_WATCHLIST)
 HEADLINE = "Tesla shares surge after record quarterly deliveries"
 PARAGRAPHS = [
     "Tesla reported record deliveries for the third quarter on Thursday, beating analyst "

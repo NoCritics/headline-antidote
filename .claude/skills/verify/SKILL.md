@@ -1,11 +1,11 @@
 ---
 name: verify
-description: How to verify a headline_guard change at its package boundary - build the wheel, install it into its own folder, drive HeadlineGuard over served pages with the headless-Chrome browser check.
+description: How to verify a headline_antidote change at its package boundary - build the wheel, install it into its own folder, drive HeadlineAntidote over served pages with the headless-Chrome browser check.
 ---
 
-# Verifying headline_guard
+# Verifying headline_antidote
 
-The surface is the installed package: `from headline_guard import HeadlineGuard`, `extract_article`,
+The surface is the installed package: `from headline_antidote import HeadlineAntidote`, `extract_article`,
 `verify_article_in_browser`, `to_dict()`. Drive it, not the repo's modules.
 
 ## Build and install (offline, no new downloads)
@@ -23,7 +23,7 @@ The deps (tinycss2, playwright, lexbor parser, requests) come from the venv.
 
 ## Drive
 
-- Driver: `sys.path.insert(0, <install dir>)`, then import headline_guard and print `headline_guard.__file__`
+- Driver: `sys.path.insert(0, <install dir>)`, then import headline_antidote and print `headline_antidote.__file__`
   to prove the installed copy loaded. Run it from outside the repo so the source tree is not on the path.
 - Serve the test pages with `python -m http.server <port> --bind 127.0.0.1` in their folder; fetch with
   `requests` and set `response.encoding = "utf-8"` (a wrong decoding once gave a false pass).
@@ -36,5 +36,8 @@ The deps (tinycss2, playwright, lexbor parser, requests) come from the venv.
 
 - Hidden words in an `<h1>` that the `<title>` lacks show up statically as `headline_adds_words` (low)
   when the reader thinks they are visible; a high `hidden_html_text` when it thinks they are hidden.
+- The venv holds an editable install of the repo, so a wrong install path silently imports the repo
+  copy. Git Bash converts `/c/...` to `C:\...` only in command arguments: inside a `python -c` string
+  or a script, write the Windows path. Always check the printed `__file__`.
 - Chrome 158 crashes the tab on `inherit(var(--n))`; `verify_article_in_browser` then raises
   `TargetClosedError`.

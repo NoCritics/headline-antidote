@@ -16,7 +16,7 @@ which the browser check settles (tests/test_browser_check.SVG_POSITION_CASES).""
 
 import unittest
 
-from headline_guard.html_visibility import extract_visible_text
+from headline_antidote.html_visibility import extract_visible_text
 
 XHTML = "http://www.w3.org/1999/xhtml"
 MATHML = "http://www.w3.org/1998/Math/MathML"

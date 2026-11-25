@@ -12,7 +12,7 @@ import time
 
 import requests
 
-from headline_guard.html_visibility import linked_stylesheet_urls
+from headline_antidote.html_visibility import linked_stylesheet_urls
 
 from .collect import REQUEST_TIMEOUT_SECONDS, USER_AGENT, allowed_by_robots
 from .page_data import data_arguments, load_pages, read_page
