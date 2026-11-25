@@ -307,7 +307,7 @@ HEADLINE_TEXT_SCRIPT = (
 )
 BODY_TEXT_SCRIPT = (
     "(limits) => { const visibleText = " + VISIBLE_TEXT_SCRIPT.strip()
-    + "; return document.body ? visibleText(document.body, limits) : { visible: '', clipped: '' }; }"
+    + "; return document.body ? visibleText(document.body, limits) : { visible: '', clipped: '', colorUnchecked: '' }; }"
 )
 
 
