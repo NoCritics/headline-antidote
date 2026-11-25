@@ -11,6 +11,8 @@ Run from the project root with the project virtual environment:
 Writes scraper_comparison/results.md.
 """
 
+import datetime
+import json
 import os
 import warnings
 
@@ -21,13 +23,17 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
-from headline_antidote.browser_visibility import rendered_visible_text
+from headline_antidote.browser_visibility import BrowserVerifier, rendered_visible_text
 
 from .pages import TEST_PAGES
 
 warnings.filterwarnings("ignore", message="nltk is not installed")
 
 RESULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results.md")
+JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "benchmark", "results", "example_pages.json")
+PAGE_URL = "https://example.com/news/article"
+ANTIDOTE = "headline-antidote"
 
 
 def first_line(text):
@@ -139,6 +145,47 @@ def outcome(page, survives, verdict):
     return "pass (attack did not reach model)"
 
 
+def antidote_reading(page, guard, verifier):
+    """headline-antidote used in place of the scraper's extraction: extract_article, then the browser
+    check when it asks for one and a verifier is given. An attack gets through when it reaches the
+    headline or body and the verdict is pass."""
+    article = guard.extract_article(page.html)
+    browser_checked = verifier is not None and article.needs_browser_check
+    if browser_checked:
+        article = guard.verify_article_in_browser(article, page.html, PAGE_URL, verifier)
+    reached = page.is_attack and page.attack_survives(article.headline + " " + article.body)
+    return {"headline": article.headline, "body": article.body, "verdict": article.verdict, "reached": reached,
+            "got_through": reached and article.verdict == "pass", "browser_checked": browser_checked}
+
+
+def write_json(pages_readings, antidote_readings, chrome_version):
+    """benchmark/results/example_pages.json: every reading of every page, and the totals the chart uses."""
+    readers = [reading["reader"] for reading in pages_readings[0][1]]
+    summary = {reader: {"reached": 0, "got_through_beside": 0, "false_alarms_beside": 0} for reader in readers}
+    summary[ANTIDOTE] = {"got_through": 0, "reached_flagged": 0, "false_alarms": 0}
+    pages = []
+    for (page, readings), antidote in zip(pages_readings, antidote_readings):
+        for reading in readings:
+            totals = summary[reading["reader"]]
+            totals["reached"] += reading["got_through_alone"]
+            totals["got_through_beside"] += reading["got_through_beside"]
+            totals["false_alarms_beside"] += not page.is_attack and reading["verdict_beside"] != "pass"
+        totals = summary[ANTIDOTE]
+        totals["got_through"] += antidote["got_through"]
+        totals["reached_flagged"] += antidote["reached"] and not antidote["got_through"]
+        totals["false_alarms"] += not page.is_attack and antidote["verdict"] != "pass"
+        pages.append({"name": page.name, "description": page.description, "is_attack": page.is_attack,
+                      "html": page.html, "readings": readings, "antidote": antidote})
+    attack_count = sum(page.is_attack for page in TEST_PAGES)
+    document = {"generated": datetime.date.today().isoformat(), "chrome": chrome_version,
+                "attack_count": attack_count, "clean_count": len(TEST_PAGES) - attack_count,
+                "readers": readers, "pages": pages, "summary": summary}
+    os.makedirs(os.path.dirname(JSON_PATH), exist_ok=True)
+    with open(JSON_PATH, "w", encoding="utf-8", newline="") as file:
+        json.dump(document, file, ensure_ascii=False, indent=1)
+    return summary
+
+
 def main():
     guard = HeadlineAntidote(PAPER_WATCHLIST)
     rows_by_page = []
@@ -148,11 +195,15 @@ def main():
         tallies[extractor_name] = {
             "reached": 0, "after_missed": 0, "after_false": 0, "beside_missed": 0, "beside_false": 0,
         }
+    # The JSON leaves out the visibility walker: it is headline-antidote's own browser reader, not a scraper.
+    pages_readings = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="chrome", headless=True)
+        chrome_version = browser.version
         browser_page = browser.new_page()
         for page in TEST_PAGES:
             rows = []
+            readings = []
             for extractor_name, extract, reads_headline_element in EXTRACTORS:
                 try:
                     scraped_text, document_for_guard = extract(page.html, browser_page)
@@ -176,8 +227,20 @@ def main():
                         extractor_tally[placement + "_false"] += 1
                 rows.append((extractor_name, printable(scraped_text), "yes" if survives else "no",
                              after_label, beside_label))
+                if extract is extract_playwright_visibility_walker:
+                    continue
+                readings.append({"reader": extractor_name.replace("`", ""), "text": scraped_text, "reached": survives,
+                                 "verdict_beside": beside_verdict, "got_through_alone": survives,
+                                 "got_through_beside": "MISSED" in beside_label,
+                                 "outcome_beside": beside_label.replace("*", "")})
             rows_by_page.append((page, rows))
+            pages_readings.append((page, readings))
         browser.close()
+
+    with BrowserVerifier() as verifier:
+        antidote_readings = [antidote_reading(page, guard, verifier) for page in TEST_PAGES]
+    antidote_summary = write_json(pages_readings, antidote_readings, chrome_version)[ANTIDOTE]
+    print(f"{ANTIDOTE} (extract_article, then the browser check): {antidote_summary}")
 
     attack_page_count = 0
     for page in TEST_PAGES:
@@ -228,7 +291,7 @@ def main():
         for row in rows:
             lines.append("| " + " | ".join(row) + " |")
         lines.append("")
-    with open(RESULTS_PATH, "w", encoding="utf-8") as file:
+    with open(RESULTS_PATH, "w", encoding="utf-8", newline="") as file:
         file.write("\n".join(lines))
     summary_end = lines.index("## `" + TEST_PAGES[0].name + "`: " + TEST_PAGES[0].description)
     print("\n".join(lines[:summary_end]))

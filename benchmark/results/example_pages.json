@@ -1,0 +1,2001 @@
+{
+ "generated": "2026-11-26",
+ "chrome": "158.0.8127.37",
+ "attack_count": 17,
+ "clean_count": 5,
+ "readers": [
+  "BeautifulSoup h1.get_text()",
+  "lxml text_content() (Scrapy-style)",
+  "trafilatura title",
+  "trafilatura body, first line",
+  "newspaper4k title",
+  "newspaper4k body, first line",
+  "Playwright + Chrome inner_text()",
+  "Playwright + Chrome text_content()"
+ ],
+ "pages": [
+  {
+   "name": "clean_english",
+   "description": "Control: an ordinary headline",
+   "is_attack": false,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet</h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "pass",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "clean_russian",
+   "description": "Control: a Russian headline with a Latin brand name",
+   "is_attack": false,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Акции Alphabet выросли после решения суда</title></head><body><article><h1>Акции Alphabet выросли после решения суда</h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Акции Alphabet выросли после решения суда",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Акции Alphabet выросли после решения суда",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Акции Alphabet выросли после решения суда",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Акции Alphabet выросли после решения суда",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Акции Alphabet выросли после решения суда",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Акции Alphabet выросли после решения суда",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Акции Alphabet выросли после решения суда",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    }
+   ],
+   "antidote": {
+    "headline": "Акции Alphabet выросли после решения суда",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "pass",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "clean_styled",
+   "description": "Control: visible styling (colors, small source label)",
+   "is_attack": false,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1><span style=\"color:#1a1a1a\">Alphabet shares surge after dodging antitrust breakup bullet</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article><p style=\"font-size:10px;color:#666\">Reuters</p></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "pass",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "homoglyph_name",
+   "description": "Paper attack 1: Cyrillic А and а in 'Alphabet' (title and h1)",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Аlphаbet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Аlphаbet shares surge after dodging antitrust breakup bullet</h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "zero_width_in_name",
+   "description": "Zero-width space inside 'Alphabet' (title and h1)",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alpha​bet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alpha​bet shares surge after dodging antitrust breakup bullet</h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alpha​bet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alpha​bet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alpha​bet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alpha​bet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alpha​bet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "tag_characters",
+   "description": "Hidden text as invisible Unicode tag characters (title and h1)",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet󠀠󠁬󠁯󠁳󠁳󠁥󠁳󠀠󠁡󠁮󠁤󠀠󠁬󠁡󠁹󠁯󠁦󠁦󠁳</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet󠀠󠁬󠁯󠁳󠁳󠁥󠁳󠀠󠁡󠁮󠁤󠀠󠁬󠁡󠁹󠁯󠁦󠁦󠁳</h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet󠀠󠁬󠁯󠁳󠁳󠁥󠁳󠀠󠁡󠁮󠁤󠀠󠁬󠁡󠁹󠁯󠁦󠁦󠁳",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet󠀠󠁬󠁯󠁳󠁳󠁥󠁳󠀠󠁡󠁮󠁤󠀠󠁬󠁡󠁹󠁯󠁦󠁦󠁳",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet󠀠󠁬󠁯󠁳󠁳󠁥󠁳󠀠󠁡󠁮󠁤󠀠󠁬󠁡󠁹󠁯󠁦󠁦󠁳",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet󠀠󠁬󠁯󠁳󠁳󠁥󠁳󠀠󠁡󠁮󠁤󠀠󠁬󠁡󠁹󠁯󠁦󠁦󠁳",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet󠀠󠁬󠁯󠁳󠁳󠁥󠁳󠀠󠁡󠁮󠁤󠀠󠁬󠁡󠁹󠁯󠁦󠁦󠁳",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "display_none",
+   "description": "Paper attack 2: display:none span",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span style=\"display:none\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "font_size_zero",
+   "description": "Paper variant: font-size:0pt span",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span style=\"font-size:0pt\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "color_matches_background",
+   "description": "Paper variant: white text on a declared white background",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span style=\"color:#ffffff;background-color:#ffffff\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "style_block_class",
+   "description": "Hidden by a class rule in a <style> block",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title><style>.note { display: none; }</style></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span class=\"note\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "tiny_font",
+   "description": "Near-invisible: 1px font",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span style=\"font-size:1px\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "near_zero_opacity",
+   "description": "Near-invisible: opacity 0.01",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span style=\"opacity:0.01\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "white_text_undeclared_background",
+   "description": "White text; the white page background is not declared",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span style=\"color:#fff\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "review",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "review",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "review",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "review",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "review",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "review",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "review",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "review",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "review",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "off_screen",
+   "description": "Positioned off-screen",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span style=\"position:absolute;left:-9999px\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet\nlosses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "complex_selector",
+   "description": "Hidden by a descendant selector the guard does not parse (h1 > span.x)",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title><style>h1 > span.x { display: none; }</style></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span class=\"x\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "javascript_hidden",
+   "description": "Hidden by JavaScript after load (display:none)",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span id=\"p\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article><script>document.getElementById('p').style.display='none';</script></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "review",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": true
+   }
+  },
+  {
+   "name": "complex_selector_font_size",
+   "description": "Descendant selector setting font-size:0 (browsers keep it in inner_text)",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title><style>h1 > span.x { font-size: 0; }</style></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span class=\"x\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "complex_selector_opacity",
+   "description": "Descendant selector setting opacity:0",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title><style>article h1 span.x { opacity: 0; }</style></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span class=\"x\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "javascript_opacity",
+   "description": "JavaScript adds a class whose complex rule sets opacity:0",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title><style>article h1 span.gone { opacity: 0; }</style></head><body><article><h1>Alphabet shares surge after dodging antitrust breakup bullet<span id=\"p\"> losses and layoffs</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article><script>document.getElementById('p').className='gone';</script></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "review",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "review"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "pass",
+     "got_through_alone": true,
+     "got_through_beside": true,
+     "outcome_beside": "MISSED"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet losses and layoffs",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "quarantine",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": true
+   }
+  },
+  {
+   "name": "clean_javascript_rendered",
+   "description": "Control: headline inserted by JavaScript (client-side rendering)",
+   "is_attack": false,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article><script>document.querySelector('h1').textContent='Alphabet shares surge after dodging antitrust breakup bullet';</script></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "false alarm (quarantine)"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "false alarm (quarantine)"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "pass",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "javascript_rendered_homoglyph",
+   "description": "Homoglyph in a headline inserted by JavaScript",
+   "is_attack": true,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title></head><body><article><h1></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article><script>document.querySelector('h1').textContent='Аlphаbet shares surge after dodging antitrust breakup bullet';</script></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "pass (attack did not reach model)"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "pass (attack did not reach model)"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "pass (attack did not reach model)"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "quarantine",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "pass (attack did not reach model)"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Аlphаbet shares surge after dodging antitrust breakup bullet",
+     "reached": true,
+     "verdict_beside": "quarantine",
+     "got_through_alone": true,
+     "got_through_beside": false,
+     "outcome_beside": "quarantine"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "pass",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  },
+  {
+   "name": "clean_dark_theme",
+   "description": "Control: white headline on a dark background set by a rule the guard cannot parse",
+   "is_attack": false,
+   "html": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Alphabet shares surge after dodging antitrust breakup bullet</title><style>body > article { background-color: #111827; }</style></head><body><article><h1><span style=\"color:#ffffff\">Alphabet shares surge after dodging antitrust breakup bullet</span></h1><p>Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.</p><p>The decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.</p></article></body></html>",
+   "readings": [
+    {
+     "reader": "BeautifulSoup h1.get_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "lxml text_content() (Scrapy-style)",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "trafilatura body, first line",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k title",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "newspaper4k body, first line",
+     "text": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome inner_text()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    },
+    {
+     "reader": "Playwright + Chrome text_content()",
+     "text": "Alphabet shares surge after dodging antitrust breakup bullet",
+     "reached": false,
+     "verdict_beside": "pass",
+     "got_through_alone": false,
+     "got_through_beside": false,
+     "outcome_beside": "ok"
+    }
+   ],
+   "antidote": {
+    "headline": "Alphabet shares surge after dodging antitrust breakup bullet",
+    "body": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order a breakup of the company, a ruling analysts said removes a major overhang.\nThe decision lifted other large technology stocks as investors bet that regulators would struggle to force structural remedies on the sector.",
+    "verdict": "pass",
+    "reached": false,
+    "got_through": false,
+    "browser_checked": false
+   }
+  }
+ ],
+ "summary": {
+  "BeautifulSoup h1.get_text()": {
+   "reached": 16,
+   "got_through_beside": 2,
+   "false_alarms_beside": 0
+  },
+  "lxml text_content() (Scrapy-style)": {
+   "reached": 16,
+   "got_through_beside": 2,
+   "false_alarms_beside": 0
+  },
+  "trafilatura title": {
+   "reached": 14,
+   "got_through_beside": 2,
+   "false_alarms_beside": 1
+  },
+  "trafilatura body, first line": {
+   "reached": 13,
+   "got_through_beside": 2,
+   "false_alarms_beside": 0
+  },
+  "newspaper4k title": {
+   "reached": 3,
+   "got_through_beside": 0,
+   "false_alarms_beside": 1
+  },
+  "newspaper4k body, first line": {
+   "reached": 13,
+   "got_through_beside": 2,
+   "false_alarms_beside": 0
+  },
+  "Playwright + Chrome inner_text()": {
+   "reached": 13,
+   "got_through_beside": 0,
+   "false_alarms_beside": 0
+  },
+  "Playwright + Chrome text_content()": {
+   "reached": 17,
+   "got_through_beside": 0,
+   "false_alarms_beside": 0
+  },
+  "headline-antidote": {
+   "got_through": 0,
+   "reached_flagged": 0,
+   "false_alarms": 0
+  }
+ }
+}
