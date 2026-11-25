@@ -4,7 +4,9 @@ __pycache__/
 .remember/
 # Scraped third-party pages (118 MB): kept on disk for the tests in real_world_test, not versioned.
 real_world_test/data/
-real_world_test/data_2026-11-09/
+real_world_test/data_2026-11-09/*
+# Its attack results (docs/guide.md links them) hold no page text, so they are versioned.
+!real_world_test/data_2026-11-09/injection_report.md
 build/
 dist/
 *.egg-info/
