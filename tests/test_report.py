@@ -5,6 +5,7 @@ import dataclasses
 import importlib.resources
 import importlib.util
 import json
+import re
 import unittest
 
 from headline_guard import HeadlineGuard, PAPER_WATCHLIST
@@ -565,6 +566,128 @@ class ArticleEvidenceTests(ReportCase):
         self.assertEqual(flag["field"], "page")
         self.assertEqual(set(flag["evidence"]), {"message"})
         self.assertTrue(flag["evidence"]["message"])
+
+
+def browser_reports():
+    """Article reports after a browser run, from hand-made renders (no Chrome): the way
+    tests/test_browser_check.py builds them."""
+    from headline_guard.browser_check import compare_with_rendered_page
+    from headline_guard.browser_visibility import RenderedPage
+    from tests import test_browser_check as browser_tests
+
+    headline, body = browser_tests.HEADLINE, browser_tests.BODY
+    body_text = re.sub(r"<[^>]+>", "\n", body)
+    visible = ("Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
+               "a breakup of the company, a ruling analysts said removes a major overhang.")
+
+    def rendered(headline_text, text=body_text, clipped_text="", complete=True, note=""):
+        return RenderedPage(headline_text, f"{headline_text or ''}\n{text}", clipped_text, 5.0, complete, note)
+
+    def compare(html, render):
+        return compare_with_rendered_page(GUARD, GUARD.extract_article(html), render).to_dict()
+
+    def long_page(hidden_count):
+        hidden = "".join(f"<p>Insiders say restructuring wave {number} will bring mass layoffs, a profit warning "
+                         "and a regulatory probe that analysts expect to hit the shares.</p>"
+                         for number in range(hidden_count))
+        return (f"<!doctype html><html><head><title>{headline}</title></head><body><article>"
+                f"<h1>{headline}</h1><p>{visible}</p>{hidden}</article></body></html>")
+
+    hiding_script = "<script>document.getElementById('p').style.display='none';</script>"
+    hidden_paragraph = ('<p id="x">Insiders say the company is preparing mass layoffs and a profit warning that '
+                        "will shock investors next week.</p>"
+                        "<script>document.getElementById('x').style.visibility='hidden';</script>")
+    return {
+        "headline words hidden by a script": compare(
+            browser_tests.page(f'{headline}<span id="p"> {browser_tests.PAYLOAD}</span>', body_extra=hiding_script),
+            rendered(headline)),
+        "headline words in svg text off its drawing": compare(
+            browser_tests.page('Alphabet shares surge <svg width="300" height="40"><text x="10">fraud</text></svg>'
+                               "after dodging antitrust breakup bullet"), rendered(headline)),
+        "headline not found": compare(browser_tests.page(headline), rendered(None)),
+        "a script added words": compare(browser_tests.page(headline), rendered(f"{headline} bonus")),
+        "hidden body text": compare(browser_tests.page(headline, article_extra=hidden_paragraph), rendered(headline)),
+        "incomplete load": compare(long_page(6), rendered(headline, visible, complete=False, note="timed out")),
+        "most of the article hidden": compare(long_page(6), rendered(headline, visible)),
+        "inconclusive render": compare(long_page(30), rendered(headline, visible)),
+        "preview window": compare(browser_tests.page(headline), rendered(headline, "", clipped_text=body_text)),
+    }
+
+
+def article_reports():
+    read_more = "".join(f"<p>Paragraph {number} of the rest of the story explains how the ruling affects "
+                        "advertising revenue, cloud contracts and the company's hiring plans for next year.</p>"
+                        for number in range(6))
+    embedded_font = ('@font-face { font-family: "Remap"; src: url(data:font/woff2;base64,AAAA) format("woff2") } '
+                     'h1 { font-family: "Remap", serif }')
+    kicker = f'<span class="topline">Handel mit Wertpapieren</span> <span>{gaps.HEADLINE}</span>'
+    json_ld = ('<script type="application/ld+json">{"@type": "NewsArticle", "headline": "' + gaps.HEADLINE + '", '
+               '"articleBody": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order '
+               'a breakup of the company, a ruling analysts said removes a major overhang."}</script>')
+    pages = {
+        "homoglyph in an og:title": build_page(og_title=HEADLINE.replace("Tesla", HOMOGLYPH_TESLA) + " | News"),
+        "headline words a script may hide": gaps.article_page(
+            f'{gaps.HEADLINE}<span id="p">{gaps.PAYLOAD}</span>',
+            body_extra="<script>document.getElementById('p').style.display='none';</script>"),
+        "kicker": gaps.article_page(kicker),
+        "no title to confirm the heading": ("<html><body><article><h1>" + gaps.HEADLINE + "</h1>" + gaps.ARTICLE_BODY
+                                            + "</article></body></html>"),
+        "heading matches no title": build_page(headline_html="Breaking"),
+        "no article body": "<html><head><title>Hello there world</title></head><body><h1>Hello there world</h1></body></html>",
+        "css generated words": gaps.article_page(
+            f'<span class="k"></span>{gaps.HEADLINE}',
+            head_extra='<style>.k::before { content: "Exclusive: losses ahead " }</style>'),
+        "embedded font": gaps.article_page(gaps.HEADLINE, head_extra=f"<style>{embedded_font}</style>"),
+        "article collapsed behind read more": gaps.body_page(
+            f'<div class="readmore"><div id="ControlPara1">{read_more}</div></div>',
+            head_extra='<style>.readmore div[id^="ControlPara"] > * { display: none }</style>'),
+        "hidden paragraph": gaps.body_page(
+            f'<p style="font-size:0">{gaps.INJECTED_PARAGRAPH_TEXT}</p>' + AFTER_THE_HIDDEN_PARAGRAPH),
+        "white paragraph": gaps.body_page(f'<p style="color:#fff">{gaps.INJECTED_PARAGRAPH_TEXT}</p>'),
+        "paragraph missing from the article copy": gaps.body_page(
+            "<p>Insiders say the company is quietly preparing for mass layoffs and a profit warning "
+            "that will shock investors next week.</p>", head_extra=json_ld),
+        "page too complex": "<div>" * 600 + "x",
+    }
+    return {name: GUARD.extract_article(html).to_dict() for name, html in pages.items()}
+
+
+def text_reports():
+    texts = [f"{HOMOGLYPH_TESLA} shares surge", "TesIa shares surge", "Tésla soars",
+             "Головна МЕТА компанії — вийти на ринок ЄС", "hеllo world", "the сор arrested today",
+             FULL_WIDTH_BUY + " now", "Tesla" + "".join(chr(0xE0000 + ord(letter)) for letter in "buy"),
+             f"hel{ZERO_WIDTH_SPACE}lo world", f"Tes{ZERO_WIDTH_SPACE}la shares", f"abc{RIGHT_TO_LEFT_OVERRIDE} def",
+             f"Tes{RIGHT_TO_LEFT_OVERRIDE}la x", f"e{STACKED_MARKS} x", f"T{STACKED_MARKS}esla x"]
+    reports = {text: GUARD.analyze(text).to_dict() for text in texts}
+    pages = {
+        "hidden text": '<h1>Tesla shares <span style="display:none">plunge</span> surge</h1>',
+        "comment": "<h1>Apple beats estimates<!-- losses --></h1>",
+        "reordered": '<h1>Tesla shares <span style="unicode-bidi:bidi-override;direction:rtl">surge fast</span></h1>',
+        "no headline": "<p>No headline</p>",
+        "page too complex": "<div>" * 600 + "x",
+    }
+    for name, html in pages.items():
+        reports[name] = GUARD.analyze_html(html, headline_xpath="//h1" if name == "no headline" else None).to_dict()
+    reports["scraper text"] = GUARD.analyze_html(
+        "<h1>Apple beats estimates</h1>", "//h1", scraped_text="Apple beats estimates losses").to_dict()
+    reports["browser text"] = GUARD.analyze_html(
+        "<h1>Apple beats estimates</h1>", "//h1", scraped_text="Apple beats estimates bonus",
+        rendered_by_browser=True).to_dict()
+    return reports
+
+
+@unittest.skipUnless(HAS_JSONSCHEMA and HAS_TRAFILATURA, "jsonschema or trafilatura not installed")
+@unittest.skipUnless(gaps.CASCADE_AVAILABLE, "the CSS libraries are not installed")
+class CoverageTests(ReportCase):
+    def test_every_category_in_the_spec_is_produced_with_valid_evidence(self):
+        produced = {}
+        for source in (text_reports, article_reports, browser_reports):
+            for name, report in source().items():
+                self.assert_valid(report)
+                for flag in report["flags"]:
+                    produced.setdefault(flag["category"], name)
+        missing = sorted(set(SPEC_CATEGORIES) - set(produced))
+        self.assertEqual(missing, [], "categories in docs/report_format.md that no fixture produces")
 
 
 if __name__ == "__main__":

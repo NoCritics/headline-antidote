@@ -2,6 +2,7 @@
 static reading could not (needs playwright and Google Chrome; skipped otherwise)."""
 
 import importlib.util
+import re
 import unittest
 
 from headline_guard import HeadlineGuard, PAPER_WATCHLIST
@@ -103,8 +104,9 @@ class RenderedPageComparisonTests(unittest.TestCase):
     def test_headline_svg_text_the_browser_also_hides_is_quarantined(self):
         _, verified = self._off_drawing_headline(HEADLINE)
         self.assertEqual(verified.verdict, "quarantine")
-        hidden = [(flag.severity, flag.original) for flag in verified.flags if flag.kind == "hidden_html_text"]
-        self.assertEqual(hidden, [("high", "fraud")])
+        hidden = [(flag.severity, flag.original, flag.evidence) for flag in verified.flags
+                  if flag.kind == "hidden_html_text"]
+        self.assertEqual(hidden, [("high", "fraud", {"cause": "svg_off_drawing"})])
 
     def test_headline_svg_text_the_browser_shows_is_kept(self):
         shown = "Alphabet shares surge fraud after dodging antitrust breakup bullet"
@@ -138,6 +140,157 @@ class RenderedPageComparisonTests(unittest.TestCase):
             '<text x="10" y="30" fill="white">fraud</text></svg>after dodging antitrust breakup bullet'))
         self.assertEqual([flag.severity for flag in article.flags if flag.kind == "hidden_html_text"], ["medium"])
         self.assertFalse(article.needs_browser_check)
+
+
+@unittest.skipUnless(importlib.util.find_spec("trafilatura") is not None, "trafilatura not installed")
+class RenderedPageEvidenceTests(unittest.TestCase):
+    """What the browser check reports, and how it merges with the static reading's suspicions
+    (docs/report_format.md: the browser's flag replaces the static one; a shown text clears it).
+    compare_with_rendered_page on a constructed render, so no Chrome is needed."""
+
+    CHEAP_BODY_WORDS = re.sub(r"<[^>]+>", "\n", BODY)
+    HIDING_SCRIPT = "<script>document.getElementById('p').style.display='none';</script>"
+    HIDDEN_WORDS_HEADLINE = f'{HEADLINE}<span id="p"> {PAYLOAD}</span>'
+
+    def render(self, headline_text, body_text=None, **options):
+        from headline_guard.browser_visibility import RenderedPage
+
+        body_text = self.CHEAP_BODY_WORDS if body_text is None else body_text
+        return RenderedPage(headline_text, f"{headline_text or ''}\n{body_text}", options.get("clipped_text", ""),
+                            5.0, options.get("complete", True), options.get("note", ""))
+
+    def compare(self, article, rendered):
+        from headline_guard.browser_check import compare_with_rendered_page
+
+        return compare_with_rendered_page(GUARD, article, rendered)
+
+    def flags_of(self, result, category):
+        return [flag for flag in result.flags if flag.kind == category]
+
+    def suspicious_headline_article(self):
+        article = GUARD.extract_article(page(self.HIDDEN_WORDS_HEADLINE, body_extra=self.HIDING_SCRIPT))
+        self.assertEqual(len(self.flags_of(article, "headline_adds_words")), 1)
+        return article
+
+    # ---- headline_adds_words: after a conclusive comparison it never survives ----------------
+
+    def test_words_the_browser_hides_become_one_hidden_text_flag(self):
+        verified = self.compare(self.suspicious_headline_article(), self.render(HEADLINE))
+        self.assertEqual(self.flags_of(verified, "headline_adds_words"), [])
+        [flag] = self.flags_of(verified, "hidden_html_text")
+        self.assertEqual((flag.severity, flag.original, flag.field), ("high", PAYLOAD, "headline"))
+        self.assertEqual(flag.evidence, {"cause": "script_or_overlay"})
+        self.assertEqual(verified.verdict, "quarantine")
+        self.assertEqual(verified.headline, HEADLINE)
+
+    def test_words_the_browser_shows_clear_the_suspicion(self):
+        verified = self.compare(self.suspicious_headline_article(), self.render(f"{HEADLINE} {PAYLOAD}"))
+        self.assertEqual(self.flags_of(verified, "headline_adds_words"), [])
+        self.assertEqual(self.flags_of(verified, "hidden_html_text"), [])
+        self.assertEqual(verified.verdict, "pass", verified.flags)
+
+    def test_words_the_browser_shows_in_part_leave_only_the_hidden_words_flagged(self):
+        verified = self.compare(self.suspicious_headline_article(), self.render(f"{HEADLINE} losses"))
+        self.assertEqual(self.flags_of(verified, "headline_adds_words"), [])
+        [flag] = self.flags_of(verified, "hidden_html_text")
+        self.assertEqual(flag.original, "and layoffs")
+        self.assertEqual(flag.evidence, {"cause": "script_or_overlay"})
+
+    def test_the_browser_not_finding_the_heading_leaves_the_suspicion_standing(self):
+        verified = self.compare(self.suspicious_headline_article(), self.render(None))
+        self.assertEqual(len(self.flags_of(verified, "headline_adds_words")), 1)
+        [flag] = self.flags_of(verified, "headline_not_found_in_browser")
+        self.assertEqual((flag.severity, flag.evidence), ("high", {}))
+
+    def test_headline_words_hidden_in_svg_text_name_that_cause(self):
+        article = GUARD.extract_article(page(
+            'Alphabet shares surge <svg width="300" height="40"><text x="10">fraud</text></svg>'
+            "after dodging antitrust breakup bullet"))
+        verified = self.compare(article, self.render(HEADLINE))
+        [flag] = self.flags_of(verified, "hidden_html_text")
+        self.assertEqual(flag.evidence, {"cause": "svg_off_drawing"})
+
+    def test_words_a_script_added_are_script_generated_text(self):
+        article = GUARD.extract_article(page(HEADLINE))
+        verified = self.compare(article, self.render(f"{HEADLINE} bonus"))
+        self.assertEqual(self.flags_of(verified, "scraper_text_differs"), [])
+        [flag] = self.flags_of(verified, "script_generated_text")
+        self.assertEqual((flag.severity, flag.field, flag.original, flag.evidence), ("medium", "headline", "bonus", {}))
+
+    # ---- body flags ---------------------------------------------------------------------------
+
+    def hidden_paragraph_page(self, style):
+        injected = ('<p id="x" style="' + style + '">Insiders say the company is preparing mass layoffs and a '
+                    "profit warning that will shock investors next week.</p>")
+        return page(HEADLINE, article_extra=injected)
+
+    def test_body_text_the_browser_hides_is_hidden_text_in_the_article(self):
+        article = GUARD.extract_article(page(HEADLINE, article_extra=(
+            '<p id="x">Insiders say the company is preparing mass layoffs and a profit warning that will '
+            "shock investors next week.</p>"
+            "<script>document.getElementById('x').style.visibility='hidden';</script>")))
+        verified = self.compare(article, self.render(HEADLINE))
+        [flag] = self.flags_of(verified, "hidden_text_in_article")
+        self.assertEqual((flag.severity, flag.field, flag.evidence), ("low", "body", {"cause": "script_or_overlay"}))
+        self.assertNotIn("layoffs", verified.body)
+
+    @unittest.skipUnless(importlib.util.find_spec("tinycss2") is not None, "tinycss2 not installed")
+    def test_white_text_the_browser_hides_replaces_the_guess_with_a_sure_flag(self):
+        article = GUARD.extract_article(self.hidden_paragraph_page("color:#fff"))
+        self.assertEqual(len(self.flags_of(article, "possibly_hidden_text")), 1)
+        verified = self.compare(article, self.render(HEADLINE))
+        self.assertEqual(self.flags_of(verified, "possibly_hidden_text"), [])
+        [flag] = self.flags_of(verified, "hidden_text_in_article")
+        self.assertEqual(flag.evidence, {"cause": "script_or_overlay"})
+        self.assertNotIn("layoffs", verified.body)
+
+    @unittest.skipUnless(importlib.util.find_spec("tinycss2") is not None, "tinycss2 not installed")
+    def test_white_text_the_browser_shows_removes_the_guess(self):
+        article = GUARD.extract_article(self.hidden_paragraph_page("color:#fff"))
+        shown = self.CHEAP_BODY_WORDS + ("\nInsiders say the company is preparing mass layoffs and a profit "
+                                         "warning that will shock investors next week.")
+        verified = self.compare(article, self.render(HEADLINE, shown))
+        self.assertEqual(self.flags_of(verified, "possibly_hidden_text"), [])
+        self.assertEqual(self.flags_of(verified, "hidden_text_in_article"), [])
+        self.assertIn("layoffs", verified.body)
+
+    @unittest.skipUnless(importlib.util.find_spec("tinycss2") is not None, "tinycss2 not installed")
+    def test_an_inconclusive_render_keeps_the_guess(self):
+        article = GUARD.extract_article(self.hidden_paragraph_page("color:#fff"))
+        verified = self.compare(article, self.render("", "x"))
+        self.assertEqual(len(self.flags_of(verified, "browser_check_inconclusive")), 1)
+        self.assertEqual(len(self.flags_of(verified, "possibly_hidden_text")), 1)
+
+    def test_an_inconclusive_render_counts_the_words_it_showed(self):
+        visible = ("Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
+                   "a breakup of the company, a ruling analysts said removes a major overhang.")
+        hidden = "".join(f"<p>Insiders say restructuring wave {number} will bring mass layoffs, a profit warning "
+                         "and a regulatory probe that analysts expect to hit the shares.</p>" for number in range(30))
+        html = (f"<!doctype html><html><head><title>{HEADLINE}</title></head><body><article>"
+                f"<h1>{HEADLINE}</h1><p>{visible}</p>{hidden}</article></body></html>")
+        article = GUARD.extract_article(html)
+        verified = self.compare(article, self.render(HEADLINE, visible))
+        [flag] = self.flags_of(verified, "browser_check_inconclusive")
+        self.assertEqual(flag.evidence, {"words_shown": len(re.findall(r"\w+", visible)),
+                                         "words_total": len(re.findall(r"\w+", article.body))})
+
+    def test_flags_without_evidence_have_an_empty_object(self):
+        visible = ("Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
+                   "a breakup of the company, a ruling analysts said removes a major overhang.")
+        hidden = "".join(f"<p>Insiders say restructuring wave {number} will bring mass layoffs, a profit warning "
+                         "and a regulatory probe that analysts expect to hit the shares.</p>" for number in range(6))
+        html = (f"<!doctype html><html><head><title>{HEADLINE}</title></head><body><article>"
+                f"<h1>{HEADLINE}</h1><p>{visible}</p>{hidden}</article></body></html>")
+        article = GUARD.extract_article(html)
+        verified = self.compare(article, self.render(HEADLINE, visible, complete=False, note="timed out"))
+        for category in ("most_of_article_hidden", "browser_check_incomplete"):
+            with self.subTest(category=category):
+                [flag] = self.flags_of(verified, category)
+                self.assertEqual(flag.evidence, {})
+        preview = self.compare(GUARD.extract_article(page(HEADLINE)),
+                               self.render(HEADLINE, clipped_text=self.CHEAP_BODY_WORDS, body_text=""))
+        [flag] = self.flags_of(preview, "text_behind_preview_window")
+        self.assertEqual(flag.evidence, {})
 
 
 @unittest.skipUnless(AVAILABLE, "playwright or trafilatura not installed")

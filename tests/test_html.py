@@ -298,6 +298,14 @@ class BrowserRenderedModeTests(unittest.TestCase):
         self.assertEqual(result.verdict, "quarantine")
         self.assertEqual(result.clean_text, VISIBLE_HEADLINE)
         self.assertEqual(hidden_text_flags(result)[0].original, "losses and layoffs")
+        self.assertEqual(hidden_text_flags(result)[0].evidence, {"cause": "transparent", "css": "opacity:0"})
+
+    def test_text_the_browser_hides_that_the_parser_cannot_see_is_script_or_overlay(self):
+        page = f'<html><body><h1>{VISIBLE_HEADLINE}<span> losses and layoffs</span></h1></body></html>'
+        result = GUARD.analyze_html(page, "//h1", scraped_text=VISIBLE_HEADLINE, rendered_by_browser=True)
+        [flag] = hidden_text_flags(result)
+        self.assertEqual((flag.severity, flag.original, flag.evidence),
+                         ("high", "losses and layoffs", {"cause": "script_or_overlay"}))
 
     def test_homoglyph_in_browser_text_is_caught(self):
         page = "<html><body><h1>Теsla shares surge</h1></body></html>"
@@ -306,6 +314,14 @@ class BrowserRenderedModeTests(unittest.TestCase):
         )
         self.assertEqual(result.verdict, "quarantine")
         self.assertEqual(result.clean_text, "Tesla shares surge")
+
+    def test_words_only_the_browser_shows_are_script_generated_text(self):
+        page = "<html><body><h1>Apple beats estimates</h1></body></html>"
+        result = GUARD.analyze_html(
+            page, "//h1", scraped_text="Apple beats estimates bonus", rendered_by_browser=True
+        )
+        self.assertEqual([(flag.kind, flag.severity, flag.original, flag.evidence) for flag in result.flags],
+                         [("script_generated_text", "medium", "bonus", {})])
 
     def test_browser_mode_requires_browser_text(self):
         with self.assertRaises(ValueError):
