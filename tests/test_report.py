@@ -8,6 +8,7 @@ import json
 import unittest
 
 from headline_guard import HeadlineGuard, PAPER_WATCHLIST
+from tests import test_remaining_gaps as gaps
 from tests.test_article import HEADLINE, build_page
 
 GUARD = HeadlineGuard(PAPER_WATCHLIST)
@@ -443,6 +444,127 @@ class SchemaRuleTests(ReportCase):
         report["flags"][0]["category"] = "invented_category"
         with self.assertRaises(AssertionError):
             assert_follows_the_spec(self, report)
+
+
+AFTER_THE_HIDDEN_PARAGRAPH = (
+    "<p>Analysts expect the company to update its guidance when it reports results "
+    "later this month, and several raised their price targets.</p>")
+
+
+@unittest.skipUnless(HAS_JSONSCHEMA and HAS_TRAFILATURA, "jsonschema or trafilatura not installed")
+class ArticleEvidenceTests(ReportCase):
+    """The evidence of each flag the static article reading raises."""
+
+    def only_flag(self, report, category):
+        self.assert_valid(report)
+        [flag] = flags_of(report, category)
+        return flag
+
+    def article_report(self, html, **options):
+        return GUARD.extract_article(html, **options).to_dict()
+
+    def test_one_added_ordinary_word_names_the_title_it_was_compared_with(self):
+        html = gaps.article_page("Berkshire profit fell sharply as buybacks paused",
+                                 title="Berkshire profit fell as buybacks paused")
+        flag = self.only_flag(self.article_report(html), "headline_adds_words")
+        self.assertEqual(flag["severity"], "low")
+        self.assertEqual(flag["evidence"], {"compared_with": "<title>"})
+
+    def test_words_a_script_may_hide_name_the_feed_title(self):
+        html = gaps.article_page(f'{gaps.HEADLINE}<span id="p">{gaps.PAYLOAD}</span>',
+                                 body_extra="<script>document.getElementById('p').style.display='none';</script>")
+        flag = self.only_flag(self.article_report(html, feed_title=gaps.HEADLINE), "headline_adds_words")
+        self.assertEqual(flag["severity"], "medium")
+        self.assertEqual(flag["evidence"], {"compared_with": "feed title"})
+
+    def test_a_kicker_is_marked(self):
+        html = gaps.article_page(f'<span class="topline">Handel mit Wertpapieren</span> <span>{gaps.HEADLINE}</span>')
+        flag = self.only_flag(self.article_report(html), "headline_adds_words")
+        self.assertEqual(flag["severity"], "low")
+        self.assertEqual(flag["evidence"], {"compared_with": "<title>", "kicker": True})
+
+    def test_a_negation_in_its_own_element_is_not_a_kicker(self):
+        html = gaps.article_page(f'<span>Not true:</span> <span>{gaps.HEADLINE}</span>')
+        flag = self.only_flag(self.article_report(html), "headline_adds_words")
+        self.assertEqual(flag["severity"], "medium")
+        self.assertNotIn("kicker", flag["evidence"])
+
+    def json_ld_page(self):
+        json_ld = (
+            '<script type="application/ld+json">{"@type": "NewsArticle", "headline": "' + gaps.HEADLINE + '", '
+            '"articleBody": "Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order '
+            'a breakup of the company, a ruling analysts said removes a major overhang. The decision lifted other '
+            'large technology stocks as investors bet that regulators would struggle to force structural remedies '
+            'on the sector."}</script>'
+        )
+        injected = ("<p>Insiders say the company is quietly preparing for mass layoffs and a profit warning "
+                    "that will shock investors next week.</p>")
+        return (f"<!doctype html><html><head><title>{gaps.HEADLINE}</title>{json_ld}</head><body><article>"
+                f"<h1>{gaps.HEADLINE}</h1>{gaps.ARTICLE_BODY}{injected}</article></body></html>")
+
+    def test_body_passages_missing_from_the_json_ld_copy(self):
+        flag = self.only_flag(self.article_report(self.json_ld_page()), "body_text_not_in_page_copy")
+        self.assertEqual(flag["evidence"], {"compared_with": "JSON-LD articleBody"})
+        self.assertIn("mass layoffs", flag["flagged_text"])
+
+    def test_body_passages_missing_from_the_feeds_article_text(self):
+        feed_body = ("Shares of Alphabet rose sharply on Tuesday after a federal judge declined to order "
+                     "a breakup of the company, a ruling analysts said removes a major overhang. The decision "
+                     "lifted other large technology stocks as investors bet that regulators would struggle to "
+                     "force structural remedies on the sector.")
+        flag = self.only_flag(self.article_report(self.json_ld_page(), feed_body=feed_body),
+                              "body_text_not_in_page_copy")
+        self.assertEqual(flag["evidence"], {"compared_with": "feed article text"})
+
+    def test_hidden_body_text_gives_its_cause_and_rule(self):
+        for style, evidence in (
+            ('style="font-size:0"', {"cause": "tiny_font", "css": "font-size:0"}),
+            ('style="opacity:0"', {"cause": "transparent", "css": "opacity:0"}),
+            ("hidden", {"cause": "hidden_attribute"}),
+        ):
+            with self.subTest(style=style):
+                html = gaps.body_page(f"<p {style}>{gaps.INJECTED_PARAGRAPH_TEXT}</p>" + AFTER_THE_HIDDEN_PARAGRAPH)
+                flag = self.only_flag(self.article_report(html), "hidden_text_in_article")
+                self.assertEqual(flag["severity"], "low")
+                self.assertEqual(flag["evidence"], evidence)
+
+    @unittest.skipUnless(gaps.CASCADE_AVAILABLE, "the CSS libraries are not installed")
+    def test_white_text_on_an_undeclared_background_gives_the_color_rule(self):
+        html = gaps.body_page(f'<p style="color:#fff">{gaps.INJECTED_PARAGRAPH_TEXT}</p>')
+        flag = self.only_flag(self.article_report(html), "possibly_hidden_text")
+        self.assertEqual(flag["evidence"], {"cause": "same_color_as_background", "css": "color:#fff"})
+
+    def test_flags_without_evidence_have_an_empty_object(self):
+        read_more = "".join(f"<p>Paragraph {number} of the rest of the story explains how the ruling affects "
+                            "advertising revenue, cloud contracts and the company's hiring plans for next year.</p>"
+                            for number in range(6))
+        embedded_font = ('@font-face { font-family: "Remap"; src: url(data:font/woff2;base64,AAAA) format("woff2") } '
+                         'h1 { font-family: "Remap", serif }')
+        pages = {
+            "headline_unconfirmed": ("<html><body><article><h1>" + gaps.HEADLINE + "</h1>" + gaps.ARTICLE_BODY
+                                     + "</article></body></html>"),
+            "headline_from_metadata": build_page(headline_html="Breaking"),
+            "article_body_not_found": ("<html><head><title>Hello there world</title></head><body>"
+                                       "<h1>Hello there world</h1></body></html>"),
+            "css_generated_text": gaps.article_page(
+                f'<span class="k"></span>{gaps.HEADLINE}',
+                head_extra='<style>.k::before { content: "Exclusive: losses ahead " }</style>'),
+            "embedded_font": gaps.article_page(gaps.HEADLINE, head_extra=f"<style>{embedded_font}</style>"),
+            "most_of_article_hidden": gaps.body_page(
+                f'<div class="readmore"><div id="ControlPara1">{read_more}</div></div>',
+                head_extra='<style>.readmore div[id^="ControlPara"] > * { display: none }</style>'),
+        }
+        for category, html in pages.items():
+            with self.subTest(category=category):
+                flag = self.only_flag(self.article_report(html), category)
+                self.assertEqual(flag["evidence"], {})
+
+    def test_a_page_too_complex_to_read_gives_the_readers_message(self):
+        report = self.article_report("<div>" * 600 + "x")
+        flag = self.only_flag(report, "page_too_complex_to_read")
+        self.assertEqual(flag["field"], "page")
+        self.assertEqual(set(flag["evidence"]), {"message"})
+        self.assertTrue(flag["evidence"]["message"])
 
 
 if __name__ == "__main__":
