@@ -196,9 +196,21 @@ def _compare_headline(guard, article, rendered, flags):
     return headline, headline_source, flags
 
 
-def _remove_hidden_runs(paragraphs, flags):
+def _hidden_text_evidence(removed_text, suspicions):
+    """The evidence for body text the browser hides: a static suspicion it confirms keeps its own
+    cause and rule (the browser sees only that the text is not shown); otherwise script_or_overlay."""
+    removed_words = set(_comparison_words(removed_text))
+    for suspicion in suspicions:
+        suspected_words = set(_comparison_words(suspicion.original))
+        if suspected_words and len(removed_words & suspected_words) * 2 >= len(suspected_words):
+            return dict(suspicion.evidence)
+    return {"cause": "script_or_overlay"}
+
+
+def _remove_hidden_runs(paragraphs, flags, suspicions=()):
     """(body, clipped paragraph count, removed passages): each paragraph without its hidden runs,
-    one LOW flag appended per paragraph that lost text."""
+    one LOW flag appended per paragraph that lost text. suspicions: the static possibly_hidden_text
+    flags this render settles."""
     kept_paragraphs = []
     removed_passages = []
     clipped_paragraphs = 0
@@ -222,9 +234,10 @@ def _remove_hidden_runs(paragraphs, flags):
         remaining = _without_runs(paragraph, spans, runs)
         removed_passages.append(" ".join(removed_parts))
         # Low, as in the static reading: removed, so the model never sees it.
+        removed_text = " … ".join(removed_parts)
         flags.append(Flag(
-            "hidden_text_in_article", LOW, None, None, " … ".join(removed_parts)[:500],
-            {"cause": "script_or_overlay"}, "body",
+            "hidden_text_in_article", LOW, None, None, removed_text[:500],
+            _hidden_text_evidence(removed_text, suspicions), "body",
         ))
         if remaining:
             kept_paragraphs.append(remaining)
@@ -272,8 +285,10 @@ def compare_with_rendered_page(guard, article, rendered):
     # then showing the text proves nothing, and the suspicion stands.
     color_unchecked_words = set(_comparison_words(rendered.color_unchecked_text))
     kept_flags = []
+    settled_suspicions = []
     for flag in flags:
         if flag.kind == "possibly_hidden_text" and color_unchecked_words.isdisjoint(_comparison_words(flag.original)):
+            settled_suspicions.append(flag)
             continue
         kept_flags.append(flag)
     flags = kept_flags
@@ -303,7 +318,7 @@ def compare_with_rendered_page(guard, article, rendered):
             browser_verified=headline_confirmed, browser_milliseconds=rendered.milliseconds,
         )
 
-    body, clipped_paragraphs, _ = _remove_hidden_runs(paragraphs, flags)
+    body, clipped_paragraphs, _ = _remove_hidden_runs(paragraphs, flags, settled_suspicions)
     if clipped_paragraphs:
         flags.append(Flag("text_behind_preview_window", LOW, None, None, "", {}, "body"))
     return replace(

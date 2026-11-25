@@ -59,8 +59,10 @@ outside the Basic Multilingual Plane, such as the tag characters the guard catch
 
 When a browser check confirms a suspicion of the static reading, the browser's flag replaces it: one
 finding, one flag, at the browser's severity (`headline_adds_words` becomes `hidden_html_text`,
-`possibly_hidden_text` becomes `hidden_text_in_article`). When the browser shows the suspected text, the
-suspicion is removed.
+`possibly_hidden_text` becomes `hidden_text_in_article`). A browser sees only that text is not shown, so
+its flags say `script_or_overlay`, except where it confirms a suspicion whose cause the static reading
+knew: then that `cause` and `css` stand (white text: `same_color_as_background`, `color:#fff`). When the
+browser shows the suspected text, the suspicion is removed.
 
 ## Evidence keys
 
