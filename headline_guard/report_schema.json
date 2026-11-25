@@ -38,13 +38,14 @@
       "uniqueItems": true
     },
     "flag": {
+      "description": "Four fields every flag has, plus evidence. Known categories require their evidence; unknown categories pass with any.",
       "type": "object",
       "required": [
         "category",
         "severity",
         "field",
         "flagged_text",
-        "detail"
+        "evidence"
       ],
       "properties": {
         "category": {
@@ -57,10 +58,715 @@
         "flagged_text": {
           "type": "string"
         },
-        "detail": {
-          "type": "string"
+        "evidence": {
+          "$ref": "#/$defs/evidence"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "watchlist_homoglyph"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like",
+                  "tickers",
+                  "characters"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "accented_watchlist_name"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like",
+                  "tickers",
+                  "characters"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "possible_watchlist_lookalike"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like",
+                  "tickers"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "mixed_script_word"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "characters"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "whole_script_lookalike"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "looks_like"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "compatibility_lookalike"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "characters",
+                  "looks_like"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "hidden_tag_characters"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "decoded_text"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "invisible_character"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "characters"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "bidi_control"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "characters"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "excessive_combining_marks"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "characters"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "hidden_html_text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "cause"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "headline_adds_words"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "compared_with"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "medium",
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "reordered_text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "css"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "hidden_text_in_article"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "cause"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "possibly_hidden_text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "cause",
+                  "css"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "body_text_not_in_page_copy"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "compared_with"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "page_too_complex_to_read"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "message"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "browser_check_inconclusive"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "words_shown",
+                  "words_total"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "script_generated_text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "css_generated_text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "html_comment_text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "embedded_font"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "headline_not_found_in_browser"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "high"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "headline_unconfirmed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "headline_from_metadata"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "headline_not_found"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "scraper_text_differs"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "most_of_article_hidden"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "medium"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "text_behind_preview_window"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "article_body_not_found"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "browser_check_incomplete"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "enum": [
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "field": {
+                "const": "metadata"
+              },
+              "category": {
+                "enum": [
+                  "watchlist_homoglyph",
+                  "accented_watchlist_name",
+                  "possible_watchlist_lookalike",
+                  "mixed_script_word",
+                  "whole_script_lookalike",
+                  "compatibility_lookalike",
+                  "hidden_tag_characters",
+                  "invisible_character",
+                  "bidi_control",
+                  "excessive_combining_marks"
+                ]
+              }
+            },
+            "required": [
+              "field",
+              "category"
+            ]
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "required": [
+                  "found_in"
+                ]
+              }
+            }
+          }
+        }
+      ]
     },
     "article_report": {
       "type": "object",
@@ -372,6 +1078,110 @@
           }
         }
       ]
+    },
+    "evidence": {
+      "description": "Facts of one finding that no other field holds; keys per category in docs/report_format.md.",
+      "type": "object",
+      "properties": {
+        "looks_like": {
+          "type": "string"
+        },
+        "tickers": {
+          "$ref": "#/$defs/tickers"
+        },
+        "characters": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "code_point",
+              "name"
+            ],
+            "properties": {
+              "code_point": {
+                "type": "string",
+                "pattern": "^U\\+[0-9A-F]{4,6}$"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "decoded_text": {
+          "type": "string"
+        },
+        "inside_name": {
+          "type": "string"
+        },
+        "found_in": {
+          "type": "string"
+        },
+        "cause": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "x-known-values": [
+            "display_none",
+            "content_visibility_hidden",
+            "visibility_hidden",
+            "transparent",
+            "blurred",
+            "tiny_font",
+            "letters_stacked",
+            "same_color_as_background",
+            "clipped",
+            "scaled_to_zero",
+            "off_screen",
+            "screen_reader_only",
+            "covered",
+            "behind_background",
+            "closed_details",
+            "not_rendered_element",
+            "hidden_attribute",
+            "hidden_input",
+            "svg_not_drawn",
+            "svg_not_painted",
+            "svg_off_drawing",
+            "css_not_evaluated",
+            "script_or_overlay"
+          ]
+        },
+        "css": {
+          "type": "string"
+        },
+        "compared_with": {
+          "type": "string"
+        },
+        "kicker": {
+          "type": "boolean"
+        },
+        "added_text": {
+          "type": "string"
+        },
+        "dropped_text": {
+          "type": "string"
+        },
+        "words_shown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "words_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "dependentRequired": {
+        "inside_name": [
+          "tickers"
+        ],
+        "words_shown": [
+          "words_total"
+        ]
+      }
     }
   }
 }
