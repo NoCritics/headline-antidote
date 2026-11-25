@@ -23,6 +23,7 @@ Writes injection_report.md (in real_world_test/ for the baseline set, else in th
 """
 
 import argparse
+import datetime
 import json
 import os
 import time
@@ -32,10 +33,11 @@ import lxml.html
 
 from headline_antidote import HeadlineAntidote, PAPER_WATCHLIST
 from headline_antidote.article import HEADLINE_MATCH_THRESHOLD, _title_similarity
-from headline_antidote.html_visibility import _parse
+from headline_antidote.html_tree import parse_html
 from headline_antidote.text_guard import LOW, MEDIUM, SEVERITY_RANK
 
 from .page_data import TEST_DIRECTORY, load_pages, load_stylesheet_entries, load_stylesheets, read_page, report_path
+from .scraper_readings import BODY_READERS, HEADLINE_READERS, ChromeReader, is_error, static_readings
 
 warnings.filterwarnings("ignore")
 
@@ -47,6 +49,7 @@ BODY_PAYLOAD_CHECK = "fraud probe into the company"
 MINIMUM_BODY_WORDS = 60
 MINIMUM_ANCHOR_WORDS = 8
 RESTART_PAGES = 25
+BENCHMARK_RESULTS = os.path.join(os.path.dirname(TEST_DIRECTORY), "benchmark", "results")
 
 
 def _span(text, attributes):
@@ -216,6 +219,38 @@ def outcome_of(control, variant, payload_check):
 OUTCOMES = ["removed, flagged", "removed silently", "leaked, flagged", "leaked, sent to browser", "LEAKED, MISSED"]
 
 
+def got_through(final, payload_check):
+    """The payload reaches the model's text and nothing warns: the verdict is pass."""
+    return leaked(final, payload_check) and final.verdict == "pass"
+
+
+def count_reading(counts, text, payload_check, ambiguous):
+    """Adds one scraper reading of a variant to counts. A failed or ambiguous reading is counted
+    apart and stays out of the variants the rate is taken over."""
+    if ambiguous:
+        counts["ambiguous"] += 1
+        return
+    if is_error(text):
+        counts["errors"] += 1
+        return
+    counts["variants"] += 1
+    counts["reached"] += payload_check in normalized(text)
+
+
+def ambiguous_readers(clean_readings, readers, payload_check):
+    """The readers whose output of the clean page already holds the payload check string."""
+    return {reader for reader in readers
+            if reader in clean_readings and payload_check in normalized(clean_readings[reader])}
+
+
+def count_antidote(counts, final, payload_check):
+    counts["variants"] += 1
+    if got_through(final, payload_check):
+        counts["got_through"] += 1
+    elif leaked(final, payload_check):
+        counts["reached_flagged"] += 1
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="data")
@@ -236,9 +271,16 @@ def empty_results(total_pages, browser):
         browser_counts[name] = {}
         for outcome in OUTCOMES:
             counts[name][outcome] = 0
+    scraper_counts = {}
+    antidote_counts = {}
+    for name, where, _ in ATTACKS:
+        readers = HEADLINE_READERS if where == "headline" else BODY_READERS
+        scraper_counts[name] = {reader: {"variants": 0, "reached": 0, "errors": 0, "ambiguous": 0} for reader in readers}
+        antidote_counts[name] = {"variants": 0, "got_through": 0, "reached_flagged": 0, "browser_errors": 0}
     return {"counts": counts, "browser_counts": browser_counts, "miss_lines": [], "browser_lines": [],
             "skipped": [], "used_pages": 0, "sites": [], "static_seconds": 0.0, "total_pages": total_pages,
-            "browser": browser}
+            "browser": browser, "scraper_counts": scraper_counts, "antidote_counts": antidote_counts,
+            "pages_without_body_anchor": 0, "scraper_seconds": 0.0, "slice": None, "chrome": None}
 
 
 def run(arguments, pages):
@@ -247,17 +289,65 @@ def run(arguments, pages):
     guard = HeadlineAntidote(PAPER_WATCHLIST)
     stylesheet_entries = load_stylesheet_entries(data_directory)
     results = empty_results(len(pages), arguments.browser)
-    counts = results["counts"]
     browser_counts = results["browser_counts"]
-    sites = set()
+    antidote_counts = results["antidote_counts"]
     browser_variants = []
+    chrome = ChromeReader().start() if arguments.browser else None
+    if chrome is not None:
+        results["chrome"] = chrome.version
     started_all = time.perf_counter()
+    try:
+        scraper_seconds = _read_pages(arguments, pages, guard, stylesheet_entries, results, chrome, browser_variants)
+    finally:
+        if chrome is not None:
+            chrome.close()
+    results["static_seconds"] = time.perf_counter() - started_all - scraper_seconds
+    results["scraper_seconds"] = scraper_seconds
+
+    if browser_variants:
+        from headline_antidote.browser_visibility import BrowserVerifier
+
+        with BrowserVerifier() as verifier:
+            verifier.render("https://guard-test.invalid/", "<html><body><h1>warm up</h1></body></html>")
+            for index, (page_entry, name, payload_check, variant, variant_html) in enumerate(browser_variants):
+                if index and index % RESTART_PAGES == 0:
+                    verifier.close()
+                    verifier.start()
+                try:
+                    verified = guard.verify_article_in_browser(variant, variant_html, page_entry["url"], verifier)
+                except Exception as error:  # Chrome 158 crashes on some CSS; the check failed, it did not pass
+                    antidote_counts[name]["browser_errors"] += 1
+                    print(f"browser {page_entry['file']} {name}: error {type(error).__name__}")
+                    verifier.close()
+                    verifier.start()
+                    continue
+                count_antidote(antidote_counts[name], verified, payload_check)
+                if leaked(verified, payload_check):
+                    after = f"leaked, verdict {verified.verdict}"
+                else:
+                    after = f"removed, verdict {verified.verdict}"
+                browser_counts[name][after] = browser_counts[name].get(after, 0) + 1
+                print(f"browser {page_entry['file']} {name}: {after}")
+                if leaked(verified, payload_check) and verified.verdict == "pass":
+                    results["browser_lines"].append(f"- {page_entry['file']} {page_entry['source']}: {name} still passes")
+    return results
+
+
+def _read_pages(arguments, pages, guard, stylesheet_entries, results, chrome, browser_variants):
+    """The static part of run(): every variant of every page, read by headline-antidote and the
+    scrapers. Returns the seconds the scrapers took."""
+    data_directory = arguments.data_directory
+    counts = results["counts"]
+    scraper_counts = results["scraper_counts"]
+    antidote_counts = results["antidote_counts"]
+    sites = set()
+    scraper_seconds = 0.0
     for page_entry in pages:
         label = f"{page_entry['file']} {page_entry['source']}"
         raw_html = read_page(data_directory, page_entry)
         external_css = load_stylesheets(data_directory, stylesheet_entries.get(page_entry["file"], []))
         try:
-            control_html = lxml.html.tostring(_parse(raw_html), encoding="unicode")
+            control_html = lxml.html.tostring(parse_html(raw_html), encoding="unicode")
         except Exception as error:
             results["skipped"].append(f"{label}: does not parse ({type(error).__name__})")
             continue
@@ -271,18 +361,26 @@ def run(arguments, pages):
         if leaked(control, HEADLINE_PAYLOAD_CHECK) or leaked(control, BODY_PAYLOAD_CHECK):
             results["skipped"].append(f"{label}: the article itself mentions the payload")
             continue
-        probe_root = _parse(control_html)
+        probe_root = parse_html(control_html)
         if find_headline(probe_root, control) is None:
             results["skipped"].append(f"{label}: headline element not found")
             continue
         has_anchor = find_anchor(probe_root, control) is not None
         results["used_pages"] += 1
+        results["pages_without_body_anchor"] += not has_anchor
         sites.add(page_entry["source"])
+        started_scrapers = time.perf_counter()
+        clean_readings = static_readings(control_html)
+        if chrome is not None:
+            clean_readings.update(chrome.read(page_entry["url"], control_html))
+        scraper_seconds += time.perf_counter() - started_scrapers
+        ambiguous = {"headline": ambiguous_readers(clean_readings, HEADLINE_READERS, HEADLINE_PAYLOAD_CHECK),
+                     "body": ambiguous_readers(clean_readings, BODY_READERS, BODY_PAYLOAD_CHECK)}
         page_outcomes = []
         for name, where, splice in ATTACKS:
             if where == "body" and not has_anchor:
                 continue
-            root = _parse(control_html)
+            root = parse_html(control_html)
             headline_element = find_headline(root, control)
             anchor = find_anchor(root, control)
             extra_css = splice(root, headline_element, anchor)
@@ -297,49 +395,59 @@ def run(arguments, pages):
             page_outcomes.append(outcome)
             if outcome == "LEAKED, MISSED":
                 results["miss_lines"].append(f"- {label}: {name}")
+            # Chrome loads the live stylesheets, which lack the injected rule: serve it in a
+            # <style> block, so every reader sees the same CSS, as it would on a real page.
+            browser_html = variant_html
+            if extra_css:
+                browser_root = parse_html(variant_html)
+                _append_head_style(browser_root, extra_css)
+                browser_html = lxml.html.tostring(browser_root, encoding="unicode")
+            started_scrapers = time.perf_counter()
+            readings = static_readings(variant_html)
+            if chrome is not None:
+                readings.update(chrome.read(page_entry["url"], browser_html))
+            scraper_seconds += time.perf_counter() - started_scrapers
+            for reader, reader_counts in scraper_counts[name].items():
+                if reader in readings:
+                    count_reading(reader_counts, readings[reader], payload_check, reader in ambiguous[where])
             if arguments.browser and variant.needs_browser_check:
-                # Chrome loads the live stylesheets, which lack the injected rule: serve it in a
-                # <style> block, so both readers see the same CSS, as they would on a real page.
-                browser_html = variant_html
-                if extra_css:
-                    browser_root = _parse(variant_html)
-                    _append_head_style(browser_root, extra_css)
-                    browser_html = lxml.html.tostring(browser_root, encoding="unicode")
                 browser_variants.append((page_entry, name, payload_check, variant, browser_html))
+            else:
+                count_antidote(antidote_counts[name], variant, payload_check)
         print(f"{label}: {page_outcomes.count('LEAKED, MISSED')} missed of {len(page_outcomes)}")
-    results["static_seconds"] = time.perf_counter() - started_all
     results["sites"] = sorted(sites)
-
-    if browser_variants:
-        from headline_antidote.browser_visibility import BrowserVerifier
-
-        with BrowserVerifier() as verifier:
-            verifier.render("https://guard-test.invalid/", "<html><body><h1>warm up</h1></body></html>")
-            for index, (page_entry, name, payload_check, variant, variant_html) in enumerate(browser_variants):
-                if index and index % RESTART_PAGES == 0:
-                    verifier.close()
-                    verifier.start()
-                verified = guard.verify_article_in_browser(variant, variant_html, page_entry["url"], verifier)
-                if leaked(verified, payload_check):
-                    after = f"leaked, verdict {verified.verdict}"
-                else:
-                    after = f"removed, verdict {verified.verdict}"
-                browser_counts[name][after] = browser_counts[name].get(after, 0) + 1
-                print(f"browser {page_entry['file']} {name}: {after}")
-                if leaked(verified, payload_check) and verified.verdict == "pass":
-                    results["browser_lines"].append(f"- {page_entry['file']} {page_entry['source']}: {name} still passes")
-    return results
+    return scraper_seconds
 
 
-def merged_results(part_results):
-    """One results dict from the saved slices."""
+def merged_results(part_results, total_pages=None):
+    """One results dict from the saved slices. Raises ValueError when the slices overlap, leave a
+    gap, or (given total_pages) stop short of the last page."""
+    part_results = sorted(part_results, key=lambda part: part["slice"][0])
+    next_first = 0
+    for part in part_results:
+        first, last = part["slice"]
+        if first != next_first:
+            raise ValueError(f"the slices overlap or leave a gap at page {next_first}: the next one starts at {first}")
+        next_first = last
+    if total_pages is not None and next_first != total_pages:
+        raise ValueError(f"the slices end at page {next_first}, of {total_pages}")
     total = empty_results(0, False)
     sites = set()
     for part in part_results:
         total["total_pages"] += part["total_pages"]
         total["used_pages"] += part["used_pages"]
         total["static_seconds"] += part["static_seconds"]
+        total["scraper_seconds"] += part["scraper_seconds"]
+        total["pages_without_body_anchor"] += part["pages_without_body_anchor"]
         total["browser"] = total["browser"] or part["browser"]
+        total["chrome"] = total["chrome"] or part["chrome"]
+        for name, readers in part["scraper_counts"].items():
+            for reader, reader_counts in readers.items():
+                for key, value in reader_counts.items():
+                    total["scraper_counts"][name][reader][key] += value
+        for name, antidote in part["antidote_counts"].items():
+            for key, value in antidote.items():
+                total["antidote_counts"][name][key] += value
         for site in part["sites"]:
             sites.add(site)
         for key in ("miss_lines", "browser_lines", "skipped"):
@@ -407,28 +515,55 @@ def write_report(arguments, results):
     print("\n".join(lines[:24]))
 
 
+def write_json(arguments, results):
+    """benchmark/results/real_pages_<data>.json: per attack, what each scraper and headline-antidote
+    let through. Pages appear only as counts, site names and skip reasons, never their text."""
+    attacks = []
+    for name, where, _ in ATTACKS:
+        attacks.append({"name": name, "where": where, "readers": results["scraper_counts"][name],
+                        "antidote": results["antidote_counts"][name]})
+    document = {"generated": datetime.date.today().isoformat(), "data": arguments.data, "chrome": results["chrome"],
+                "browser": results["browser"], "total_pages": results["total_pages"],
+                "used_pages": results["used_pages"], "pages_without_body_anchor": results["pages_without_body_anchor"],
+                "sites": results["sites"], "skipped": results["skipped"], "attacks": attacks}
+    os.makedirs(BENCHMARK_RESULTS, exist_ok=True)
+    with open(os.path.join(BENCHMARK_RESULTS, f"real_pages_{arguments.data}.json"), "w", encoding="utf-8",
+              newline="") as file:
+        json.dump(document, file, ensure_ascii=False, indent=1)
+
+
 def main():
     arguments = parse_arguments()
     parts_directory = os.path.join(arguments.data_directory, "injection_parts")
+    pages = load_pages(arguments.data_directory)
     if arguments.merge:
         part_results = []
         for file_name in sorted(os.listdir(parts_directory)):
             with open(os.path.join(parts_directory, file_name), encoding="utf-8") as file:
                 part_results.append(json.load(file))
-        write_report(arguments, merged_results(part_results))
+        results = merged_results(part_results, total_pages=len(pages))
+        write_report(arguments, results)
+        write_json(arguments, results)
         return
-    pages = load_pages(arguments.data_directory)
     if arguments.pages:
         first_text, last_text = arguments.pages.split(":")
         first = int(first_text)
-        last = int(last_text)
+        last = min(int(last_text), len(pages))
+        if first == 0 and os.path.isdir(parts_directory):
+            # A new run starts here: slices left from an earlier run must not be merged into it.
+            for file_name in os.listdir(parts_directory):
+                os.remove(os.path.join(parts_directory, file_name))
         results = run(arguments, pages[first:last])
+        results["slice"] = [first, last]
         os.makedirs(parts_directory, exist_ok=True)
         with open(os.path.join(parts_directory, f"part_{first:04d}_{last:04d}.json"), "w", encoding="utf-8") as file:
             json.dump(results, file, ensure_ascii=False, indent=1)
         print(f"saved pages {first}:{last}: {results['used_pages']} used")
         return
-    write_report(arguments, run(arguments, pages))
+    results = run(arguments, pages)
+    results["slice"] = [0, len(pages)]
+    write_report(arguments, results)
+    write_json(arguments, results)
 
 
 if __name__ == "__main__":
