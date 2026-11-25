@@ -450,6 +450,8 @@ CHROME_DECIDED_CASES += (
     (".x{display:attr(data-hide type(<custom-ident>))}", "", True),
     ("@function --f(){result:0} .x{opacity:--f()}", "", True),
     (".x{--o:if(else:0);opacity:var(--o)}", "", True),
+    # An undefined var() in a branch Chrome does not take leaves the value valid.
+    (".x{opacity:if(style(--a:1):var(--u);else:0)}", "", True),
     # Chrome 158 substitutes inherit() in a value that also holds var(); this reader cannot.
     (":root{--x:0} .x{opacity:var(--a, inherit(--x))}", "", True),
     (":root{--x:0} .x{opacity:inherit(--x, var(--y))}", "", True),
