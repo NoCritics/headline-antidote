@@ -146,5 +146,12 @@ class RealPageScoringTests(unittest.TestCase):
             merged_results([part(0, 60)], total_pages=120)
 
 
+class CleanRunTests(unittest.TestCase):
+    def test_verdict_counts_fill_zeros(self):
+        from benchmark.run_clean import verdict_counts
+
+        self.assertEqual(verdict_counts(["pass", "pass", "review"]), {"pass": 2, "review": 1, "quarantine": 0})
+
+
 if __name__ == "__main__":
     unittest.main()
