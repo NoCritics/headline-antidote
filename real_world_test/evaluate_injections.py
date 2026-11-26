@@ -532,6 +532,21 @@ def write_json(arguments, results):
         json.dump(document, file, ensure_ascii=False, indent=1)
 
 
+def check_slice_is_free(parts_directory, first, last):
+    """Raises ValueError when a saved slice other than first:last overlaps it: a new run must not be
+    merged with an earlier one, and finished slices are never deleted for it."""
+    if not os.path.isdir(parts_directory):
+        return
+    overlapping = []
+    for file_name in sorted(os.listdir(parts_directory)):
+        saved_first, saved_last = (int(number) for number in file_name.removesuffix(".json").split("_")[1:])
+        if (saved_first, saved_last) != (first, last) and saved_first < last and first < saved_last:
+            overlapping.append(file_name)
+    if overlapping:
+        raise ValueError(f"saved slices overlap {first}:{last}: {', '.join(overlapping)} in {parts_directory}; "
+                         "merge them, or move them away to start a new run")
+
+
 def main():
     arguments = parse_arguments()
     parts_directory = os.path.join(arguments.data_directory, "injection_parts")
@@ -549,10 +564,7 @@ def main():
         first_text, last_text = arguments.pages.split(":")
         first = int(first_text)
         last = min(int(last_text), len(pages))
-        if first == 0 and os.path.isdir(parts_directory):
-            # A new run starts here: slices left from an earlier run must not be merged into it.
-            for file_name in os.listdir(parts_directory):
-                os.remove(os.path.join(parts_directory, file_name))
+        check_slice_is_free(parts_directory, first, last)
         results = run(arguments, pages[first:last])
         results["slice"] = [first, last]
         os.makedirs(parts_directory, exist_ok=True)
