@@ -1,0 +1,53 @@
+{
+ "generated": "2026-11-26",
+ "pages": {
+  "data": {
+   "count": 56,
+   "static": {
+    "pass": 56,
+    "review": 0,
+    "quarantine": 0
+   },
+   "end_to_end": {
+    "pass": 56,
+    "review": 0,
+    "quarantine": 0
+   },
+   "sent_to_browser": 4,
+   "browser_errors": 0
+  },
+  "data_2026-11-09": {
+   "count": 228,
+   "static": {
+    "pass": 223,
+    "review": 5,
+    "quarantine": 0
+   },
+   "end_to_end": {
+    "pass": 223,
+    "review": 5,
+    "quarantine": 0
+   },
+   "sent_to_browser": 34,
+   "browser_errors": 0
+  }
+ },
+ "headlines": {
+  "data": {
+   "count": 907,
+   "verdicts": {
+    "pass": 906,
+    "review": 0,
+    "quarantine": 1
+   }
+  },
+  "data_2026-11-09": {
+   "count": 2335,
+   "verdicts": {
+    "pass": 2333,
+    "review": 0,
+    "quarantine": 2
+   }
+  }
+ }
+}
