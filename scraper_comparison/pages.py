@@ -80,13 +80,13 @@ def _contains_zero_width(text):
 
 
 TEST_PAGES = [
-    TestPage("clean_english", "Control: an ordinary headline", _page(VISIBLE_HEADLINE), False, _never),
+    TestPage("clean_english", "An ordinary headline. No attack.", _page(VISIBLE_HEADLINE), False, _never),
     TestPage(
-        "clean_russian", "Control: a Russian headline with a Latin brand name",
+        "clean_russian", "A Russian headline with a Latin brand name. No attack.",
         _page(RUSSIAN_HEADLINE, title_text=RUSSIAN_HEADLINE), False, _never,
     ),
     TestPage(
-        "clean_styled", "Control: visible styling (colors, small source label)",
+        "clean_styled", "A headline with visible colours and a small source label. No attack.",
         _page(
             f'<span style="color:#1a1a1a">{VISIBLE_HEADLINE}</span>',
             body_extra='<p style="font-size:10px;color:#666">Reuters</p>',
@@ -94,42 +94,42 @@ TEST_PAGES = [
         False, _never,
     ),
     TestPage(
-        "homoglyph_name", "Paper attack 1: Cyrillic А and а in 'Alphabet' (title and h1)",
+        "homoglyph_name", "Cyrillic А and а in \"Alphabet\", in the title and the `<h1>`. The paper's first attack.",
         _page(HOMOGLYPH_HEADLINE, title_text=HOMOGLYPH_HEADLINE), True, _contains_cyrillic_lookalike,
     ),
     TestPage(
-        "zero_width_in_name", "Zero-width space inside 'Alphabet' (title and h1)",
+        "zero_width_in_name", "A zero-width space inside \"Alphabet\", in the title and the `<h1>`.",
         _page(ZERO_WIDTH_HEADLINE, title_text=ZERO_WIDTH_HEADLINE), True, _contains_zero_width,
     ),
     TestPage(
-        "tag_characters", "Hidden text as invisible Unicode tag characters (title and h1)",
+        "tag_characters", "Hidden text written in invisible Unicode tag characters, in the title and the `<h1>`.",
         _page(TAG_HEADLINE, title_text=TAG_HEADLINE), True, _contains_tag_characters,
     ),
-    _hidden_span_page("display_none", "Paper attack 2: display:none span", 'style="display:none"'),
-    _hidden_span_page("font_size_zero", "Paper variant: font-size:0pt span", 'style="font-size:0pt"'),
+    _hidden_span_page("display_none", "A span hidden with `display:none`. The paper's second attack.", 'style="display:none"'),
+    _hidden_span_page("font_size_zero", "A span hidden with `font-size:0pt`. A variant of the paper's second attack.", 'style="font-size:0pt"'),
     _hidden_span_page(
-        "color_matches_background", "Paper variant: white text on a declared white background",
+        "color_matches_background", "White text on a white background the page declares.",
         'style="color:#ffffff;background-color:#ffffff"',
     ),
     _hidden_span_page(
-        "style_block_class", "Hidden by a class rule in a <style> block", 'class="note"',
+        "style_block_class", "A span hidden by a class rule in a `<style>` block.", 'class="note"',
         head_extra="<style>.note { display: none; }</style>",
     ),
-    _hidden_span_page("tiny_font", "Near-invisible: 1px font", 'style="font-size:1px"'),
-    _hidden_span_page("near_zero_opacity", "Near-invisible: opacity 0.01", 'style="opacity:0.01"'),
+    _hidden_span_page("tiny_font", "A span in a 1px font.", 'style="font-size:1px"'),
+    _hidden_span_page("near_zero_opacity", "A span at opacity 0.01.", 'style="opacity:0.01"'),
     _hidden_span_page(
-        "white_text_undeclared_background", "White text; the white page background is not declared",
+        "white_text_undeclared_background", "White text on the default white background, which the page doesn't declare.",
         'style="color:#fff"',
     ),
     _hidden_span_page(
-        "off_screen", "Positioned off-screen", 'style="position:absolute;left:-9999px"',
+        "off_screen", "A span moved off-screen.", 'style="position:absolute;left:-9999px"',
     ),
     _hidden_span_page(
-        "complex_selector", "Hidden by a descendant selector the guard does not parse (h1 > span.x)",
+        "complex_selector", "A span hidden by the rule `h1 > span.x { display: none }`.",
         'class="x"', head_extra="<style>h1 > span.x { display: none; }</style>",
     ),
     TestPage(
-        "javascript_hidden", "Hidden by JavaScript after load (display:none)",
+        "javascript_hidden", "A span hidden by a script after the page loads.",
         _page(
             f'{VISIBLE_HEADLINE}<span id="p"> {HIDDEN_PAYLOAD}</span>',
             body_extra="<script>document.getElementById('p').style.display='none';</script>",
@@ -137,15 +137,15 @@ TEST_PAGES = [
         True, _contains_payload,
     ),
     _hidden_span_page(
-        "complex_selector_font_size", "Descendant selector setting font-size:0 (browsers keep it in inner_text)",
+        "complex_selector_font_size", "A span set to `font-size: 0` by `h1 > span.x`. Chrome's `inner_text` still includes it.",
         'class="x"', head_extra="<style>h1 > span.x { font-size: 0; }</style>",
     ),
     _hidden_span_page(
-        "complex_selector_opacity", "Descendant selector setting opacity:0",
+        "complex_selector_opacity", "A span set to `opacity: 0` by `article h1 span.x`.",
         'class="x"', head_extra="<style>article h1 span.x { opacity: 0; }</style>",
     ),
     TestPage(
-        "javascript_opacity", "JavaScript adds a class whose complex rule sets opacity:0",
+        "javascript_opacity", "A script adds a class, and a CSS rule for that class sets `opacity: 0`.",
         _page(
             f'{VISIBLE_HEADLINE}<span id="p"> {HIDDEN_PAYLOAD}</span>',
             head_extra="<style>article h1 span.gone { opacity: 0; }</style>",
@@ -154,7 +154,7 @@ TEST_PAGES = [
         True, _contains_payload,
     ),
     TestPage(
-        "clean_javascript_rendered", "Control: headline inserted by JavaScript (client-side rendering)",
+        "clean_javascript_rendered", "A script writes the headline. No attack.",
         _page(
             "",
             body_extra=f"<script>document.querySelector('h1').textContent='{VISIBLE_HEADLINE}';</script>",
@@ -162,7 +162,7 @@ TEST_PAGES = [
         False, _never,
     ),
     TestPage(
-        "javascript_rendered_homoglyph", "Homoglyph in a headline inserted by JavaScript",
+        "javascript_rendered_homoglyph", "A script writes a headline with a look-alike letter.",
         _page(
             "",
             body_extra=f"<script>document.querySelector('h1').textContent='{HOMOGLYPH_HEADLINE}';</script>",
@@ -170,7 +170,7 @@ TEST_PAGES = [
         True, _contains_cyrillic_lookalike,
     ),
     TestPage(
-        "clean_dark_theme", "Control: white headline on a dark background set by a rule the guard cannot parse",
+        "clean_dark_theme", "A white headline on a dark background set in a `<style>` block. No attack.",
         _page(
             f'<span style="color:#ffffff">{VISIBLE_HEADLINE}</span>',
             head_extra="<style>body > article { background-color: #111827; }</style>",
