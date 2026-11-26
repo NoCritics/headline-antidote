@@ -1,0 +1,475 @@
+{
+ "generated": "2026-11-26",
+ "data": "data_2026-11-09",
+ "chrome": "158.0.8127.37",
+ "browser": true,
+ "total_pages": 228,
+ "used_pages": 189,
+ "pages_without_body_anchor": 12,
+ "sites": [
+  "ABC Australia Business",
+  "ANSA Economia",
+  "Al Jazeera",
+  "BBC Business",
+  "Business Insider",
+  "Business Standard Markets",
+  "CBC Business",
+  "CNBC",
+  "CNBC Markets",
+  "Cointelegraph",
+  "Decrypt",
+  "Deutsche Welle Business",
+  "Economic Times",
+  "El Pais Economia",
+  "Euronews Business",
+  "FAZ Wirtschaft",
+  "Fortune",
+  "Fox Business",
+  "France 24 Business",
+  "Globes",
+  "Guardian Business",
+  "Handelsblatt",
+  "Hindu BusinessLine",
+  "Il Sole 24 Ore Finanza",
+  "InfoMoney",
+  "Interfax",
+  "Le Figaro Economie",
+  "Le Monde Economie",
+  "Livemint Markets",
+  "Motley Fool",
+  "NPR Business",
+  "Nikkei Asia",
+  "OilPrice",
+  "Seeking Alpha",
+  "South China Morning Post Business",
+  "Spiegel Wirtschaft",
+  "Straits Times Business",
+  "Sydney Morning Herald Business",
+  "Tagesschau Wirtschaft",
+  "TechCrunch",
+  "The Independent Business",
+  "Times of India Business",
+  "Vedomosti"
+ ],
+ "skipped": [
+  "page_001.html Federal Reserve: headline element not found",
+  "page_002.html Federal Reserve: headline element not found",
+  "page_003.html Federal Reserve: headline element not found",
+  "page_004.html Federal Reserve: headline element not found",
+  "page_005.html Federal Reserve: headline element not found",
+  "page_026.html Quartz: headline element not found",
+  "page_027.html Quartz: headline element not found",
+  "page_051.html ABC Australia Business: clean reading has the wrong headline",
+  "page_055.html ABC Australia Business: clean reading has the wrong headline",
+  "page_107.html Spiegel Wirtschaft: body under 60 words",
+  "page_109.html Spiegel Wirtschaft: body under 60 words",
+  "page_110.html Spiegel Wirtschaft: body under 60 words",
+  "page_111.html FAZ Wirtschaft: clean reading has the wrong headline",
+  "page_112.html FAZ Wirtschaft: clean reading has the wrong headline",
+  "page_113.html FAZ Wirtschaft: clean reading has the wrong headline",
+  "page_115.html FAZ Wirtschaft: clean reading has the wrong headline",
+  "page_116.html Tagesschau Wirtschaft: headline element not found",
+  "page_120.html Tagesschau Wirtschaft: headline element not found",
+  "page_156.html TASS: body under 60 words",
+  "page_157.html TASS: body under 60 words",
+  "page_158.html TASS: body under 60 words",
+  "page_159.html TASS: body under 60 words",
+  "page_160.html TASS: body under 60 words",
+  "page_161.html Interfax: body under 60 words",
+  "page_168.html Globes: body under 60 words",
+  "page_173.html Handelsblatt: clean reading has the wrong headline",
+  "page_175.html Handelsblatt: clean reading has the wrong headline",
+  "page_176.html Yahoo Japan Business: body under 60 words",
+  "page_177.html Yahoo Japan Business: body under 60 words",
+  "page_178.html Yahoo Japan Business: body under 60 words",
+  "page_179.html Yahoo Japan Business: body under 60 words",
+  "page_180.html Yahoo Japan Business: body under 60 words",
+  "page_206.html Al Jazeera: body under 60 words",
+  "page_207.html Al Jazeera: body under 60 words",
+  "page_209.html Al Jazeera: body under 60 words",
+  "page_212.html Nikkei Asia: body under 60 words",
+  "page_214.html Nikkei Asia: body under 60 words",
+  "page_221.html Seeking Alpha: body under 60 words",
+  "page_223.html Seeking Alpha: body under 60 words"
+ ],
+ "attacks": [
+  {
+   "name": "headline: display:none span",
+   "where": "headline",
+   "readers": {
+    "BeautifulSoup h1": {
+     "variants": 189,
+     "reached": 184,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "lxml h1 (Scrapy)": {
+     "variants": 189,
+     "reached": 184,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "trafilatura title": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k title": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome h1 inner_text": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 189,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "headline: class hidden by external CSS (font-size:0)",
+   "where": "headline",
+   "readers": {
+    "BeautifulSoup h1": {
+     "variants": 189,
+     "reached": 184,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "lxml h1 (Scrapy)": {
+     "variants": 189,
+     "reached": 184,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "trafilatura title": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k title": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome h1 inner_text": {
+     "variants": 188,
+     "reached": 151,
+     "errors": 1,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 189,
+    "got_through": 1,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "headline: span hidden by JavaScript",
+   "where": "headline",
+   "readers": {
+    "BeautifulSoup h1": {
+     "variants": 189,
+     "reached": 184,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "lxml h1 (Scrapy)": {
+     "variants": 189,
+     "reached": 184,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "trafilatura title": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k title": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome h1 inner_text": {
+     "variants": 187,
+     "reached": 0,
+     "errors": 2,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 189,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "headline: bidi-reversed span",
+   "where": "headline",
+   "readers": {
+    "BeautifulSoup h1": {
+     "variants": 189,
+     "reached": 184,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "lxml h1 (Scrapy)": {
+     "variants": 189,
+     "reached": 184,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "trafilatura title": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k title": {
+     "variants": 189,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome h1 inner_text": {
+     "variants": 189,
+     "reached": 153,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 189,
+    "got_through": 0,
+    "reached_flagged": 2,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: class hidden by external CSS (opacity:0)",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 177,
+     "reached": 175,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 177,
+     "reached": 135,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 176,
+     "reached": 138,
+     "errors": 1,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 177,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: screen-reader box from a <style> block",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 177,
+     "reached": 175,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 177,
+     "reached": 135,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 177,
+     "reached": 138,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 177,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: off-screen paragraph",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 177,
+     "reached": 175,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 177,
+     "reached": 136,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 175,
+     "reached": 139,
+     "errors": 2,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 177,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: white text",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 177,
+     "reached": 175,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 177,
+     "reached": 135,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 176,
+     "reached": 140,
+     "errors": 1,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 177,
+    "got_through": 5,
+    "reached_flagged": 2,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: paragraph covered by a white box",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 177,
+     "reached": 175,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 177,
+     "reached": 95,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 177,
+     "reached": 133,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 177,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: paragraph removed by JavaScript (by id)",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 177,
+     "reached": 175,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 177,
+     "reached": 136,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 177,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 177,
+    "got_through": 0,
+    "reached_flagged": 5,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: paragraph removed by JavaScript (no name)",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 177,
+     "reached": 175,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 177,
+     "reached": 136,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 174,
+     "reached": 0,
+     "errors": 3,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 177,
+    "got_through": 115,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  }
+ ]
+}

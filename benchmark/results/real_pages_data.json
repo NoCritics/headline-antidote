@@ -1,0 +1,417 @@
+{
+ "generated": "2026-11-26",
+ "data": "data",
+ "chrome": "158.0.8127.37",
+ "browser": true,
+ "total_pages": 56,
+ "used_pages": 45,
+ "pages_without_body_anchor": 0,
+ "sites": [
+  "Al Jazeera",
+  "BBC Business",
+  "Business Insider",
+  "CNBC",
+  "Economic Times",
+  "Fortune",
+  "Globes",
+  "Guardian Business",
+  "Handelsblatt",
+  "Interfax",
+  "NPR Business",
+  "Nikkei Asia",
+  "Seeking Alpha"
+ ],
+ "skipped": [
+  "page_025.html Seeking Alpha: body under 60 words",
+  "page_026.html Seeking Alpha: body under 60 words",
+  "page_027.html Seeking Alpha: body under 60 words",
+  "page_030.html Al Jazeera: body under 60 words",
+  "page_031.html Al Jazeera: body under 60 words",
+  "page_032.html Al Jazeera: body under 60 words",
+  "page_046.html Globes: body under 60 words",
+  "page_053.html Yahoo Japan Business: body under 60 words",
+  "page_054.html Yahoo Japan Business: body under 60 words",
+  "page_055.html Yahoo Japan Business: body under 60 words",
+  "page_056.html Yahoo Japan Business: body under 60 words"
+ ],
+ "attacks": [
+  {
+   "name": "headline: display:none span",
+   "where": "headline",
+   "readers": {
+    "BeautifulSoup h1": {
+     "variants": 45,
+     "reached": 41,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "lxml h1 (Scrapy)": {
+     "variants": 45,
+     "reached": 41,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "trafilatura title": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k title": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome h1 inner_text": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "headline: class hidden by external CSS (font-size:0)",
+   "where": "headline",
+   "readers": {
+    "BeautifulSoup h1": {
+     "variants": 45,
+     "reached": 41,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "lxml h1 (Scrapy)": {
+     "variants": 45,
+     "reached": 41,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "trafilatura title": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k title": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome h1 inner_text": {
+     "variants": 44,
+     "reached": 32,
+     "errors": 1,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "headline: span hidden by JavaScript",
+   "where": "headline",
+   "readers": {
+    "BeautifulSoup h1": {
+     "variants": 45,
+     "reached": 41,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "lxml h1 (Scrapy)": {
+     "variants": 45,
+     "reached": 41,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "trafilatura title": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k title": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome h1 inner_text": {
+     "variants": 44,
+     "reached": 0,
+     "errors": 1,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "headline: bidi-reversed span",
+   "where": "headline",
+   "readers": {
+    "BeautifulSoup h1": {
+     "variants": 45,
+     "reached": 41,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "lxml h1 (Scrapy)": {
+     "variants": 45,
+     "reached": 41,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "trafilatura title": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k title": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome h1 inner_text": {
+     "variants": 44,
+     "reached": 32,
+     "errors": 1,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: class hidden by external CSS (opacity:0)",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 45,
+     "reached": 44,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 45,
+     "reached": 36,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 45,
+     "reached": 31,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: screen-reader box from a <style> block",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 45,
+     "reached": 44,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 45,
+     "reached": 36,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 43,
+     "reached": 29,
+     "errors": 2,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: off-screen paragraph",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 45,
+     "reached": 44,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 45,
+     "reached": 35,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 45,
+     "reached": 31,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: white text",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 45,
+     "reached": 44,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 45,
+     "reached": 35,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 44,
+     "reached": 30,
+     "errors": 1,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 1,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: paragraph covered by a white box",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 45,
+     "reached": 44,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 45,
+     "reached": 29,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 43,
+     "reached": 30,
+     "errors": 2,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: paragraph removed by JavaScript (by id)",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 45,
+     "reached": 44,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 45,
+     "reached": 35,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 44,
+     "reached": 0,
+     "errors": 1,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 0,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  },
+  {
+   "name": "body: paragraph removed by JavaScript (no name)",
+   "where": "body",
+   "readers": {
+    "trafilatura body": {
+     "variants": 45,
+     "reached": 44,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "newspaper4k body": {
+     "variants": 45,
+     "reached": 35,
+     "errors": 0,
+     "ambiguous": 0
+    },
+    "Chrome body inner_text": {
+     "variants": 45,
+     "reached": 0,
+     "errors": 0,
+     "ambiguous": 0
+    }
+   },
+   "antidote": {
+    "variants": 45,
+    "got_through": 35,
+    "reached_flagged": 0,
+    "browser_errors": 0
+   }
+  }
+ ]
+}

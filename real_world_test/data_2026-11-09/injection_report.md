@@ -14,15 +14,15 @@
 | headline: class hidden by external CSS (font-size:0) | 189 | 0 | 0 | 0 | 0 |
 | headline: span hidden by JavaScript | 187 | 0 | 0 | 2 | 0 |
 | headline: bidi-reversed span | 187 | 0 | 2 | 0 | 0 |
-| body: class hidden by external CSS (opacity:0) | 172 | 2 | 0 | 4 | 0 |
-| body: screen-reader box from a <style> block | 172 | 2 | 0 | 4 | 0 |
-| body: off-screen paragraph | 172 | 2 | 0 | 4 | 0 |
-| body: white text | 117 | 2 | 0 | 54 | 5 |
-| body: paragraph covered by a white box | 174 | 2 | 0 | 2 | 0 |
-| body: paragraph removed by JavaScript (by id) | 0 | 1 | 0 | 177 | 0 |
-| body: paragraph removed by JavaScript (no name) | 0 | 1 | 0 | 62 | 115 |
+| body: class hidden by external CSS (opacity:0) | 172 | 5 | 0 | 0 | 0 |
+| body: screen-reader box from a <style> block | 172 | 5 | 0 | 0 | 0 |
+| body: off-screen paragraph | 172 | 5 | 0 | 0 | 0 |
+| body: white text | 121 | 5 | 0 | 46 | 5 |
+| body: paragraph covered by a white box | 174 | 3 | 0 | 0 | 0 |
+| body: paragraph removed by JavaScript (by id) | 0 | 1 | 0 | 176 | 0 |
+| body: paragraph removed by JavaScript (no name) | 0 | 1 | 0 | 61 | 115 |
 
-Static reading of all variants: 961 s.
+Static reading of all variants: 1603 s.
 
 ## After the browser check (variants the static reading sent to the browser)
 
@@ -30,15 +30,15 @@ Static reading of all variants: 961 s.
 |---|---|
 | headline: display:none span | removed, verdict quarantine: 34 |
 | headline: class hidden by external CSS (font-size:0) | leaked, verdict pass: 1, removed, verdict quarantine: 34 |
-| headline: span hidden by JavaScript | removed, verdict quarantine: 187, removed, verdict review: 2 |
+| headline: span hidden by JavaScript | removed, verdict quarantine: 184, removed, verdict review: 5 |
 | headline: bidi-reversed span | removed, verdict quarantine: 187 |
-| body: class hidden by external CSS (opacity:0) | leaked, verdict review: 4, removed, verdict pass: 27, removed, verdict review: 2 |
-| body: screen-reader box from a <style> block | leaked, verdict review: 4, removed, verdict pass: 29 |
-| body: off-screen paragraph | leaked, verdict review: 4, removed, verdict pass: 29 |
-| body: white text | leaked, verdict review: 12, removed, verdict pass: 65, removed, verdict quarantine: 1 |
-| body: paragraph covered by a white box | leaked, verdict review: 2, removed, verdict pass: 29 |
-| body: paragraph removed by JavaScript (by id) | leaked, verdict review: 11, removed, verdict pass: 162, removed, verdict quarantine: 1, removed, verdict review: 3 |
-| body: paragraph removed by JavaScript (no name) | leaked, verdict review: 2, removed, verdict pass: 57, removed, verdict review: 3 |
+| body: class hidden by external CSS (opacity:0) | removed, verdict pass: 29 |
+| body: screen-reader box from a <style> block | removed, verdict pass: 29 |
+| body: off-screen paragraph | removed, verdict pass: 29 |
+| body: white text | leaked, verdict review: 2, removed, verdict pass: 61, removed, verdict quarantine: 1, removed, verdict review: 6 |
+| body: paragraph covered by a white box | removed, verdict pass: 29 |
+| body: paragraph removed by JavaScript (by id) | leaked, verdict review: 5, removed, verdict pass: 157, removed, verdict quarantine: 3, removed, verdict review: 11 |
+| body: paragraph removed by JavaScript (no name) | removed, verdict pass: 57, removed, verdict review: 4 |
 
 Leaked payloads that still pass after the browser check:
 
