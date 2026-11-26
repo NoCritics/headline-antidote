@@ -28,6 +28,7 @@ Requires trafilatura (pip install trafilatura).
 
 import copy
 import difflib
+import itertools
 import json
 import re
 import unicodedata
@@ -41,6 +42,11 @@ from .text_guard import (
 )
 
 HEADLINE_MATCH_THRESHOLD = 0.6
+# Limits on matching headings to titles, far above the 284 saved news pages (at most 4 title
+# variants, 20 <h1> and <h2>, and a 146-character <h1>), so a hostile page cannot make it slow.
+MAXIMUM_TITLE_VARIANTS = 8
+MAXIMUM_HEADINGS_COMPARED = 100
+MAXIMUM_HEADING_CHARACTERS = 1000
 SITE_NAME_SEPARATORS = (" | ", " - ", " – ", " — ", " :: ", " · ")
 DUPLICATE_HEADLINE_THRESHOLD = 0.9
 # Hidden text is a harmless repeat when at most this share of its word trigrams is new.
@@ -173,15 +179,15 @@ def _without_site_name(title):
     return title[:best_position]
 
 
-def _title_similarity(candidate, reference):
-    candidate_text = _normalized_title(candidate)
-    reference_text = _normalized_title(reference)
-    if not candidate_text or not reference_text:
-        return 0.0
+def _title_similarity(candidate_text, reference_variants):
+    """The best similarity of a normalized heading to a title's variants, or 0.0 when none reaches
+    HEADLINE_MATCH_THRESHOLD. difflib's cheap upper bounds skip a variant that cannot reach it."""
     best_ratio = 0.0
-    for variant in _title_variants(reference_text):
-        ratio = difflib.SequenceMatcher(a=candidate_text, b=variant, autojunk=False).ratio()
-        best_ratio = max(best_ratio, ratio)
+    for variant in reference_variants:
+        matcher = difflib.SequenceMatcher(a=candidate_text, b=variant, autojunk=False)
+        if matcher.real_quick_ratio() < HEADLINE_MATCH_THRESHOLD or matcher.quick_ratio() < HEADLINE_MATCH_THRESHOLD:
+            continue
+        best_ratio = max(best_ratio, matcher.ratio())
     return best_ratio
 
 
@@ -288,10 +294,10 @@ def _remove_keeping_tail(node):
 
 
 def _title_variants(title):
-    """The title, then the title without each trailing ' | Site name' segment."""
+    """The title, then the title without each trailing ' | Site name' segment, up to MAXIMUM_TITLE_VARIANTS."""
     variants = [title]
     shortened = _without_site_name(title)
-    while shortened != variants[-1]:
+    while shortened != variants[-1] and len(variants) < MAXIMUM_TITLE_VARIANTS:
         variants.append(shortened)
         shortened = _without_site_name(shortened)
     return variants
@@ -459,14 +465,24 @@ class _ArticleExtraction:
 
     def _locate_headline(self, metadata_titles):
         references = self._titles_to_compare(metadata_titles)
+        reference_variants = []
+        for reference_label, reference_text in references:
+            normalized_reference = _normalized_title(reference_text)
+            if normalized_reference:
+                reference_variants.append((reference_label, _title_variants(normalized_reference)))
         for heading_tag in ("h1", "h2"):
             best = None
-            for heading in self.root.iter(heading_tag):
+            similarities = {}  # by heading text: pages can repeat one heading thousands of times
+            for heading in itertools.islice(self.root.iter(heading_tag), MAXIMUM_HEADINGS_COMPARED):
                 visible_text, hidden_fragments = visible_text_of_element(heading, self.rules)
-                if not visible_text:
+                if not visible_text or len(visible_text) > MAXIMUM_HEADING_CHARACTERS:
                     continue
-                for reference_label, reference_text in references:
-                    similarity = _title_similarity(visible_text, reference_text)
+                candidate_text = _normalized_title(visible_text)
+                if candidate_text not in similarities:
+                    similarities[candidate_text] = [
+                        (label, _title_similarity(candidate_text, variants)) for label, variants in reference_variants
+                    ]
+                for reference_label, similarity in similarities[candidate_text]:
                     if similarity >= HEADLINE_MATCH_THRESHOLD and (best is None or similarity > best[0]):
                         best = (similarity, visible_text, hidden_fragments, reference_label, heading)
             if best is not None:
@@ -973,13 +989,20 @@ class _ArticleExtraction:
 def _without_repeated_headline(body, headline_text):
     """The body without its first line when that line repeats the headline."""
     body_lines = body.split("\n")
-    if body_lines and headline_text:
-        first_line_similarity = difflib.SequenceMatcher(
-            a=_normalized_title(body_lines[0]), b=_normalized_title(headline_text), autojunk=False
-        ).ratio()
-        if first_line_similarity >= DUPLICATE_HEADLINE_THRESHOLD:
-            body_lines = body_lines[1:]
+    if headline_text and _repeats_headline(_normalized_title(body_lines[0]), _normalized_title(headline_text)):
+        body_lines = body_lines[1:]
     return "\n".join(body_lines).strip()
+
+
+def _repeats_headline(line, headline):
+    """Whether a normalized line is the normalized headline, nearly. Texts past
+    MAXIMUM_HEADING_CHARACTERS must match exactly: comparing them letter by letter takes minutes."""
+    if line == headline:
+        return True
+    if max(len(line), len(headline)) > MAXIMUM_HEADING_CHARACTERS:
+        return False
+    matcher = difflib.SequenceMatcher(a=line, b=headline, autojunk=False)
+    return matcher.real_quick_ratio() >= DUPLICATE_HEADLINE_THRESHOLD and matcher.ratio() >= DUPLICATE_HEADLINE_THRESHOLD
 
 
 def extract_article(guard, html, feed_title=None, stylesheets=None, feed_body=None):

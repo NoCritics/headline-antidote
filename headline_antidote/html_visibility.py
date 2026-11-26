@@ -310,6 +310,20 @@ def _covering_pseudo_element(element, rules):
     return None
 
 
+def _cached_covering_child(element, rules):
+    """_covering_child, kept on the page's rules: reading any element's text looks at the children
+    of each of its ancestors, so 5,000 sibling headings each scanned all 5,000. Keyed by the child
+    count as well, since extraction removes elements from the page."""
+    cache = getattr(rules, "_covering_child_cache", None)
+    if cache is None:
+        cache = {}
+        rules._covering_child_cache = cache
+    key = (element, len(element))
+    if key not in cache:
+        cache[key] = _covering_child(element, rules)
+    return cache[key]
+
+
 def _covering_child(element, rules):
     """The child element that is an opaque overlay over element's content, or None."""
     for child in element:
@@ -822,7 +836,7 @@ def _hiding_under_undecided_rules(element, tag, rules):
 def _overlay_over_content(element, rules, skip_child=None):
     """A child drawn as an opaque overlay over element's content (in either rule world), or None."""
     for world_rules in _rule_worlds(rules, element):
-        overlay = _covering_child(element, world_rules)
+        overlay = _cached_covering_child(element, world_rules)
         if overlay is not None and overlay is not skip_child and _has_positioned_container(element, world_rules):
             return overlay
     return None
