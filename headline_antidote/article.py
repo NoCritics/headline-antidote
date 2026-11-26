@@ -294,10 +294,13 @@ def _remove_keeping_tail(node):
 
 
 def _title_variants(title):
-    """The title, then the title without each trailing ' | Site name' segment, up to MAXIMUM_TITLE_VARIANTS."""
+    """The title, then the title without each trailing ' | Site name' segment. Raises PageTooComplex
+    past MAXIMUM_TITLE_VARIANTS: the headline may be the part left uncompared."""
     variants = [title]
     shortened = _without_site_name(title)
-    while shortened != variants[-1] and len(variants) < MAXIMUM_TITLE_VARIANTS:
+    while shortened != variants[-1]:
+        if len(variants) == MAXIMUM_TITLE_VARIANTS:
+            raise PageTooComplex(f"a title has more than {MAXIMUM_TITLE_VARIANTS} parts, more than this reader compares")
         variants.append(shortened)
         shortened = _without_site_name(shortened)
     return variants
@@ -494,13 +497,13 @@ class _ArticleExtraction:
                 for reference_label, similarity in similarities[candidate_text]:
                     if similarity >= HEADLINE_MATCH_THRESHOLD and (best is None or similarity > best[0]):
                         best = (similarity, visible_text, hidden_fragments, reference_label, heading)
+            if left_out is not None and reference_variants:
+                # The headline may be the heading left out, so neither a match nor a title will do.
+                raise PageTooComplex(f"it has {left_out}, more than this reader compares with the titles")
             if best is not None:
                 similarity, visible_text, hidden_fragments, reference_label, heading_element = best
                 self._flag_hidden_in_headline(hidden_fragments)
                 return visible_text, f"<{heading_tag}> matching the {reference_label}", heading_element
-        if left_out is not None and reference_variants:
-            # The headline may be the heading left out: falling back to a title would pass it unread.
-            raise PageTooComplex(f"it has {left_out}, and no heading compared matches a title")
 
         if not references:
             for heading in self.root.iter("h1"):
