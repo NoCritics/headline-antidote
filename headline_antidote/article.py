@@ -1009,9 +1009,8 @@ def extract_article(guard, html, feed_title=None, stylesheets=None, feed_body=No
     """feed_body: the article's full text from the feed (RSS content:encoded), when there is one;
     otherwise the page's JSON-LD articleBody is used for the body comparison."""
     try:
-        extraction = _ArticleExtraction(guard, html, feed_title, stylesheets, feed_body)
-    except PageTooComplex as error:
+        return _ArticleExtraction(guard, html, feed_title, stylesheets, feed_body).run()
+    except PageTooComplex as error:  # also raised while reading, when selectors take too long to match
         flag = Flag("page_too_complex_to_read", MEDIUM, None, None, "", {"message": str(error)}, "page")
         return ArticleResult("", "none: the page was not read", "", [flag], [], {},
                              ["page too complex to read statically"])
-    return extraction.run()

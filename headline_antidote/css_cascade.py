@@ -48,6 +48,7 @@ from .css_hiding import (
     scale_is_zero, translation_is_off_screen, z_index_is_negative,
 )
 from .css_validity import INVALID, QUIRKS_ONLY, UNKNOWN, VALID, custom_property_validity, declaration_validity
+from .html_tree import PageTooComplex
 from .css_values import length_in_pixels, parse_color, quoted_strings, with_math_evaluated
 from .media_queries import media_query_applies
 
@@ -1320,14 +1321,46 @@ class _SharedElementWrapper(cssselect2.ElementWrapper):
     ones on every iteration, so each sibling, :has() or :nth-last-child() test re-wrapped the
     siblings and recomputed their names and classes (203,196 wrappers for 1,468 elements on one
     Euronews page). The shared children point back at their parent: CascadeRules breaks those
-    cycles when it is freed."""
+    cycles when it is freed.
+
+    Every walk over ancestors, earlier siblings or children is charged to the page's budget of
+    MAXIMUM_MATCH_STEPS (match_steps, shared by the page's wrappers). cssselect2 retries every
+    combination of ancestors for a descendant chain that fails, so a short selector Chrome accepts
+    could otherwise run for hours; past the budget the page raises PageTooComplex."""
+
+    match_steps = None
 
     def iter_children(self):
         children = self.__dict__.get("shared_children")
         if children is None:
             children = list(super().iter_children())
+            for child in children:
+                child.match_steps = self.match_steps
             self.shared_children = children
+        self._charge(len(children))
         return iter(children)
+
+    @property
+    def ancestors(self):
+        ancestors = cssselect2.ElementWrapper.ancestors.fget(self)
+        self._charge(len(ancestors))
+        return ancestors
+
+    @property
+    def previous_siblings(self):
+        siblings = cssselect2.ElementWrapper.previous_siblings.fget(self)
+        self._charge(len(siblings))
+        return siblings
+
+    def _charge(self, steps):
+        self.match_steps[0] -= steps
+        if self.match_steps[0] < 0:
+            raise PageTooComplex(f"its CSS selectors take more than {MAXIMUM_MATCH_STEPS:,} steps to match")
+
+
+# The 284 saved news pages, read with their sites' stylesheets, take 55,056 steps (median) and
+# 3,538,381 at most. cssselect2 runs about 2.5 million steps a second.
+MAXIMUM_MATCH_STEPS = 10_000_000
 
 
 # Cascade entries: (important, inline, layer rank, specificity, order, name, value, undecided),
@@ -1454,7 +1487,9 @@ class CascadeRules:
             for family in rule_set.data_font_families:
                 self.data_uri_font_families.add(family)
         self._all_wrappers = {}
-        for element_wrapper in _SharedElementWrapper.from_html_root(root).iter_subtree():
+        root_wrapper = _SharedElementWrapper.from_html_root(root)
+        root_wrapper.match_steps = [MAXIMUM_MATCH_STEPS]
+        for element_wrapper in root_wrapper.iter_subtree():
             self._all_wrappers[element_wrapper.etree_element] = element_wrapper
         # Step 1 (does any rule that could hide text, or a ::before/::after worth reading, touch
         # the element?) is decided when an element is first asked about: about half of a page's
