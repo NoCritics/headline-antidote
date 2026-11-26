@@ -105,6 +105,38 @@ class NestedHasTests(unittest.TestCase):
         self.assertNotIn("losses", GUARD.analyze_html(kept, "//h1").clean_text)
 
 
+@unittest.skipUnless(CASCADE_AVAILABLE, "tinycss2 and cssselect2 not installed")
+class SelectorMatchingWorkTests(unittest.TestCase):
+    """A selector Chrome accepts can still take cssselect2 exponential time: a descendant chain
+    that fails retries every combination of ancestors. Past a budget of matching steps, the page
+    is left to the browser check."""
+
+    def test_a_long_failing_descendant_chain_is_left_to_the_browser(self):
+        import time
+
+        chain = "x " + "div " * 10 + "span"
+        for selector in (chain, f"body:has({chain})", f":is({chain})"):
+            with self.subTest(selector=selector):
+                html = (f"<style>{selector} {{ display: none }}</style>" + "<div>" * 40
+                        + "<h1>Tesla shares surge<span> losses</span></h1>" + "</div>" * 40)
+                started = time.perf_counter()
+                article = GUARD.extract_article(html)
+                self.assertLess(time.perf_counter() - started, 10)
+                self.assertIn("page_too_complex_to_read", [flag.kind for flag in article.flags])
+                self.assertTrue(article.needs_browser_check)
+                started = time.perf_counter()
+                result = GUARD.analyze_html(html, "//h1")
+                self.assertLess(time.perf_counter() - started, 10)
+                self.assertIn("page_too_complex_to_read", [flag.kind for flag in result.flags])
+
+    def test_a_short_chain_on_the_same_page_is_still_read(self):
+        html = ("<style>div div span { display: none }</style>" + "<div>" * 40
+                + "<h1>Tesla shares surge<span> losses</span></h1>" + "</div>" * 40)
+        article = GUARD.extract_article(html)
+        self.assertNotIn("page_too_complex_to_read", [flag.kind for flag in article.flags])
+        self.assertNotIn("losses", article.headline)
+
+
 class HeadlineMatchingTimeTests(unittest.TestCase):
     """Matching headings against titles stays fast whatever the page repeats. Real pages: at most
     4 title variants, 20 <h1> and <h2>, and a 146-character <h1> (284 saved news pages)."""
