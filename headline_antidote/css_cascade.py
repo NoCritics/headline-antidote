@@ -739,31 +739,58 @@ def _relative_selector_texts(prelude, stand_in, scope):
 def _compiled_selector_list(selector_input):
     """cssselect2.compile_selector_list, with Chrome's rule that :has() may not hold a :has(): such a
     selector is invalid, and only dropped from a forgiving :is() or :where() (measured in Chrome 158).
-    cssselect2 allows it, and nesting one in another makes matching exponential in the depth."""
-    selectors = list(cssselect2.parser.parse(selector_input))
+    cssselect2 allows it, and nesting one in another makes matching exponential in the depth. The
+    selector is filtered as tokens, so cssselect2 computes specificity from what is left, and reads
+    the selectors in :nth-child(An+B of S) filtered too."""
+    if isinstance(selector_input, str):
+        selector_input = tinycss2.parse_component_value_list(selector_input)
+    tokens = _without_nested_has(list(selector_input), False)
+    if tokens is None:
+        raise cssselect2.SelectorError(None, ":has() inside :has()")
+    return cssselect2.compile_selector_list(tokens)
+
+
+def _without_nested_has(tokens, inside_has):
+    """The selector tokens with each :is() and :where() keeping only the selectors valid under the
+    nested :has() rule, or None when the rule makes them invalid. Recursion is bounded by
+    MAXIMUM_SELECTOR_DEPTH, checked before a selector is compiled."""
+    kept = []
+    for index, token in enumerate(tokens):
+        if token.type != "function":
+            kept.append(token)
+            continue
+        is_pseudo_class = index > 0 and tokens[index - 1] == ":" and not (index > 1 and tokens[index - 2] == ":")
+        if is_pseudo_class and token.lower_name == "has":
+            if inside_has:
+                return None
+            arguments = _without_nested_has(token.arguments, True)
+        elif is_pseudo_class and token.lower_name in ("is", "where"):
+            arguments = _forgiving_selectors(token.arguments, inside_has)
+        else:
+            arguments = _without_nested_has(token.arguments, inside_has)
+        if arguments is None:
+            return None
+        kept.append(tinycss2.ast.FunctionBlock(token.source_line, token.source_column, token.name, arguments))
+    return kept
+
+
+def _forgiving_selectors(tokens, inside_has):
+    """The comma-separated selectors of a forgiving list, without those the nested :has() rule makes invalid."""
+    selectors = [[]]
+    for token in tokens:
+        if token == ",":
+            selectors.append([])
+        else:
+            selectors[-1].append(token)
+    kept = []
     for selector in selectors:
-        if not _without_nested_has(selector.parsed_tree, False):
-            raise cssselect2.SelectorError(None, ":has() inside :has()")
-    return [cssselect2.compiler.CompiledSelector(selector) for selector in selectors]
-
-
-def _without_nested_has(node, inside_has):
-    """Whether a parsed selector is valid under the nested :has() rule. Drops the invalid selectors
-    from the forgiving :is() and :where() lists within it."""
-    if isinstance(node, cssselect2.parser.CombinedSelector):
-        return _without_nested_has(node.left, inside_has) and _without_nested_has(node.right, inside_has)
-    if isinstance(node, cssselect2.parser.CompoundSelector):
-        return all(_without_nested_has(simple, inside_has) for simple in node.simple_selectors)
-    if isinstance(node, cssselect2.parser.RelationalSelector):
-        if inside_has:
-            return False
-        return all(_without_nested_has(item.selector.parsed_tree, True) for item in node.selector_list)
-    if isinstance(node, cssselect2.parser.NegationSelector):
-        return all(_without_nested_has(item.parsed_tree, inside_has) for item in node.selector_list)
-    if isinstance(node, (cssselect2.parser.MatchesAnySelector, cssselect2.parser.SpecificityAdjustmentSelector)):
-        node.selector_list = [item for item in node.selector_list
-                              if _without_nested_has(item.parsed_tree, inside_has)]
-    return True
+        filtered = _without_nested_has(selector, inside_has)
+        if filtered is None:
+            continue
+        if kept:
+            kept.append(tinycss2.ast.LiteralToken(None, None, ","))
+        kept.extend(filtered)
+    return kept
 
 
 def _rule_selectors(prelude, context):
