@@ -24,6 +24,17 @@ class HugeColorNumberTests(unittest.TestCase):
                 GUARD.analyze_html(white_page_headline(style), "//h1")
                 GUARD.extract_article(white_page_headline(style))
 
+    def test_a_huge_hue_is_hue_zero(self):
+        # Measured in Chrome 158: each of these computes to the colour with hue 0.
+        from headline_antidote.css_values import parse_color
+
+        for function, rest in (("oklch", "0.7 0.2"), ("hsl", "100% 50%"), ("hwb", "10% 10%")):
+            hue_zero = parse_color(f"{function}(0 {rest})" if function != "oklch" else f"oklch({rest} 0)")
+            for hue in ("1e400", "1e200", "-1e400"):
+                value = f"{function}({hue} {rest})" if function != "oklch" else f"oklch({rest} {hue})"
+                with self.subTest(value=value):
+                    self.assertEqual(parse_color(value), hue_zero)
+
     def test_oklab_lightness_past_100_percent_is_white(self):
         # CSS Color 4 clamps oklab()/oklch() lightness to 0-100% when the value is parsed.
         for style in ("color:oklab(1e200 0 0)", "color:oklch(1e200 0 0)", "color:oklch(1 0 1e400)"):
@@ -41,6 +52,42 @@ class TooLongNumberInStylesheetTests(unittest.TestCase):
         article = GUARD.extract_article(white_page_headline("color:red"), stylesheets=stylesheets)
         self.assertIn("page_too_complex_to_read", [flag.kind for flag in article.flags])
         self.assertTrue(article.needs_browser_check)
+
+
+def nested_divs_page(css, depth):
+    return (f"<html><head><style>{css}</style></head><body><article>" + "<div>" * depth
+            + "<h1>Tesla shares surge<span> losses and layoffs</span></h1>" + "</div>" * depth
+            + "</article></body></html>")
+
+
+@unittest.skipUnless(CASCADE_AVAILABLE, "tinycss2 and cssselect2 not installed")
+class NestedHasTests(unittest.TestCase):
+    """Chrome drops a :has() inside :has() (measured in Chrome 158): the whole rule, or, inside a
+    forgiving :is() or :where(), only that selector."""
+
+    def test_deeply_nested_has_is_read_quickly(self):
+        import time
+
+        depth = 25
+        selector = "div:" + "has(div:" * (depth - 1) + "has(span)" + ")" * (depth - 1)
+        started = time.perf_counter()
+        GUARD.extract_article(nested_divs_page(selector + " { display: none }", depth))
+        self.assertLess(time.perf_counter() - started, 2)
+
+    def test_a_rule_with_has_inside_has_is_dropped(self):
+        for selector in ("h1:has(span:has(b)) span", "h1:has(span:not(:has(i))) span",
+                         "h1:has(span), h1:has(span:has(b)) span"):
+            with self.subTest(selector=selector):
+                html = (f"<style>{selector} {{ display: none }}</style><article><h1>Tesla shares surge"
+                        f"<span> losses <b>and</b> layoffs</span></h1></article>")
+                self.assertIn("losses", GUARD.analyze_html(html, "//h1").clean_text)
+
+    def test_inside_is_only_the_selector_with_has_is_dropped(self):
+        html = ('<style>h1:has(span:is(.x, :has(b))) span.x { display: none }</style><article><h1>'
+                'Tesla shares surge<span class="x"> losses <b>and</b> layoffs</span></h1></article>')
+        result = GUARD.analyze_html(html, "//h1")
+        self.assertNotIn("losses", result.clean_text)
+        self.assertEqual(result.verdict, "quarantine")
 
 
 if __name__ == "__main__":
