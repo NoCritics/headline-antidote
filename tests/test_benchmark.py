@@ -146,6 +146,23 @@ class RealPageScoringTests(unittest.TestCase):
             merged_results([part(0, 60)], total_pages=120)
 
 
+class SavedSliceTests(unittest.TestCase):
+    def test_overlapping_slice_is_refused_and_saved_slices_kept(self):
+        import os
+        import tempfile
+
+        from real_world_test.evaluate_injections import check_slice_is_free
+
+        with tempfile.TemporaryDirectory() as parts_directory:
+            for name in ("part_0000_0020.json", "part_0020_0040.json"):
+                open(os.path.join(parts_directory, name), "w").close()
+            with self.assertRaises(ValueError):
+                check_slice_is_free(parts_directory, 0, 3)
+            check_slice_is_free(parts_directory, 0, 20)
+            check_slice_is_free(parts_directory, 40, 60)
+            self.assertEqual(sorted(os.listdir(parts_directory)), ["part_0000_0020.json", "part_0020_0040.json"])
+
+
 class CleanRunTests(unittest.TestCase):
     def test_verdict_counts_fill_zeros(self):
         from benchmark.run_clean import verdict_counts
