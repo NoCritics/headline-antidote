@@ -20,6 +20,8 @@ RESULTS = os.path.join(FOLDER, "results")
 CHARTS = os.path.join(FOLDER, "charts")
 ANTIDOTE = "headline-antidote"
 DATA_SETS = ["data", "data_2026-11-09"]
+PLAIN_ATTACK_NAMES = {"body: paragraph removed by JavaScript (no name)":
+                      "a script that removes a paragraph without naming it"}
 
 SURFACE = "#fcfcfb"
 INK = "#0b0b0b"
@@ -61,11 +63,19 @@ def label_bar(axes, value, position, text, limit):
     axes.text(value + limit * 0.01, position, text, va="center", ha="left", fontsize=8, color=INK_SECONDARY)
 
 
-def finish(figure, title, subtitle, file_name, top=0.86):
+def finish(figure, title, subtitle, file_name, footnote=""):
+    """Title and subtitle above the plot, an optional footnote below it, then the PNG."""
+    height = figure.get_figheight()
     figure.text(0.02, 0.975, title, ha="left", va="top", fontsize=13, fontweight="bold", color=INK)
-    figure.text(0.02, 0.975 - 0.32 / figure.get_figheight(), subtitle, ha="left", va="top", fontsize=8.5,
+    figure.text(0.02, 0.975 - 0.32 / height, subtitle, ha="left", va="top", fontsize=8.5,
                 color=INK_SECONDARY, linespacing=1.4)
-    figure.tight_layout(rect=(0, 0, 1, top))
+    bottom = 0
+    if footnote:
+        figure.text(0.02, 0.12 / height, footnote, ha="left", va="bottom", fontsize=8, color=INK_SECONDARY,
+                    linespacing=1.4)
+        bottom = (0.2 + 0.17 * (footnote.count("\n") + 1)) / height
+    top = 1 - (0.6 + 0.17 * (subtitle.count("\n") + 1)) / height
+    figure.tight_layout(rect=(0, bottom, 1, top))
     os.makedirs(CHARTS, exist_ok=True)
     figure.savefig(os.path.join(CHARTS, file_name), facecolor=SURFACE)
     plt.close(figure)
@@ -91,14 +101,15 @@ def example_pages_chart():
     antidote = summary[ANTIDOTE]["got_through"]
     axes.barh(positions[-1], antidote, height=bar_height, color=WITH_ANTIDOTE)
     label_bar(axes, antidote, positions[-1], str(antidote), total)
-    axes.set_yticks(positions, readers + ["headline-antidote alone\n(extract_article)"])
+    axes.set_yticks(positions, readers + ["headline-antidote (extract_article)"])
     axes.set_xlim(0, total)
     axes.set_xticks(range(0, total + 1, 5))
     legend = [Patch(color=ALONE), Patch(color=WITH_ANTIDOTE)]
-    axes.legend(legend, ["Scraper alone", "With headline-antidote"], loc="lower right", frameon=False, fontsize=8.5)
-    finish(figure, f"Attacks that get through to the model, of {total}",
-           f"{total} poisoned example pages, read by common scrapers alone and with headline-antidote beside them.\n"
-           "Got through: the attack reached the model's text with no warning.", "example_pages.png")
+    axes.legend(legend, ["Scraper alone", "Scraper + headline-antidote"], loc="lower right", frameon=False,
+                fontsize=8.5)
+    finish(figure, f"Attacks that reach the model: {total} example pages",
+           "headline-antidote was built against these pages.\n"
+           "An attack gets through when the model gets the hidden text with no warning.", "example_pages.png")
 
 
 def share_text(through, variants):
@@ -141,25 +152,19 @@ def real_pages_chart():
     figure, (headline_axes, body_axes) = plt.subplots(
         2, 1, figsize=(7.6, rows * 0.36 + 2.2), dpi=DPI,
         gridspec_kw={"height_ratios": [len(groups["headline"]) + 1, len(groups["body"]) + 1]})
-    left_out = []
-    for axes, where, heading in ((headline_axes, "headline", "Headline attacks, spliced into the <h1> only"),
-                                  (body_axes, "body", "Body attacks, spliced after the first paragraph")):
+    for axes, where, heading in ((headline_axes, "headline", "Headline attacks, in the <h1>"),
+                                  (body_axes, "body", "Body attacks, after the first paragraph")):
         style_axes(axes)
         readers = groups[where]
         names = list(readers) + [ANTIDOTE]
         positions = list(range(len(names)))[::-1]
         for name, position in zip(names, positions):
             if name == ANTIDOTE:
-                variants, through, errors = antidote[where]
+                variants, through, _ = antidote[where]
                 color = WITH_ANTIDOTE
-                if errors:
-                    left_out.append(f"{errors} failed browser checks")
             else:
-                variants, through, errors, ambiguous = readers[name]
+                variants, through, _, _ = readers[name]
                 color = ALONE
-                parts = [f"{count} {label}" for count, label in ((errors, "failed"), (ambiguous, "ambiguous")) if count]
-                if parts:
-                    left_out.append(f"{name}: {', '.join(parts)}")
             share = 100 * through / variants if variants else 0
             axes.barh(position, share, height=0.6, color=color)
             label_bar(axes, share, position, share_text(through, variants), 100)
@@ -167,24 +172,24 @@ def real_pages_chart():
         axes.set_xlim(0, 100)
         axes.set_xticks(range(0, 101, 25), [f"{tick}%" for tick in range(0, 101, 25)])
         axes.set_title(heading, loc="left", fontsize=10, fontweight="bold", color=INK, pad=6)
-    subtitle = (f"{len(sites)} news sites: headline attacks spliced into {used_pages} real pages, body attacks into "
-                f"the {body_pages} with a body found.\n"
-                "Blue: the scraper alone. Orange: headline-antidote, with the browser check on pages it flags.")
+    headline_axes.legend([Patch(color=ALONE), Patch(color=WITH_ANTIDOTE)], ["Scraper alone", ANTIDOTE],
+                         loc="lower right", frameon=False, fontsize=8.5)
+    subtitle = (f"{antidote['headline'][0] // used_pages} headline attacks on each of {used_pages} pages from "
+                f"{len(sites)} news sites, and {antidote['body'][0] // body_pages} body attacks on {body_pages} of them.")
+    footnotes = ["trafilatura and newspaper4k don't take the title from the <h1>, where these attacks are."]
     worst_attack, worst_count = max(antidote_by_attack.items(), key=lambda item: item[1])
     body_misses = antidote["body"][1]
     if body_misses and worst_count * 2 >= body_misses:
-        subtitle += (f"\n{worst_count} of headline-antidote's {body_misses} body misses are one attack: "
-                     f"{worst_attack.split(': ', 1)[1]}.")
+        plain_name = PLAIN_ATTACK_NAMES.get(worst_attack, worst_attack.split(": ", 1)[-1])
+        footnotes.append(f"{worst_count} of headline-antidote's {body_misses} body misses are one attack: {plain_name}.")
     rebuilding = load("rebuilding.json")
     rebuilt_unsure = sum(count for name, count in rebuilding["body_variants_sent_leaking"].items()
                          if "removed by JavaScript" not in name)
-    subtitle += (f"\nChrome's bars are a floor: {len(rebuilding['rebuilding_pages'])} of {rebuilding['pages_read']} "
-                 "pages rebuild their article with scripts and drop the spliced attack.\nThe same rebuild could hide "
-                 f"{rebuilt_unsure} more headline-antidote body misses (at worst {body_misses + rebuilt_unsure}).")
-    if left_out:
-        subtitle += "\nLeft out of the shares: " + "; ".join(left_out) + "."
-    finish(figure, "Attacks that get through to the model, on real pages", subtitle, "real_pages.png",
-           top=0.92 - 0.035 * (subtitle.count("\n") + 1))
+    footnotes.append(f"On {len(rebuilding['rebuilding_pages'])} of {rebuilding['pages_read']} pages, scripts rebuild "
+                     "the article and drop the attack, so Chrome scores better than it should.")
+    footnotes.append(f"The same rebuild could hide up to {rebuilt_unsure} more headline-antidote misses.")
+    finish(figure, "Attacks that reach the model: real news pages", subtitle, "real_pages.png",
+           footnote="\n".join(footnotes))
 
 
 def false_alarms_chart():
@@ -192,10 +197,10 @@ def false_alarms_chart():
     rows = []
     for data_name, label in zip(DATA_SETS, ("Nov 7", "Nov 9")):
         pages = results["pages"][data_name]
-        rows.append((f"Pages saved {label} ({pages['count']:,})", pages["end_to_end"], pages["count"]))
+        rows.append((f"Pages, {label} ({pages['count']:,})", pages["end_to_end"], pages["count"]))
     for data_name, label in zip(DATA_SETS, ("Nov 7", "Nov 9")):
         headlines = results["headlines"][data_name]
-        rows.append((f"Headlines saved {label} ({headlines['count']:,})", headlines["verdicts"], headlines["count"]))
+        rows.append((f"Headlines, {label} ({headlines['count']:,})", headlines["verdicts"], headlines["count"]))
     figure, axes = new_figure(len(rows), row_height=0.5)
     positions = list(range(len(rows)))[::-1]
     for (label, verdicts, count), position in zip(rows, positions):
@@ -208,7 +213,7 @@ def false_alarms_chart():
                 axes.text(start + share / 2, position, f"{verdicts[verdict]:,}", ha="center", va="center",
                           fontsize=8, color="white", fontweight="bold")
             elif verdicts[verdict]:
-                outside.append(f"{verdict} {verdicts[verdict]:,}")
+                outside.append(f"{verdicts[verdict]:,} {verdict}")
             start += share
         if outside:
             axes.text(101, position, ", ".join(outside), ha="left", va="center", fontsize=8, color=INK_SECONDARY)
@@ -218,9 +223,10 @@ def false_alarms_chart():
     legend = [Patch(color=color) for color in VERDICT_COLORS.values()]
     axes.legend(legend, list(VERDICT_COLORS), loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3,
                 frameon=False, fontsize=8.5)
-    finish(figure, "Verdicts on clean news, no attacks",
-           "Saved real pages read end to end (stylesheets, feed title, browser check when asked), and feed headlines.\n"
-           "Anything but pass on these is a false alarm or a real finding.", "false_alarms.png", top=0.76)
+    page_count = sum(results["pages"][data_name]["count"] for data_name in DATA_SETS)
+    headline_count = sum(results["headlines"][data_name]["count"] for data_name in DATA_SETS)
+    finish(figure, "Verdicts on clean news",
+           f"{page_count} saved news pages and {headline_count:,} feed headlines, with no attacks.", "false_alarms.png")
 
 
 CHARTS_BY_NAME = {"example_pages": example_pages_chart, "real_pages": real_pages_chart,

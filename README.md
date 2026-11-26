@@ -10,25 +10,25 @@ Built against the attacks in Rizvani, Apruzzese and Laskov, *Adversarial News an
 ## What it does
 
 - Finds look-alike letters, invisible Unicode characters and bidi tricks, and links watched company names to their tickers. Real Russian, Greek, Arabic, CJK and other text is left alone.
-- Reads HTML and CSS the way Chrome does and removes text a reader can't see: `display:none`, zero size or opacity, off-screen, clipped, covered, the same colour as the background, and more.
+- Reads HTML and CSS the way Chrome does and removes text a reader can't see: `display:none`, zero size or opacity, off-screen, clipped, covered, or the same colour as the background.
 - Picks the real headline (the `<h1>` that matches the page's titles) and the visible article body.
 - Compares the headline with the feed and metadata titles, which page CSS and scripts can't change.
-- For pages a static read can't settle (about 15% of real pages), renders them in headless Chrome.
+- When HTML and CSS aren't enough to decide (about 15% of real pages), renders the page in headless Chrome.
 - Gives each result a verdict (`pass`, `review`, `quarantine`) and flags with evidence, as objects or JSON.
 
-It doesn't fetch pages, and it doesn't make trading decisions.
+It doesn't fetch pages.
 
 ## Results
 
-![Attacks that get through to the model, of 17](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/example_pages.png)
+An attack gets through when the model gets the hidden text and headline-antidote says `pass`.
 
-17 poisoned example pages, the ones headline-antidote was built against, read by common scrapers. Blue: attacks that reach the model's text. Orange: the same, counting only pages headline-antidote passes.
+![Attacks that reach the model: 17 example pages](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/example_pages.png)
 
-![Attacks that get through to the model, on real pages](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/real_pages.png)
+These are the 17 pages headline-antidote was built against. The real pages below are the harder test.
 
-The same kinds of attack spliced into real pages from 43 news sites: 4 headline attacks into each of 234 pages, and 7 body attacks into the 222 where the test found the article body. 150 of headline-antidote's 155 body misses are one attack: a script that removes a paragraph without naming it.
+![Attacks that reach the model: real news pages](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/real_pages.png)
 
-Each attack page, and what every scraper made of it: [the gallery](https://github.com/NoCritics/headline-antidote/blob/master/benchmark/README.md).
+The [gallery](https://github.com/NoCritics/headline-antidote/blob/master/benchmark/README.md) shows each example page and what each scraper got from it.
 
 ## Install
 
@@ -63,11 +63,11 @@ result.clean_text   # "Tesla shares surge"
 result.tickers      # ["TSLA"]
 ```
 
-Give the model only `headline` and `body`, or `clean_text`. A suggested policy:
+Give the model only `headline` and `body`, or `clean_text`. What to do with each verdict:
 
-- `quarantine`: drop it and alert;
-- `review`: lower its weight, or wait for a second source;
 - `pass`: use it.
+- `review`: lower its weight, or wait for a second source.
+- `quarantine`: drop it and alert.
 
 ## JSON report
 
@@ -83,13 +83,13 @@ print(json.dumps(article.to_dict(), indent=2, ensure_ascii=False))
             "evidence": {"cause": "tiny_font", "css": "font-size:0"}, "start": null, "end": null}]}
 ```
 
-That is the report for `<h1>Tesla shares <span style="font-size:0">plunge</span> surge</h1>`. The JSON Schema ships in the package as `report_schema.json`. Every field is described in [docs/report_format.md](docs/report_format.md).
+This is the report for `<h1>Tesla shares <span style="font-size:0">plunge</span> surge</h1>`. The schema ships as `report_schema.json`, and [docs/report_format.md](docs/report_format.md) describes every field.
 
-Report strings come from the page, which an attacker may control. Never pass the report itself to an LLM.
+Don't give the report itself to an LLM. Its strings come from the page, and an attacker may control the page.
 
 ## More
 
-[docs/guide.md](docs/guide.md) covers where to call it in a scraper, external stylesheets, the browser check, every flag, test results and known limits.
+The [guide](docs/guide.md) covers scraper setup, external stylesheets, the browser check, every flag, test results and known limits.
 
 ## Tests
 
@@ -102,4 +102,4 @@ Without the extras, the Chrome and schema tests are skipped.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

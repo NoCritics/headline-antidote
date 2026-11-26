@@ -4,7 +4,7 @@ The 17 attack pages and 5 clean pages behind the first chart of the [README](../
 
 *Gets through*: the attack reaches the model's text with no warning. *Reached, flagged*: it reaches the text, and the verdict is `review` or `quarantine`. *Stopped*: it never reaches the text.
 
-![Attacks that get through to the model](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/example_pages.png)
+![Attacks that reach the model: 17 example pages](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/example_pages.png)
 
 The same attacks spliced into real news pages: [chart](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/real_pages.png). Verdicts on clean news: [chart](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/false_alarms.png).
 
