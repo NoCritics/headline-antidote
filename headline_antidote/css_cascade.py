@@ -736,6 +736,36 @@ def _relative_selector_texts(prelude, stand_in, scope):
     return relative_texts, root_texts
 
 
+def _compiled_selector_list(selector_input):
+    """cssselect2.compile_selector_list, with Chrome's rule that :has() may not hold a :has(): such a
+    selector is invalid, and only dropped from a forgiving :is() or :where() (measured in Chrome 158).
+    cssselect2 allows it, and nesting one in another makes matching exponential in the depth."""
+    selectors = list(cssselect2.parser.parse(selector_input))
+    for selector in selectors:
+        if not _without_nested_has(selector.parsed_tree, False):
+            raise cssselect2.SelectorError(None, ":has() inside :has()")
+    return [cssselect2.compiler.CompiledSelector(selector) for selector in selectors]
+
+
+def _without_nested_has(node, inside_has):
+    """Whether a parsed selector is valid under the nested :has() rule. Drops the invalid selectors
+    from the forgiving :is() and :where() lists within it."""
+    if isinstance(node, cssselect2.parser.CombinedSelector):
+        return _without_nested_has(node.left, inside_has) and _without_nested_has(node.right, inside_has)
+    if isinstance(node, cssselect2.parser.CompoundSelector):
+        return all(_without_nested_has(simple, inside_has) for simple in node.simple_selectors)
+    if isinstance(node, cssselect2.parser.RelationalSelector):
+        if inside_has:
+            return False
+        return all(_without_nested_has(item.selector.parsed_tree, True) for item in node.selector_list)
+    if isinstance(node, cssselect2.parser.NegationSelector):
+        return all(_without_nested_has(item.parsed_tree, inside_has) for item in node.selector_list)
+    if isinstance(node, (cssselect2.parser.MatchesAnySelector, cssselect2.parser.SpecificityAdjustmentSelector)):
+        node.selector_list = [item for item in node.selector_list
+                              if _without_nested_has(item.parsed_tree, inside_has)]
+    return True
+
+
 def _rule_selectors(prelude, context):
     """(compiled selectors, selector text, how deeply it nests, the context the rule is read in) of a
     style rule; the text is None when Chrome would drop the rule. A selector nesting deeper than
@@ -744,7 +774,7 @@ def _rule_selectors(prelude, context):
     if depth > MAXIMUM_SELECTOR_DEPTH:
         # The text is plain * so that rules nested in this one can be written relative to it.
         undecided_context = context._replace(undecided=True, parent_selector=None, scope_root=None, parent_depth=0)
-        return cssselect2.compile_selector_list(_ANY_ELEMENT_OR_GENERATED_BOX), "*", 0, undecided_context
+        return _compiled_selector_list(_ANY_ELEMENT_OR_GENERATED_BOX), "*", 0, undecided_context
     root_texts = []
     if context.parent_selector is not None:
         relative_texts, _ = _relative_selector_texts(prelude, f":is({context.parent_selector})", False)
@@ -755,14 +785,14 @@ def _rule_selectors(prelude, context):
     else:
         selector_text = _serialized(prelude)
     try:
-        selectors = cssselect2.compile_selector_list(
+        selectors = _compiled_selector_list(
             prelude if context.parent_selector is None and context.scope_root is None else selector_text
         )
     except cssselect2.SelectorError:
         return [], None, depth, context
     for root_text in root_texts:
         try:
-            selectors += cssselect2.compile_selector_list(root_text)
+            selectors += _compiled_selector_list(root_text)
         except cssselect2.SelectorError:
             pass  # reason=a scoped selector ending in a pseudo-element has no form matching the root itself
     return selectors, selector_text, depth, context

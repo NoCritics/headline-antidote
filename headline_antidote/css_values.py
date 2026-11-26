@@ -256,8 +256,8 @@ def parse_color(value):
             hue = _component(parts[2], 360.0)
             if chroma is None or hue is None:
                 return None
-            a = chroma * math.cos(math.radians(hue))
-            b = chroma * math.sin(math.radians(hue))
+            a = chroma * math.cos(math.radians(hue % 360))
+            b = chroma * math.sin(math.radians(hue % 360))
         if a is None or b is None:
             return None
         fractions = _oklab_to_rgb(lightness, a, b)
