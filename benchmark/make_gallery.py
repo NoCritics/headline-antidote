@@ -101,7 +101,8 @@ def main():
     lines = ["# Attack gallery", "",
              f"The {results['attack_count']} attack pages and {results['clean_count']} clean pages behind the first "
              "chart of the [README](../README.md): what a reader sees, the attack in the page's HTML, and what each "
-             "scraper and headline-antidote hand the model.", "",
+             "scraper and headline-antidote hand the model. headline-antidote was built against these pages; "
+             "the real-page chart tests the same kinds of attack on real news pages.", "",
              "*Gets through*: the attack reaches the model's text with no warning. *Reached, flagged*: it reaches the "
              "text, and the verdict is `review` or `quarantine`. *Stopped*: it never reaches the text.", "",
              f"![Attacks that get through to the model]({CHART_URL.format('example_pages')})", "",

@@ -109,17 +109,19 @@ def share_text(through, variants):
 
 def _real_page_totals():
     """Per attack group: {reader: [variants, reached, errors, ambiguous]} summed over both sets, the
-    antidote's [variants, got_through, browser_errors], its got_through per attack, and the sites and
-    pages read."""
+    antidote's [variants, got_through, browser_errors], its got_through per attack, the sites, the pages
+    read and the pages with a body to splice into."""
     groups = {"headline": {}, "body": {}}
     antidote = {"headline": [0, 0, 0], "body": [0, 0, 0]}
     antidote_by_attack = {}
     sites = set()
     used_pages = 0
+    body_pages = 0
     for data_name in DATA_SETS:
         results = load(f"real_pages_{data_name}.json")
         sites.update(results["sites"])
         used_pages += results["used_pages"]
+        body_pages += results["used_pages"] - results["pages_without_body_anchor"]
         for attack in results["attacks"]:
             readers = groups[attack["where"]]
             for reader, counts in attack["readers"].items():
@@ -130,11 +132,11 @@ def _real_page_totals():
                 antidote[attack["where"]][index] += attack["antidote"][key]
             antidote_by_attack[attack["name"]] = (antidote_by_attack.get(attack["name"], 0)
                                                   + attack["antidote"]["got_through"])
-    return groups, antidote, antidote_by_attack, sites, used_pages
+    return groups, antidote, antidote_by_attack, sites, used_pages, body_pages
 
 
 def real_pages_chart():
-    groups, antidote, antidote_by_attack, sites, used_pages = _real_page_totals()
+    groups, antidote, antidote_by_attack, sites, used_pages, body_pages = _real_page_totals()
     rows = sum(len(readers) + 1 for readers in groups.values())
     figure, (headline_axes, body_axes) = plt.subplots(
         2, 1, figsize=(7.6, rows * 0.36 + 2.2), dpi=DPI,
@@ -165,13 +167,20 @@ def real_pages_chart():
         axes.set_xlim(0, 100)
         axes.set_xticks(range(0, 101, 25), [f"{tick}%" for tick in range(0, 101, 25)])
         axes.set_title(heading, loc="left", fontsize=10, fontweight="bold", color=INK, pad=6)
-    subtitle = (f"{len(sites)} news sites, {used_pages} real pages, each attack spliced into every page.\n"
+    subtitle = (f"{len(sites)} news sites: headline attacks spliced into {used_pages} real pages, body attacks into "
+                f"the {body_pages} with a body found.\n"
                 "Blue: the scraper alone. Orange: headline-antidote, with the browser check on pages it flags.")
     worst_attack, worst_count = max(antidote_by_attack.items(), key=lambda item: item[1])
     body_misses = antidote["body"][1]
     if body_misses and worst_count * 2 >= body_misses:
         subtitle += (f"\n{worst_count} of headline-antidote's {body_misses} body misses are one attack: "
                      f"{worst_attack.split(': ', 1)[1]}.")
+    rebuilding = load("rebuilding.json")
+    rebuilt_unsure = sum(count for name, count in rebuilding["body_variants_sent_leaking"].items()
+                         if "removed by JavaScript" not in name)
+    subtitle += (f"\nChrome's bars are a floor: {len(rebuilding['rebuilding_pages'])} of {rebuilding['pages_read']} "
+                 "pages rebuild their article with scripts and drop the spliced attack.\nThe same rebuild could hide "
+                 f"{rebuilt_unsure} more headline-antidote body misses (at worst {body_misses + rebuilt_unsure}).")
     if left_out:
         subtitle += "\nLeft out of the shares: " + "; ".join(left_out) + "."
     finish(figure, "Attacks that get through to the model, on real pages", subtitle, "real_pages.png",

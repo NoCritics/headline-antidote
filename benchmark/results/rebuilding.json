@@ -1,0 +1,358 @@
+{
+ "generated": "2026-11-26",
+ "pages_read": 232,
+ "read_failed": 2,
+ "rebuilding_pages": [
+  {
+   "page": "data page_017.html Fortune",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_018.html Fortune",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_019.html Fortune",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_028.html Seeking Alpha",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_029.html Al Jazeera",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_033.html Nikkei Asia",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_034.html Nikkei Asia",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_035.html Nikkei Asia",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_036.html Nikkei Asia",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data page_037.html Economic Times",
+   "dropped": [
+    "body"
+   ]
+  },
+  {
+   "page": "data page_039.html Economic Times",
+   "dropped": [
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_052.html ABC Australia Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_053.html ABC Australia Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_054.html ABC Australia Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_056.html Sydney Morning Herald Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_057.html Sydney Morning Herald Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_058.html Sydney Morning Herald Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_059.html Sydney Morning Herald Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_060.html Sydney Morning Herald Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_081.html Livemint Markets",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_082.html Livemint Markets",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_083.html Livemint Markets",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_084.html Livemint Markets",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_085.html Livemint Markets",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_096.html South China Morning Post Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_097.html South China Morning Post Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_098.html South China Morning Post Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_099.html South China Morning Post Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_100.html South China Morning Post Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_101.html Straits Times Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_102.html Straits Times Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_103.html Straits Times Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_104.html Straits Times Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_105.html Straits Times Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_186.html BBC Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_187.html BBC Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_188.html BBC Business",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_196.html Fortune",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_197.html Fortune",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_198.html Fortune",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_199.html Fortune",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_200.html Fortune",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_208.html Al Jazeera",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_210.html Al Jazeera",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_211.html Nikkei Asia",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_213.html Nikkei Asia",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_215.html Nikkei Asia",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_216.html Economic Times",
+   "dropped": [
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_217.html Economic Times",
+   "dropped": [
+    "body"
+   ]
+  },
+  {
+   "page": "data_2026-11-09 page_222.html Seeking Alpha",
+   "dropped": [
+    "headline",
+    "body"
+   ]
+  }
+ ],
+ "body_variants_sent_leaking": {
+  "body: paragraph removed by JavaScript (by id)": 49,
+  "body: paragraph removed by JavaScript (no name)": 14,
+  "body: white text": 12
+ }
+}

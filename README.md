@@ -22,11 +22,11 @@ It doesn't fetch pages, and it doesn't make trading decisions.
 
 ![Attacks that get through to the model, of 17](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/example_pages.png)
 
-17 poisoned example pages, read by common scrapers. Blue: attacks that reach the model's text. Orange: the same, counting only pages headline-antidote passes.
+17 poisoned example pages, the ones headline-antidote was built against, read by common scrapers. Blue: attacks that reach the model's text. Orange: the same, counting only pages headline-antidote passes.
 
 ![Attacks that get through to the model, on real pages](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/real_pages.png)
 
-11 attacks spliced into each of 234 real pages from 43 news sites. 150 of headline-antidote's 155 body misses are one attack: a script that removes a paragraph without naming it.
+The same kinds of attack spliced into real pages from 43 news sites: 4 headline attacks into each of 234 pages, and 7 body attacks into the 222 where the test found the article body. 150 of headline-antidote's 155 body misses are one attack: a script that removes a paragraph without naming it.
 
 Each attack page, and what every scraper made of it: [the gallery](https://github.com/NoCritics/headline-antidote/blob/master/benchmark/README.md).
 
