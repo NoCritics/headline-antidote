@@ -69,7 +69,7 @@ class NestedHasTests(unittest.TestCase):
         import time
 
         depth = 25
-        selector = "div:" + "has(div:" * (depth - 1) + "has(span)" + ")" * (depth - 1)
+        selector = "div:" + "has(div:" * (depth - 1) + "has(b)" + ")" * (depth - 1)  # no <b>: every level is searched
         started = time.perf_counter()
         GUARD.extract_article(nested_divs_page(selector + " { display: none }", depth))
         self.assertLess(time.perf_counter() - started, 2)
