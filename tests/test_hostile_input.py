@@ -89,6 +89,21 @@ class NestedHasTests(unittest.TestCase):
         self.assertNotIn("losses", result.clean_text)
         self.assertEqual(result.verdict, "quarantine")
 
+    def test_a_dropped_selector_no_longer_counts_toward_specificity(self):
+        # Chrome reads the second rule as h1 span:is(.x), which loses to h1 span.x.y.
+        html = ("<style>h1 span.x.y { display: inline } h1 span:is(#zz:has(b:has(i)), .x) { display: none }"
+                '</style><article><h1>Tesla shares surge<span class="x y"> losses <b>and</b> layoffs</span>'
+                "</h1></article>")
+        self.assertIn("losses", GUARD.analyze_html(html, "//h1").clean_text)
+
+    def test_has_inside_nth_child_of_inside_has(self):
+        dropped = ("<style>h1:has(span:nth-child(1 of :has(b))) span { display: none }</style><article><h1>"
+                   "Tesla shares surge<span> losses <b>and</b> layoffs</span></h1></article>")
+        self.assertIn("losses", GUARD.analyze_html(dropped, "//h1").clean_text)
+        kept = ("<style>h1:has(span:nth-child(1 of :is(.x, :has(b)))) span { display: none }</style><article>"
+                '<h1>Tesla shares surge<span class="x"> losses <b>and</b> layoffs</span></h1></article>')
+        self.assertNotIn("losses", GUARD.analyze_html(kept, "//h1").clean_text)
+
 
 if __name__ == "__main__":
     unittest.main()
