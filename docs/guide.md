@@ -105,9 +105,11 @@ Invisible characters, compatibility forms and combining marks inside a watched n
 
 ## Results
 
-- **Feed headlines:** 907 live headlines gave 1 flag, and it was right (Kommersant's "Gаsuniе", with Cyrillic а and е).
-- **Article pages:** on 228 pages from 47 sites in 9 languages, the headline was right on 220. 223 pages passed and 5 got `review`. 34 went to the browser check, and all of those passed.
-- **Spliced attacks:** 11 attacks were spliced into each page ([injection_report.md](../real_world_test/data_2026-11-09/injection_report.md)). Every headline attack was removed, flagged or sent to the browser check. Without the browser check, two got through unflagged: body text removed by a script that never names it (115 of 178 pages), and white text on 5 pages whose main stylesheet the test couldn't fetch.
+![Verdicts on clean news, no attacks](https://raw.githubusercontent.com/NoCritics/headline-antidote/master/benchmark/charts/false_alarms.png)
+
+- **Feed headlines:** 3,242 live headlines (907 saved Nov 7, 2,335 saved Nov 9) gave 3 quarantines, each a real mixed-script word: Kommersant's "Gаsuniе" (Cyrillic а and е), "ХХI" (Latin I) and "cборная" (Latin c).
+- **Article pages:** 284 saved pages, read with their stylesheets, the feed title and the browser check. 279 passed and 5 got `review`: Hindu BusinessLine pages whose "read more" collapse hides most of the article. 38 went to the browser check, and none failed. On the 228 pages from 47 sites in 9 languages saved Nov 9, the headline was right on 220.
+- **Spliced attacks:** 11 attacks were spliced into each of 234 usable pages from 43 sites ([Nov 7](../real_world_test/injection_report.md), [Nov 9](../real_world_test/data_2026-11-09/injection_report.md)), and each variant was also read by BeautifulSoup, lxml, trafilatura, newspaper4k and Chrome. With the browser check, 1 of 936 headline attacks got through (a `font-size:0` class from an external stylesheet, on one Economic Times page) and 155 of 1,554 body attacks: 150 are body text removed by a script that never names it, and 5 are white text on Deutsche Welle pages whose main stylesheet the test couldn't fetch. Results per reader: [benchmark/results/](../benchmark/results/); each example attack: [benchmark/README.md](../benchmark/README.md).
 - **CSS validity:** checked against Chrome on the 21,965 distinct values from the test pages, and about 840,000 generated ones.
 - **Speed:** a headline takes 65 to 80 µs. `extract_article` takes 276 ms (median) and 735 ms (p95) when the site's CSS is cached, and 332 ms and 1.6 s on a mixed stream of all 228 pages.
 
