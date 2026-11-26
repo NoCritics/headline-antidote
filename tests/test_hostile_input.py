@@ -105,5 +105,36 @@ class NestedHasTests(unittest.TestCase):
         self.assertNotIn("losses", GUARD.analyze_html(kept, "//h1").clean_text)
 
 
+class HeadlineMatchingTimeTests(unittest.TestCase):
+    """Matching headings against titles stays fast whatever the page repeats. Real pages: at most
+    4 title variants, 20 <h1> and <h2>, and a 146-character <h1> (284 saved news pages)."""
+
+    def assert_quick(self, html, seconds=2):
+        import time
+
+        started = time.perf_counter()
+        GUARD.extract_article(html)
+        self.assertLess(time.perf_counter() - started, seconds)
+
+    def test_a_title_with_thousands_of_segments(self):
+        title = "Tesla shares surge" + " | a" * 2000
+        headings = "".join(f"<h1>Tesla shares surge {number}</h1>" for number in range(100))
+        self.assert_quick(f"<html><head><title>{title}</title></head><body>{headings}</body></html>")
+
+    def test_thousands_of_identical_headings(self):
+        title = "x" + " | a" * 200
+        self.assert_quick(f"<html><head><title>{title}</title></head><body>{'<h1>x</h1>' * 5000}</body></html>")
+
+    def test_a_long_repeated_title_and_heading(self):
+        text = "Local news " * 2000
+        self.assert_quick(f"<html><head><title>{text}</title></head><body><h1>{text}</h1></body></html>")
+
+    def test_thousands_of_distinct_long_headings(self):
+        title = "Tesla shares surge after strong deliveries"
+        headings = "".join(f"<h1>{'Tesla shares surge after strong deliveries ' * 20}{number}</h1>"
+                           for number in range(3000))
+        self.assert_quick(f"<html><head><title>{title}</title></head><body>{headings}</body></html>")
+
+
 if __name__ == "__main__":
     unittest.main()
