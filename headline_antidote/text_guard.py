@@ -293,6 +293,13 @@ class HeadlineAntidote:
             from .css_cascade import external_rule_set
         except ImportError:
             return  # without tinycss2 and cssselect2, external stylesheets are not read at all
+        from .html_tree import PageTooComplex
+        from .html_visibility import check_css_numbers
+
+        try:
+            check_css_numbers(stylesheets)
+        except PageTooComplex:
+            return  # nothing to compile: extract_article() flags these pages for the browser check
         external_rule_set(stylesheets)
 
     def verify_article_in_browser(self, article, html, url, verifier):

@@ -97,7 +97,19 @@ _COLOR_FUNCTION = re.compile(r"(rgba?|hsla?|hwb|oklch|oklab|lch|lab)\((.*)\)")
 
 
 def _component(text, percent_scale, default=None):
-    """A color component: a number, or a percentage of percent_scale. 'none' is 0."""
+    """A color component: a number, or a percentage of percent_scale. 'none' is 0. Like Chrome, a
+    number past the largest 32-bit float is clamped to it (measured: oklab(0.5 1e200 0) computes
+    to oklab(0.5 3.40282e+38 0), and an infinite hue to 0)."""
+    number = _unclamped_component(text, percent_scale, default)
+    if number is None or math.isnan(number):
+        return number
+    return max(-LARGEST_COLOR_NUMBER, min(LARGEST_COLOR_NUMBER, number))
+
+
+LARGEST_COLOR_NUMBER = 3.4028234663852886e38
+
+
+def _unclamped_component(text, percent_scale, default):
     if text == "none":
         return 0.0
     try:

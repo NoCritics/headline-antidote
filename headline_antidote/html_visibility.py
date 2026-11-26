@@ -1573,7 +1573,7 @@ def parse_document(html, stylesheets=None):
     except ImportError:
         rules = _StylesheetRules(root)
     else:
-        _check_css_numbers(css_texts)
+        check_css_numbers(css_texts)
         rules = CascadeRules(root, stylesheets or (), is_quirks_mode(html))
     rules.svg_css_mentions = _svg_css_mentions(css_texts)
     return root, rules
@@ -1588,7 +1588,7 @@ def _svg_css_mentions(css_texts):
     return frozenset(mentions)
 
 
-def _check_css_numbers(texts):
+def check_css_numbers(texts):
     """Raises PageTooComplex when the page's CSS holds an integer too long for tinycss2, which
     converts each one to a Python int (limited to sys.get_int_max_str_digits() digits)."""
     limit = sys.get_int_max_str_digits()
