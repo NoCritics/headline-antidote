@@ -296,6 +296,7 @@ class HeadlineAntidote:
         from .html_tree import PageTooComplex
         from .html_visibility import check_css_numbers
 
+        stylesheets = list(stylesheets or ())
         try:
             check_css_numbers(stylesheets)
         except PageTooComplex:

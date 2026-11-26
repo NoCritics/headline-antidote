@@ -1323,7 +1323,7 @@ class _SharedElementWrapper(cssselect2.ElementWrapper):
     Euronews page). The shared children point back at their parent: CascadeRules breaks those
     cycles when it is freed.
 
-    Every walk over ancestors, earlier siblings or children is charged to the page's budget of
+    Every walk over ancestors, siblings or children is charged to the page's budget of
     MAXIMUM_MATCH_STEPS (match_steps, shared by the page's wrappers). cssselect2 retries every
     combination of ancestors for a descendant chain that fails, so a short selector Chrome accepts
     could otherwise run for hours; past the budget the page raises PageTooComplex."""
@@ -1351,6 +1351,17 @@ class _SharedElementWrapper(cssselect2.ElementWrapper):
         siblings = cssselect2.ElementWrapper.previous_siblings.fget(self)
         self._charge(len(siblings))
         return siblings
+
+    @property
+    def etree_siblings(self):
+        """The *-of-type, :nth-of-type() and :last-child tests scan this list directly."""
+        siblings = self.__dict__["shared_etree_siblings"]
+        self._charge(len(siblings))
+        return siblings
+
+    @etree_siblings.setter
+    def etree_siblings(self, siblings):  # set by cssselect2.ElementWrapper.__init__
+        self.__dict__["shared_etree_siblings"] = siblings
 
     def _charge(self, steps):
         self.match_steps[0] -= steps

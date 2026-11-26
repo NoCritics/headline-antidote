@@ -470,12 +470,21 @@ class _ArticleExtraction:
             normalized_reference = _normalized_title(reference_text)
             if normalized_reference:
                 reference_variants.append((reference_label, _title_variants(normalized_reference)))
+        left_out = None  # a heading left out of the comparison by the limits, if any
         for heading_tag in ("h1", "h2"):
             best = None
             similarities = {}  # by heading text: pages can repeat one heading thousands of times
-            for heading in itertools.islice(self.root.iter(heading_tag), MAXIMUM_HEADINGS_COMPARED):
+            headings_read = 0
+            for heading in self.root.iter(heading_tag):
                 visible_text, hidden_fragments = visible_text_of_element(heading, self.rules)
-                if not visible_text or len(visible_text) > MAXIMUM_HEADING_CHARACTERS:
+                if not visible_text:
+                    continue
+                if headings_read == MAXIMUM_HEADINGS_COMPARED:
+                    left_out = f"more than {MAXIMUM_HEADINGS_COMPARED} <{heading_tag}> headings with text"
+                    break
+                headings_read += 1
+                if len(visible_text) > MAXIMUM_HEADING_CHARACTERS:
+                    left_out = f"a <{heading_tag}> of more than {MAXIMUM_HEADING_CHARACTERS:,} characters"
                     continue
                 candidate_text = _normalized_title(visible_text)
                 if candidate_text not in similarities:
@@ -489,6 +498,9 @@ class _ArticleExtraction:
                 similarity, visible_text, hidden_fragments, reference_label, heading_element = best
                 self._flag_hidden_in_headline(hidden_fragments)
                 return visible_text, f"<{heading_tag}> matching the {reference_label}", heading_element
+        if left_out is not None and reference_variants:
+            # The headline may be the heading left out: falling back to a title would pass it unread.
+            raise PageTooComplex(f"it has {left_out}, and no heading compared matches a title")
 
         if not references:
             for heading in self.root.iter("h1"):
