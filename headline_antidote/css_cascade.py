@@ -1342,17 +1342,32 @@ class _SharedElementWrapper(cssselect2.ElementWrapper):
 
     @property
     def ancestors(self):
+        """As cssselect2 computes them (root first), but in a loop: its recursion, one call per
+        element, overflowed the stack on deep pages. Each tuple filled on the way is charged."""
         if self._ancestors is None:
-            self._ancestors = _chain_before(self, "parent", "_ancestors")
+            pending = []
+            node = self.parent
+            while node is not None and node._ancestors is None:
+                pending.append(node)
+                node = node.parent
+            chain = () if node is None else (*node._ancestors, node)
+            for node in reversed(pending):
+                self._charge(len(chain))
+                node._ancestors = chain
+                chain = (*chain, node)
+            self._ancestors = chain
         self._charge(len(self._ancestors))
         return self._ancestors
 
     @property
     def previous_siblings(self):
-        if self._previous_siblings is None:
-            self._previous_siblings = _chain_before(self, "previous", "_previous_siblings")
-        self._charge(len(self._previous_siblings))
-        return self._previous_siblings
+        """A slice of the parent's shared children, not cached: cssselect2 kept a tuple of all
+        earlier siblings on every element (9,000 siblings: 343 MB), built by a recursion that
+        overflowed the stack past about 980."""
+        if self.parent is None:
+            return ()
+        self._charge(self.index)
+        return tuple(self.parent.shared_children[:self.index])  # filled when CascadeRules wraps the page
 
     @property
     def etree_siblings(self):
@@ -1370,21 +1385,6 @@ class _SharedElementWrapper(cssselect2.ElementWrapper):
         if self.match_steps[0] < 0:
             raise PageTooComplex(f"its CSS selectors take more than {MAXIMUM_MATCH_STEPS:,} steps to match")
 
-
-def _chain_before(element_wrapper, link, cache):
-    """The ancestors (link "parent") or previous siblings (link "previous") of a wrapper, first
-    one first, as cssselect2 computes them, but in a loop: its recursion, one call per element,
-    overflowed the stack on about 980 siblings. Fills cache on the elements passed on the way."""
-    pending = []
-    node = getattr(element_wrapper, link)
-    while node is not None and getattr(node, cache) is None:
-        pending.append(node)
-        node = getattr(node, link)
-    chain = () if node is None else (*getattr(node, cache), node)
-    for node in reversed(pending):
-        setattr(node, cache, chain)
-        chain = (*chain, node)
-    return chain
 
 # The 284 saved news pages, read with their sites' stylesheets, take 55,056 steps (median) and
 # 3,538,381 at most. cssselect2 runs about 2.5 million steps a second.
