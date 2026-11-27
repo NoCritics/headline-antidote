@@ -28,7 +28,6 @@ Requires trafilatura (pip install trafilatura).
 
 import copy
 import difflib
-import itertools
 import json
 import re
 import unicodedata

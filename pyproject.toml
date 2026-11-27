@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "headline-antidote"
-version = "0.1.0"
+version = "0.1.1"
 description = "Checks that the news headline an LLM reads is the text a human reader sees: homoglyphs, hidden HTML text, invisible characters."
 readme = "README.md"
 requires-python = ">=3.11"
