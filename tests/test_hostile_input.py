@@ -166,6 +166,19 @@ class SelectorMatchingWorkTests(unittest.TestCase):
                 self.assertIn("losses", GUARD.analyze_html(html, "//h1").clean_text)
                 GUARD.extract_article(html)
 
+    def test_matching_the_last_of_many_siblings_keeps_memory_small(self):
+        import tracemalloc
+
+        html = ("<style>x ~ h1 .inj { display: none }</style><body>" + "<p>a</p>" * 9000
+                + '<h1>Tesla shares surge<span class="inj"> losses</span></h1></body>')
+        tracemalloc.start()
+        try:
+            GUARD.analyze_html(html, "//h1")
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        self.assertLess(peak, 150 * 2 ** 20)  # each <p> caching all earlier ones took 343 MB
+
     def test_a_short_chain_on_the_same_page_is_still_read(self):
         html = ("<style>div div span { display: none }</style>" + "<div>" * 40
                 + "<h1>Tesla shares surge<span> losses</span></h1>" + "</div>" * 40)
